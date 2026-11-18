@@ -1,4 +1,4 @@
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 
 async function invokeShoppingAI(action, args = {}) {
   const payload = args?.data ?? args ?? {};
