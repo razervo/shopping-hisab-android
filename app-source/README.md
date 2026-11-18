@@ -9,7 +9,7 @@ Connect this private GitHub repository to Cloudflare Workers Builds and use:
 - Root directory: `app-source`
 - Build command: `npm run build`
 - Deploy command: `npx wrangler deploy`
-- Worker name: `shopping-hisab` (from `wrangler.jsonc`)
+- Worker/project name: `shopping-hisab-app` (must match `name` in `wrangler.jsonc`)
 
 The production app ID is set in `.env.production`. It is a public app identifier, not a password or API key.
 
