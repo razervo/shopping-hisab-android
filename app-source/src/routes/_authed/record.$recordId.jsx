@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { RecordDetail } from "@/components/shopping/RecordDetail";
 
 export const Route = createFileRoute("/_authed/record/$recordId")({
