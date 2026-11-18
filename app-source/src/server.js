@@ -16,7 +16,10 @@ export default {
       url.pathname === "/api/files" ||
       url.pathname.startsWith("/api/files/") ||
       url.pathname === "/api/profile" ||
-      url.pathname === "/api/ai"
+      url.pathname === "/api/ai" ||
+      url.pathname === "/api/migration/status" ||
+      url.pathname === "/api/migration/import" ||
+      url.pathname === "/api/migration/file"
     ) {
       return handleNativeApi(request, env);
     }
