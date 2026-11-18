@@ -32,24 +32,26 @@ jobs:
       APP_VERSION_CODE: ${{ github.event.inputs.app_version_code || '1' }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install Android 36 SDK and build tools
-        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
       - name: Install Bubblewrap generator
         run: npm install --no-save --package-lock=false @bubblewrap/core@1.27.0
