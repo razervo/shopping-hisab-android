@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS shopping_records (
   notes TEXT NOT NULL DEFAULT '',
   source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'bill')),
   bill_file_id TEXT,
+  legacy_bill_file_uri TEXT,
   legacy_base44_id TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
