@@ -1,0 +1,6 @@
+# Bubblewrap Android build output
+/android/
+/artifacts/
+/signing-material/
+/node_modules/
+/.DS_Store
