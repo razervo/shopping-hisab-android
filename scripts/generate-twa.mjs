@@ -24,6 +24,8 @@ twaManifest.name = "Shopping Hisab";
 twaManifest.launcherName = "Shop Hisab";
 twaManifest.appVersionCode = appVersionCode;
 twaManifest.appVersionName = `1.0.${appVersionCode}`;
+// Bubblewrap Android Browser Helper 2.7.4 requires Android API 24 or later.
+twaManifest.minSdkVersion = 24;
 twaManifest.signingKey = {
   path: "../signing-material/android-keystore.jks",
   alias: "shoppinghisab",
