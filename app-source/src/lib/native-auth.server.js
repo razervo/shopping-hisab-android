@@ -63,6 +63,7 @@ export function createNativeAuth(env) {
     },
     advanced: {
       useSecureCookies: true,
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       defaultCookieAttributes: {
         httpOnly: true,
         secure: true,
