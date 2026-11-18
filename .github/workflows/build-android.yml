@@ -1,0 +1,183 @@
+name: Build Shopping Hisab Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_version_code:
+        description: Android version code (increase for every release)
+        required: true
+        default: "1"
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - ".github/workflows/build-android.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: shopping-hisab-android-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Generate and sign Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      WEB_MANIFEST_URL: https://shopping-hisab-71a084c3.base44.app/manifest.json
+      APP_VERSION_CODE: ${{ github.event.inputs.app_version_code || '1' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 36 SDK and build tools
+        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install Bubblewrap generator
+        run: npm install --no-save --package-lock=false @bubblewrap/core@1.27.0
+
+      - name: Generate Android Trusted Web Activity project
+        run: node scripts/generate-twa.mjs
+
+      - name: Restore or create the persistent Android signing key
+        id: signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing-material
+          PASSWORD=""
+          ALIAS="${ANDROID_KEY_ALIAS:-shoppinghisab}"
+          NEW_KEY="false"
+
+          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" ]]; then
+            : "${ANDROID_KEYSTORE_PASSWORD:?Set ANDROID_KEYSTORE_PASSWORD with ANDROID_KEYSTORE_BASE64}"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > signing-material/android-keystore.jks
+            PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          else
+            ARTIFACT_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=shopping-hisab-signing-backup&per_page=100" --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | last | .id // empty')"
+            if [[ -n "$ARTIFACT_ID" ]]; then
+              echo "Restoring signing key from private Actions backup..."
+              curl --fail --silent --show-error --location \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+                --output /tmp/shopping-hisab-signing-backup.zip
+              unzip -q -o /tmp/shopping-hisab-signing-backup.zip -d signing-material
+              PASSWORD="$(sed -n 's/^store_password=//p' signing-material/signing-info.txt | head -n1)"
+              ALIAS="$(sed -n 's/^key_alias=//p' signing-material/signing-info.txt | head -n1)"
+              : "${PASSWORD:?Signing backup is missing store_password}"
+              : "${ALIAS:?Signing backup is missing key_alias}"
+            else
+              echo "No previous signing backup found. Generating the first key..."
+              PASSWORD="$(openssl rand -hex 24)"
+              keytool -genkeypair -v \
+                -keystore signing-material/android-keystore.jks \
+                -storepass "$PASSWORD" -keypass "$PASSWORD" \
+                -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Shopping Hisab, OU=Android, O=Shopping Hisab, L=NA, ST=NA, C=IN"
+              NEW_KEY="true"
+            fi
+          fi
+
+          chmod 600 signing-material/android-keystore.jks
+          FINGERPRINT="$(keytool -list -v -keystore signing-material/android-keystore.jks \
+            -storepass "$PASSWORD" -alias "$ALIAS" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n1 | tr -d '\r')"
+          : "${FINGERPRINT:?Could not read signing certificate SHA-256 fingerprint}"
+
+          cat > signing-material/signing-info.txt <<EOF
+          app_name=Shopping Hisab
+          package_name=com.shoppinghisab.app
+          key_alias=$ALIAS
+          store_password=$PASSWORD
+          key_password=$PASSWORD
+          sha256_fingerprint=$FINGERPRINT
+          EOF
+
+          echo "::add-mask::$PASSWORD"
+          echo "keystore_password=$PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "key_alias=$ALIAS" >> "$GITHUB_OUTPUT"
+          echo "sha256_fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "new_key=$NEW_KEY" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Shopping Hisab Android build"
+            echo ""
+            echo "- Package: `com.shoppinghisab.app`"
+            echo "- Version code: `$APP_VERSION_CODE`"
+            echo "- Signing certificate SHA-256:"
+            echo ""
+            echo "  `$FINGERPRINT`"
+            echo ""
+            if [[ "$NEW_KEY" == "true" ]]; then
+              echo "**First build:** download and securely back up the `shopping-hisab-signing-backup` artifact. It contains the private signing key and password information. Never share it."
+            else
+              echo "Existing signing key reused; this APK can update a previous Shopping Hisab install."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Align and sign APK
+        env:
+          KS_PASSWORD: ${{ steps.signing.outputs.keystore_password }}
+          KEY_ALIAS: ${{ steps.signing.outputs.key_alias }}
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -f "$UNSIGNED"
+          mkdir -p artifacts
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" artifacts/Shopping-Hisab-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks signing-material/android-keystore.jks \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASSWORD \
+            --key-pass env:KS_PASSWORD \
+            --out artifacts/Shopping-Hisab.apk \
+            artifacts/Shopping-Hisab-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs artifacts/Shopping-Hisab.apk
+          rm artifacts/Shopping-Hisab-aligned.apk
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopping-hisab-apk
+          path: artifacts/Shopping-Hisab.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preserve signing key for future updates
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopping-hisab-signing-backup
+          path: |
+            signing-material/android-keystore.jks
+            signing-material/signing-info.txt
+          if-no-files-found: error
+          retention-days: 90
