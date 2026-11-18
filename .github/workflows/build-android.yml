@@ -59,6 +59,15 @@ jobs:
       - name: Generate Android Trusted Web Activity project
         run: node scripts/generate-twa.mjs
 
+      - name: Replace retired JCenter repositories
+        run: |
+          set -euo pipefail
+          find android -type f -name '*.gradle' -print0 | xargs -0 -r sed -i 's/jcenter()/mavenCentral()/g'
+          if grep -RIn 'jcenter()' android --include='*.gradle'; then
+            echo "A retired JCenter repository declaration remains."
+            exit 1
+          fi
+
       - name: Restore or create the persistent Android signing key
         id: signing
         env:
