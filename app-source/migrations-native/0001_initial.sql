@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
 );
 
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_user_id ON uploaded_files(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_uploaded_files_user_legacy_uri ON uploaded_files(user_id, legacy_file_uri) WHERE legacy_file_uri IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS migration_imports (
   id TEXT PRIMARY KEY NOT NULL,
