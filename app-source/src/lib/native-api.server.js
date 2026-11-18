@@ -94,7 +94,7 @@ async function handleRecords(request, env, user, url) {
   const method = request.method;
 
   if (path === "/" && method === "GET") {
-    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 30, 1), 200);
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 30, 1), 500);
     const offset = Math.max(Number(url.searchParams.get("cursor")) || 0, 0);
     const shop = String(url.searchParams.get("shop") || "").trim().slice(0, 100);
     const from = url.searchParams.get("from") || "";
