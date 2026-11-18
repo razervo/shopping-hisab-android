@@ -9,10 +9,11 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
+    "deploy:native": "npm run build && wrangler deploy --config wrangler.native.jsonc"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.63",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.9.1",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -77,7 +78,8 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.171.0",
     "vaul": "^1.1.2",
-    "zod": "~4.6.7"
+    "zod": "~4.6.7",
+    "better-auth": "1.7.25"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.6",
