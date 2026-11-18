@@ -6,7 +6,11 @@ on:
       app_version_code:
         description: Android version code (increase for every release)
         required: true
-        default: "1"
+        default: "2"
+        type: string
+      web_manifest_url:
+        description: Public manifest URL of the independently hosted Shopping Hisab site, ending in /manifest.json
+        required: true
         type: string
   push:
     branches: [main]
@@ -28,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      WEB_MANIFEST_URL: https://shopping-hisab-71a084c3.base44.app/manifest.json
+      WEB_MANIFEST_URL: ${{ github.event.inputs.web_manifest_url || 'https://shopping-hisab-71a084c3.base44.app/manifest.json' }}
       APP_VERSION_CODE: ${{ github.event.inputs.app_version_code || '1' }}
     steps:
       - name: Check out source
