@@ -12,11 +12,6 @@ on:
         description: Public manifest URL of the independently hosted Shopping Hisab site, ending in /manifest.json
         required: true
         type: string
-  push:
-    branches: [main]
-    paths:
-      - "scripts/**"
-      - ".github/workflows/build-android.yml"
 
 permissions:
   contents: read
@@ -32,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      WEB_MANIFEST_URL: ${{ github.event.inputs.web_manifest_url || 'https://shopping-hisab-71a084c3.base44.app/manifest.json' }}
+      WEB_MANIFEST_URL: ${{ github.event.inputs.web_manifest_url }}
       APP_VERSION_CODE: ${{ github.event.inputs.app_version_code || '1' }}
     steps:
       - name: Check out source
