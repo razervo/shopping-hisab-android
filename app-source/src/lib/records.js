@@ -1,4 +1,4 @@
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 
 // Every shopping record for this user, newest first (used for the full backup export).
 export async function fetchAllRecords() {
