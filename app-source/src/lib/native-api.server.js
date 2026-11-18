@@ -73,6 +73,7 @@ function validateRecord(input) {
     notes: String(input?.notes || "").trim().slice(0, 2000),
     source: input?.source === "bill" ? "bill" : "manual",
     bill_file_id: parseFileId(input?.bill_file_uri),
+    legacy_bill_file_uri: parseFileId(input?.bill_file_uri) ? null : String(input?.bill_file_uri || "").slice(0, 1200) || null,
   };
 }
 
@@ -132,9 +133,9 @@ async function handleRecords(request, env, user, url) {
     const now = new Date().toISOString();
     await env.DB.prepare(
       `INSERT INTO shopping_records
-       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, now, now).run();
+       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, now, now).run();
     return json(await fetchRecord(env.DB, user.id, id), 201);
   }
 
@@ -153,8 +154,8 @@ async function handleRecords(request, env, user, url) {
     const now = new Date().toISOString();
     const result = await env.DB.prepare(
       `UPDATE shopping_records SET shop_name = ?, date = ?, items_json = ?, total = ?, item_count = ?,
-       notes = ?, source = ?, bill_file_id = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
-    ).bind(data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, now, recordId, user.id).run();
+       notes = ?, source = ?, bill_file_id = ?, legacy_bill_file_uri = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ).bind(data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, now, recordId, user.id).run();
     if (!result.meta?.changes) return error("Record not found.", 404);
     return json(await fetchRecord(env.DB, user.id, recordId));
   }
