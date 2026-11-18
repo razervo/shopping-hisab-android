@@ -1,0 +1,9 @@
+{
+  "name": "shopping-hisab-android-build",
+  "private": true,
+  "type": "module",
+  "description": "Cloud Bubblewrap Android build helper for Shopping Hisab",
+  "dependencies": {
+    "@bubblewrap/core": "1.27.0"
+  }
+}
