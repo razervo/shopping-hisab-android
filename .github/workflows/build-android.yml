@@ -134,18 +134,28 @@ jobs:
           {
             echo "## Shopping Hisab Android build"
             echo ""
-            echo "- Package: `com.shoppinghisab.app`"
-            echo "- Version code: `$APP_VERSION_CODE`"
+            echo "- Package: com.shoppinghisab.app"
+            echo "- Version code: $APP_VERSION_CODE"
             echo "- Signing certificate SHA-256:"
             echo ""
-            echo "  `$FINGERPRINT`"
+            echo "  $FINGERPRINT"
             echo ""
             if [[ "$NEW_KEY" == "true" ]]; then
-              echo "**First build:** download and securely back up the `shopping-hisab-signing-backup` artifact. It contains the private signing key and password information. Never share it."
+              echo "FIRST BUILD: download and securely back up the shopping-hisab-signing-backup artifact. It contains the private signing key and password information. Never share it."
             else
               echo "Existing signing key reused; this APK can update a previous Shopping Hisab install."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve signing key immediately, even if Gradle fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopping-hisab-signing-backup
+          path: |
+            signing-material/android-keystore.jks
+            signing-material/signing-info.txt
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Build release APK
         working-directory: android
@@ -183,12 +193,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Preserve signing key for future updates
-        uses: actions/upload-artifact@v4
-        with:
-          name: shopping-hisab-signing-backup
-          path: |
-            signing-material/android-keystore.jks
-            signing-material/signing-info.txt
-          if-no-files-found: error
-          retention-days: 90
