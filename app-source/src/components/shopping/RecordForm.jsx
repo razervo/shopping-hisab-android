@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
@@ -33,7 +32,7 @@ export function RecordForm({
   const [estimatedIds, setEstimatedIds] = useState(() => new Set(initial?.estimatedIds || []));
   const [restored, setRestored] = useState(false);
   const [actualUploadMessage, setActualUploadMessage] = useState("");
-  const estimateFn = useServerFn(estimateMarketRates);
+  const estimateFn = estimateMarketRates;
 
   // A list built at home is kept on this phone, so the real shop prices can be
   // filled in later, right before it is saved.

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +14,7 @@ import { UNIT_LABELS, UNIT_OPTIONS, amountOf, qtyOptions } from "@/lib/shopping"
 
 export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = false, onApplyMarketRate, onConfirmActual }) {
   const line = amountOf(item);
-  const fetchMarketRate = useServerFn(suggestMarketRate);
+  const fetchMarketRate = suggestMarketRate;
   const [market, setMarket] = useState(null);
   const [asking, setAsking] = useState(false);
 

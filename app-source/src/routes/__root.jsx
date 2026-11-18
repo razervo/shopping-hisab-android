@@ -3,7 +3,6 @@ import { DefaultCatchBoundary } from "@/components/DefaultCatchBoundary";
 import { NotFound } from "@/components/NotFound";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/AuthContext";
-import { Base44Scripts } from "base44:document";
 import appCss from "@/index.css?url";
 
 export const Route = createRootRoute({
@@ -25,7 +24,7 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "https://shopping-hisab-71a084c3.base44.app/manifest.json" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       {
         rel: "apple-touch-icon",
         href: "https://media.base44.com/images/public/6afc2c9d728b307571a084c3/1bf223f42_generated_image.png",
@@ -61,10 +60,9 @@ function RootDocument({ children }) {
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: 'if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }); }' }} />
       </head>
-      {/* data-react-root: the builder's preview bridge looks for #root and falls back to this. */}
+      {/* Root marker retained for React hydration. */}
       <body data-react-root="true">
         {children}
-        <Base44Scripts />
         <Scripts />
       </body>
     </html>

@@ -1,10 +1,9 @@
 import { createStart } from "@tanstack/react-start";
-import { authMiddleware, base44RequestMiddleware } from "@/lib/auth-middleware";
 import { errorCaptureFunctionMiddleware, errorCaptureRequestMiddleware } from "@/lib/error-capture";
 
-// Every server function and server route gets `context.getBase44()`, acting as the visitor.
-// Error capture goes first, so it sees what the other middlewares and the handlers throw.
+// The UI is hosted on Cloudflare Workers. App data, authentication and AI
+// functions are accessed through the external Base44 SDK client.
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorCaptureRequestMiddleware, base44RequestMiddleware],
-  functionMiddleware: [errorCaptureFunctionMiddleware, authMiddleware],
+  requestMiddleware: [errorCaptureRequestMiddleware],
+  functionMiddleware: [errorCaptureFunctionMiddleware],
 }));

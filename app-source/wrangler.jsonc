@@ -1,7 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "base44-tanstack-app",
-  "compatibility_date": "2026-09-01",
+  "name": "shopping-hisab",
+  "compatibility_date": "2026-11-18",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "src/server.js"
+  "main": "src/server.js",
+  "observability": { "enabled": true }
 }

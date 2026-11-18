@@ -15,7 +15,5 @@ export function getAppParams() {
   return {
     appId: import.meta.env.VITE_BASE44_APP_ID,
     token: isBrowser ? getAccessToken() : null,
-    functionsVersion: (isBrowser && new URLSearchParams(window.location.search).get("functions_version")?.trim()) || import.meta.env.VITE_BASE44_FUNCTIONS_VERSION,
-    appBaseUrl: import.meta.env.VITE_BASE44_APP_BASE_URL,
   };
 }
