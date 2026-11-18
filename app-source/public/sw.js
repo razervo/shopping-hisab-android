@@ -25,6 +25,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // OAuth and platform API requests must be handled as real browser requests.
+  // Intercepting /api navigation here can swallow cross-origin 302 redirects
+  // to Base44 and Google sign-in, leaving the browser on the provider splash.
+  if (url.pathname.startsWith("/api/")) return;
+
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
