@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { FileImage, Pencil, Trash2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import {
   AlertDialog,
   AlertDialogAction,
