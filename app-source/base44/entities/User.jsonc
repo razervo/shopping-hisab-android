@@ -1,0 +1,33 @@
+{
+  "properties": {
+    "role": {
+      "type": "string",
+      "description": "The role of the user in the app",
+      "enum": [
+        "admin",
+        "user"
+      ]
+    },
+    "display_name": {
+      "type": "string",
+      "description": "The user's editable display name inside Shopping Hisab"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Optional contact phone number"
+    },
+    "preferred_market": {
+      "type": "string",
+      "description": "Preferred local market used to tailor grocery price estimates"
+    },
+    "profile_picture_uri": {
+      "type": "string",
+      "description": "Private file URI for the user's profile picture"
+    }
+  },
+  "required": [
+    "role"
+  ],
+  "name": "User",
+  "type": "object"
+}
