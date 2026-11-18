@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { daysAgoISO, monthStartISO, toISO, todayISO } from "@/lib/format";
 
 function sumByDate(records) {
