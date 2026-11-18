@@ -31,3 +31,8 @@ jobs:
         run: npm install
       - name: Build for Cloudflare Workers
         run: npm run build
+      - name: Verify Android TWA files are included
+        run: |
+          test -s dist/client/.well-known/assetlinks.json
+          test -s dist/client/manifest.json
+          test -s dist/client/manifest.webmanifest
