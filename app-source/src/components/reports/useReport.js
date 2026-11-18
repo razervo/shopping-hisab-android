@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { monthStartISO, toISO } from "@/lib/format";
 
 export function useReport(monthKey) {
