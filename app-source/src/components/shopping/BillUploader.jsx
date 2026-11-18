@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Camera, FileText, ImageUp, Loader2, ShieldCheck } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { readShoppingBill } from "@/lib/server-fns";
 import { BILL_MAX_BYTES, isAcceptedBill, prepareBillFile } from "@/lib/billFile";
 
