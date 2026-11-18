@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.shoppinghisab.app",
+      "sha256_cert_fingerprints": [
+        "E8:ED:E7:96:BA:6F:58:E6:8D:7E:EA:F8:85:BE:03:85:31:05:69:26:9F:30:46:D1:C6:CE:6D:ED:AD:42:DF:D9"
+      ]
+    }
+  }
+]
