@@ -7,7 +7,7 @@ The Shopping Hisab frontend is prepared for independent hosting on **Cloudflare 
 Connect this private GitHub repository to Cloudflare Workers Builds and use:
 
 - Root directory: `app-source`
-- Build command: `npm install && npm run build`
+- Build command: `npm run build`
 - Deploy command: `npx wrangler deploy`
 - Worker name: `shopping-hisab` (from `wrangler.jsonc`)
 
