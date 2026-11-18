@@ -337,6 +337,156 @@ async function handleAI(request, env, user) {
   return error("Unknown AI action.", 404);
 }
 
+
+function safeImportedTimestamp(value, fallback) {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+}
+
+async function resolveLegacyFileId(db, userId, legacyUri) {
+  if (!legacyUri) return null;
+  const row = await db.prepare(
+    "SELECT id FROM uploaded_files WHERE user_id = ? AND legacy_file_uri = ?",
+  ).bind(userId, legacyUri).first();
+  return row?.id || null;
+}
+
+async function handleMigrationStatus(request, env, user) {
+  if (request.method !== "GET") return error("Method not allowed.", 405);
+  const [records, files, imports] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS count FROM shopping_records WHERE user_id = ? AND legacy_base44_id IS NOT NULL").bind(user.id).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM uploaded_files WHERE user_id = ? AND legacy_file_uri IS NOT NULL").bind(user.id).first(),
+    env.DB.prepare("SELECT imported_records, imported_files, created_at FROM migration_imports WHERE user_id = ? AND source = 'base44-v1'").bind(user.id).first(),
+  ]);
+  return json({
+    imported_records: Number(records?.count) || 0,
+    imported_files: Number(files?.count) || 0,
+    last_import: imports?.created_at || null,
+  });
+}
+
+async function handleMigrationImport(request, env, user) {
+  if (request.method !== "POST") return error("Method not allowed.", 405);
+  let body;
+  try { body = await request.json(); } catch { return error("Invalid migration package."); }
+  if (body?.schema !== "shopping-hisab-migration" || body?.version !== 1) {
+    return error("This is not a supported Shopping Hisab migration package.");
+  }
+  if (!Array.isArray(body.records) || body.records.length > 250) {
+    return error("Import up to 250 shopping records per batch.");
+  }
+
+  const profile = body.profile && typeof body.profile === "object" ? body.profile : null;
+  if (profile?.email && String(profile.email).trim().toLowerCase() !== String(user.email || "").toLowerCase()) {
+    return error("The export belongs to a different email account. Sign in with the same email before importing.", 403);
+  }
+
+  if (profile) {
+    const displayName = String(profile.display_name || profile.full_name || user.name || "").trim().slice(0, 80);
+    const phone = String(profile.phone || "").trim().slice(0, 24);
+    const preferredMarket = String(profile.preferred_market || "").trim().slice(0, 80);
+    const legacyPhotoUri = String(profile.profile_picture_uri || "").trim().slice(0, 1200);
+    const photoId = parseFileId(legacyPhotoUri) || await resolveLegacyFileId(env.DB, user.id, legacyPhotoUri);
+    await env.DB.prepare(
+      'UPDATE "user" SET name = ?, displayName = ?, phone = ?, preferredMarket = ?, profilePictureId = COALESCE(?, profilePictureId), updatedAt = ? WHERE id = ?',
+    ).bind(displayName || user.name, displayName, phone, preferredMarket, photoId, new Date().toISOString(), user.id).run();
+  }
+
+  const now = new Date().toISOString();
+  const statements = [];
+  for (const sourceRecord of body.records) {
+    const legacyId = String(sourceRecord?.id || "").trim().slice(0, 160);
+    if (!legacyId) continue;
+    const legacyFileUri = String(sourceRecord?.bill_file_uri || "").trim().slice(0, 1200);
+    let data;
+    try {
+      data = validateRecord({
+        ...sourceRecord,
+        bill_file_uri: legacyFileUri,
+      });
+    } catch (cause) {
+      return error(`Record ${legacyId} could not be imported: ${cause.message}`);
+    }
+    const mappedFileId = data.bill_file_id || await resolveLegacyFileId(env.DB, user.id, legacyFileUri);
+    data.bill_file_id = mappedFileId;
+    data.legacy_bill_file_uri = mappedFileId ? null : (legacyFileUri || null);
+    const id = crypto.randomUUID();
+    const createdAt = safeImportedTimestamp(sourceRecord.created_date || sourceRecord.created_at, now);
+    const updatedAt = safeImportedTimestamp(sourceRecord.updated_date || sourceRecord.updated_at, createdAt);
+    statements.push(env.DB.prepare(
+      `INSERT INTO shopping_records
+       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, legacy_base44_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, legacy_base44_id) DO UPDATE SET
+         shop_name = excluded.shop_name,
+         date = excluded.date,
+         items_json = excluded.items_json,
+         total = excluded.total,
+         item_count = excluded.item_count,
+         notes = excluded.notes,
+         source = excluded.source,
+         bill_file_id = excluded.bill_file_id,
+         legacy_bill_file_uri = excluded.legacy_bill_file_uri,
+         updated_at = excluded.updated_at`,
+    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, legacyId, createdAt, updatedAt));
+  }
+
+  for (let i = 0; i < statements.length; i += 50) {
+    await env.DB.batch(statements.slice(i, i + 50));
+  }
+
+  const [recordCount, fileCount] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS count FROM shopping_records WHERE user_id = ? AND legacy_base44_id IS NOT NULL").bind(user.id).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM uploaded_files WHERE user_id = ? AND legacy_file_uri IS NOT NULL").bind(user.id).first(),
+  ]);
+  await env.DB.prepare(
+    `INSERT INTO migration_imports (id, user_id, source, imported_records, imported_files, created_at)
+     VALUES (?, ?, 'base44-v1', ?, ?, ?)
+     ON CONFLICT(user_id, source) DO UPDATE SET
+       imported_records = excluded.imported_records,
+       imported_files = excluded.imported_files,
+       created_at = excluded.created_at`,
+  ).bind(crypto.randomUUID(), user.id, Number(recordCount?.count) || 0, Number(fileCount?.count) || 0, now).run();
+
+  return json({
+    imported_this_batch: statements.length,
+    total_imported_records: Number(recordCount?.count) || 0,
+    total_imported_files: Number(fileCount?.count) || 0,
+    message: "Records imported. Existing Base44 data has not been changed.",
+  });
+}
+
+async function handleMigrationFile(request, env, user) {
+  if (request.method !== "POST") return error("Method not allowed.", 405);
+  if (!env.FILES) return error("Private file storage is not configured.", 503);
+  const form = await request.formData();
+  const file = form.get("file");
+  const legacyUri = String(form.get("legacy_file_uri") || "").trim().slice(0, 1200);
+  if (!(file instanceof File) || !legacyUri) return error("The file and its original Base44 file URI are required.");
+  if (!file.size || file.size > MAX_FILE_BYTES) return error("Each attachment must be between 1 byte and 10 MB.");
+  const type = String(file.type || "").toLowerCase();
+  const allowed = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
+  if (!allowed.has(type)) return error("Supported attachment formats are JPG, PNG, WEBP and PDF.");
+
+  const existing = await env.DB.prepare(
+    "SELECT id FROM uploaded_files WHERE user_id = ? AND legacy_file_uri = ?",
+  ).bind(user.id, legacyUri).first();
+  if (existing) return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
+
+  const id = crypto.randomUUID();
+  const key = `users/${user.id}/${id}`;
+  const originalName = String(file.name || "attachment").slice(0, 180);
+  await env.FILES.put(key, file.stream(), {
+    httpMetadata: { contentType: type, contentDisposition: "inline" },
+    customMetadata: { ownerId: user.id, originalName },
+  });
+  await env.DB.prepare(
+    "INSERT INTO uploaded_files (id, user_id, r2_key, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).bind(id, user.id, key, originalName, type, file.size, legacyUri).run();
+  return json({ file_uri: `cf-file:${id}`, already_imported: false }, 201);
+}
+
 export async function handleNativeApi(request, env) {
   const url = new URL(request.url);
   try {
@@ -352,6 +502,9 @@ export async function handleNativeApi(request, env) {
     }
     if (url.pathname === "/api/profile") return await handleProfile(request, env, user);
     if (url.pathname === "/api/ai") return await handleAI(request, env, user);
+    if (url.pathname === "/api/migration/status") return await handleMigrationStatus(request, env, user);
+    if (url.pathname === "/api/migration/import") return await handleMigrationImport(request, env, user);
+    if (url.pathname === "/api/migration/file") return await handleMigrationFile(request, env, user);
     return error("Not found.", 404);
   } catch (cause) {
     console.error("Native API request failed", cause);
