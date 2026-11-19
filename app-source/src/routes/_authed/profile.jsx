@@ -39,7 +39,15 @@ function ProfilePage() {
     let cancelled = false;
     fetch("/api/drive/status", { credentials: "same-origin" })
       .then((response) => response.ok ? response.json() : null)
-      .then((result) => { if (!cancelled) setDriveConnected(!!result?.connected); })
+      .then(async (result) => {
+        if (!result?.connected) {
+          if (!cancelled) setDriveConnected(false);
+          return;
+        }
+        const initialized = await fetch("/api/drive/initialize", { method: "POST", credentials: "same-origin" });
+        if (!initialized.ok) throw new Error("Could not prepare your Shopping Hisab folder in Google Drive.");
+        if (!cancelled) setDriveConnected(true);
+      })
       .catch(() => { if (!cancelled) setDriveConnected(false); });
     return () => { cancelled = true; };
   }, [user?.id]);
