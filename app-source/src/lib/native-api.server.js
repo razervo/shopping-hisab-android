@@ -506,7 +506,12 @@ async function handleAI(request, env, user) {
   if (action === "estimateMarketRates") {
     const items = Array.isArray(data.items) ? data.items.slice(0, 80) : [];
     if (!items.length) return error("Add items to estimate.");
-    const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: String(item.unit || "pcs").slice(0, 20) }));
+    const normalizeRateUnit = (value) => {
+      const key = String(value || "pcs").trim().toLowerCase().replaceAll(" ", "");
+      const aliases = { gm: "g", gms: "g", gram: "g", grams: "g", kilo: "kg", kgs: "kg", kilogram: "kg", kilograms: "kg", litre: "L", liter: "L", litres: "L", liters: "L", ltr: "L", packet: "pkt", packets: "pkt", pack: "pkt", packs: "pkt", piece: "pcs", pieces: "pcs", pc: "pcs" };
+      return aliases[key] || (key === "l" ? "L" : key);
+    };
+    const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: normalizeRateUnit(item.unit) }));
     const parsed = await callTextModel(env,
       "Estimate Indian retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep item order and indexes. Estimates are approximate, not live quotations. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when plausible.",
       `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}\nEach rate must be INR per ONE exact unit shown. Items: ${JSON.stringify(promptItems)}`,
@@ -515,7 +520,7 @@ async function handleAI(request, env, user) {
     const rates = Array.isArray(parsed.rates) ? parsed.rates
       .filter((r) => {
         if (!Number.isInteger(r.index) || r.index < 0 || r.index >= items.length) return false;
-        const unit = String(items[r.index].unit || "pcs").toLowerCase();
+        const unit = normalizeRateUnit(items[r.index].unit).toLowerCase();
         const ceiling = /^(g|gram|grams|ml|millilitre|milliliter)$/.test(unit) ? 5
           : /^(kg|kilogram|kilograms|l|litre|liter)$/.test(unit) ? 5000
           : /^(pcs|pc|piece|pieces)$/.test(unit) ? 50000 : 10000;
