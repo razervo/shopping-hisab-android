@@ -3,6 +3,7 @@ import { createNativeAuth } from "@/lib/native-auth.server";
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
+const VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -382,6 +383,18 @@ async function callTextModel(env, system, userContent, maxTokens = 1800) {
   return parseModelJson(extractModelText(result));
 }
 
+async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400) {
+  if (!env.AI) throw new Error("Workers AI binding is not configured.");
+  const result = await env.AI.run(VISION_MODEL, {
+    task: "query",
+    image: imageDataUrl,
+    question: `Read this handwritten English shopping bill. Return JSON only, with no markdown or explanation. Currency is INR. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Never guess unreadable text or prices. The number in the rightmost price column is the total for that row quantity. Put it in amount and calculate price=amount/qty when quantity is clear. If no price is visible, set price=0 and amount=0. Keep quantity in the normalized unit as written (200 gm => qty 200, unit g; 5 kg => qty 5, unit kg; half kg => qty 0.5, unit kg). ${instructions} Return exactly this shape: { "draft": { "shopName": "", "date": null, "notes": "", "items": [{ "name": "", "qty": 1, "unit": "pcs", "price": 0, "amount": 0 }] } }`,
+    reasoning: false,
+    temperature: 0.05,
+    max_tokens: maxTokens,
+  });
+  return parseModelJson(result?.answer ?? result?.result?.answer ?? "");
+}
 async function handleDirectBillRead(request, env, user) {
   const form = await request.formData();
   const file = form.get("file");
@@ -400,17 +413,7 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  const readPromise = env.AI.run(AI_MODEL, {
-    messages: [
-      { role: "system", content: `You accurately read Indian grocery and household shopping bills. Currency is INR. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Never guess unreadable text or prices. ${prompt}` },
-      { role: "user", content: [
-        { type: "text", text: "Read the attached shopping bill image and return the requested JSON." },
-        { type: "image_url", image_url: { url: imageDataUrl } },
-      ] },
-    ],
-    temperature: 0.05,
-    max_tokens: 1000,
-  });
+  const readPromise = callVisionModel(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 1400);
   // Upload to Drive at the same time as AI reads the original image.
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
   const [modelResult, uploaded] = await Promise.all([readPromise, uploadPromise]);
@@ -450,18 +453,7 @@ async function handleAI(request, env, user) {
       const bytes = new Uint8Array(await object.arrayBuffer());
       if (!bytes.length || bytes.length > MAX_FILE_BYTES) return error("The bill image is empty or too large. Please choose an image under 10 MB.");
       const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-      const result = await env.AI.run(AI_MODEL, {
-        messages: [
-          { role: "system", content: `You accurately read Indian grocery and household shopping bills. Currency is INR. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Never guess unreadable text or prices. ${prompt}` },
-          { role: "user", content: [
-            { type: "text", text: "Read the attached shopping bill image and return the requested JSON." },
-            { type: "image_url", image_url: { url: imageDataUrl } },
-          ] },
-        ],
-        temperature: 0.05,
-        max_tokens: 2200,
-      });
-      parsed = parseModelJson(extractModelText(result));
+      parsed = await callVisionModel(env, imageDataUrl, prompt, 2200);
     } else if (mime === "application/pdf") {
       if (!env.AI?.toMarkdown) return error("PDF reading is not enabled. Please upload a clear JPG or PNG photo instead.", 503);
       const converted = await env.AI.toMarkdown().transform({
