@@ -57,7 +57,7 @@ function ProfilePage() {
     try {
       const result = await authClient.linkSocial({
         provider: "google",
-        scopes: ["https://www.googleapis.com/auth/drive.file"],
+        scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"],
         callbackURL: "/profile",
         additionalParams: { access_type: "offline", prompt: "consent" },
       });
