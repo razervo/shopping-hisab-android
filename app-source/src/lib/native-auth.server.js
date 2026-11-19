@@ -39,8 +39,7 @@ export function createNativeAuth(env) {
       clientId: env.GOOGLE_CLIENT_ID,
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       accessType: "offline",
-      prompt: "consent",
-      scope: ["openid", "email", "profile"],
+      scope: ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"],
     };
   }
 
