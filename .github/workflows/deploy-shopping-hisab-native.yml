@@ -1,0 +1,37 @@
+name: Deploy Shopping Hisab native Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-source
+    steps:
+      - name: Check out native migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: cloudflare-native-migration
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app-source/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build native Cloudflare app
+        run: npm run build:native
+      - name: Verify isolated deployment target
+        run: |
+          node -e "const c=require('./wrangler.native.jsonc'); if(c.name!=='shopping-hisab-native') process.exit(1)"
+      - name: Deploy only the native Worker
+        run: npx wrangler deploy --config wrangler.native.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
