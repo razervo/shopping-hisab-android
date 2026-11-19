@@ -45,7 +45,7 @@ jobs:
         if: github.ref_name == 'cloudflare-native-migration'
         run: |
           rm -rf .native-worker-bundle
-          npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config .wrangler/deploy/config.json
           test -s .wrangler/deploy/config.json
           echo "Generated deployment config:"
           cat .wrangler/deploy/config.json
