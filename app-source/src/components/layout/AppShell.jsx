@@ -1,7 +1,44 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { LogOut, ShoppingBasket, UserRound } from "lucide-react";
+import { useEffect } from "react";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { useAuth } from "@/lib/AuthContext";
+import { authClient } from "@/lib/native-auth-client";
+
+function DrivePermissionCheck({ userId }) {
+  useEffect(() => {
+    if (!userId) return;
+    const attemptKey = `shopping-hisab-drive-consent:${userId}`;
+
+    async function checkDriveAccess() {
+      try {
+        const response = await fetch("/api/drive/status", { credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) return;
+        const status = await response.json();
+        if (status.connected || sessionStorage.getItem(attemptKey)) return;
+
+        // Only one automatic attempt per user per tab, preventing a redirect loop
+        // if the user declines Google's permission screen.
+        sessionStorage.setItem(attemptKey, "started");
+        const result = await authClient.linkSocial({
+          provider: "google",
+          scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"],
+          callbackURL: window.location.pathname + window.location.search,
+          errorCallbackURL: window.location.pathname + window.location.search,
+          additionalParams: { access_type: "offline", prompt: "consent" },
+        });
+        if (result?.error) throw new Error(result.error.message || "Google Drive permission was not granted.");
+        if (result?.data?.url) window.location.assign(result.data.url);
+      } catch (error) {
+        console.warn("Google Drive permission check failed:", error);
+      }
+    }
+
+    checkDriveAccess();
+  }, [userId]);
+
+  return null;
+}
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -16,6 +53,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-white">
+      <DrivePermissionCheck userId={user?.id} />
       <header className="sticky top-0 z-30 border-b border-border/70 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
           <Link to="/" className="flex items-center gap-2.5">
