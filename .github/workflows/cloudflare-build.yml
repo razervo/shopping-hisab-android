@@ -41,3 +41,12 @@ jobs:
           test -s dist/client/.well-known/assetlinks.json
           test -s dist/client/manifest.json
           test -s dist/client/manifest.webmanifest
+      - name: Upload native Worker bundle
+        if: github.ref_name == 'cloudflare-native-migration'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopping-hisab-native-worker
+          path: |
+            app-source/dist/**
+          if-no-files-found: error
+          retention-days: 7
