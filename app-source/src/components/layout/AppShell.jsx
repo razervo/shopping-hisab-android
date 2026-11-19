@@ -15,7 +15,11 @@ function DrivePermissionCheck({ userId }) {
         const response = await fetch("/api/drive/status", { credentials: "same-origin", cache: "no-store" });
         if (!response.ok) return;
         const status = await response.json();
-        if (status.connected || sessionStorage.getItem(attemptKey)) return;
+        if (status.connected) {
+          await fetch("/api/drive/initialize", { method: "POST", credentials: "same-origin" });
+          return;
+        }
+        if (sessionStorage.getItem(attemptKey)) return;
 
         // Only one automatic attempt per user per tab, preventing a redirect loop
         // if the user declines Google's permission screen.
