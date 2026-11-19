@@ -50,6 +50,9 @@ export function cleanItems(items) {
     .filter((i) => String(i.name || "").trim() !== "" || Number(i.amount) > 0)
     .map((i) => ({
       name: String(i.name || "").trim() || "Item",
+      brand_type: ["branded", "local_brand", "unbranded"].includes(i.brandType || i.brand_type) ? (i.brandType || i.brand_type) : "unbranded",
+      brand: String(i.brand || "").trim().slice(0, 80),
+      variety: String(i.variety || "").trim().slice(0, 80),
       qty: Number(i.qty) || 0,
       unit: normalizeShoppingUnit(i.unit || ""),
       price: round2(i.price),
@@ -61,13 +64,16 @@ export function cleanItems(items) {
 }
 
 export function emptyItem() {
-  return { id: Math.random().toString(36).slice(2), name: "", qty: 1, unit: "pcs", price: "", estimatedPrice: "", amount: "" };
+  return { id: Math.random().toString(36).slice(2), name: "", brandType: "unbranded", brand: "", variety: "", qty: 1, unit: "pcs", price: "", estimatedPrice: "", amount: "" };
 }
 
 export function toFormItems(items) {
   return (items || []).map((i, idx) => ({
     id: i.id || `i${idx}-${Math.random().toString(36).slice(2, 6)}`,
     name: i.name || "",
+    brandType: i.brand_type || i.brandType || "unbranded",
+    brand: i.brand || "",
+    variety: i.variety || "",
     qty: i.qty ?? 1,
     unit: normalizeShoppingUnit(i.unit || "pcs"),
     price: i.price ?? "",
