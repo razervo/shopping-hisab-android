@@ -246,10 +246,10 @@ async function uploadGoogleDriveFile(db, userId, env, file, originalName) {
   const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
   const fileBytes = await file.arrayBuffer();
   const multipartBody = new Blob([
-    `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n${JSON.stringify(metadata)}\\r\\n`,
-    `--${boundary}\\r\\nContent-Type: ${file.type || "application/octet-stream"}\\r\\n\\r\\n`,
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+    `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`,
     fileBytes,
-    `\\r\\n--${boundary}--`,
+    `\r\n--${boundary}--`,
   ], { type: `multipart/related; boundary=${boundary}` });
   const response = await driveRequest(token,
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size",
