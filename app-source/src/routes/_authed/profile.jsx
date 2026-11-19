@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Camera, ChevronLeft, MapPin, Phone, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -146,6 +146,13 @@ function ProfilePage() {
       >
         <ChevronLeft className="h-4 w-4" /> Home
       </button>
+
+      <Link
+        to="/export-migration"
+        className="flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[13px] font-bold text-foreground"
+      >
+        Export old data for Cloudflare migration
+      </Link>
 
       <div className="rounded-[26px] bg-primary px-5 py-5 text-primary-foreground">
         <div className="flex items-center gap-4">
