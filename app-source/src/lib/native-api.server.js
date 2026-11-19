@@ -382,6 +382,49 @@ async function callTextModel(env, system, userContent, maxTokens = 1800) {
   return parseModelJson(extractModelText(result));
 }
 
+async function handleDirectBillRead(request, env, user) {
+  const form = await request.formData();
+  const file = form.get("file");
+  const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
+  if (!(file instanceof File) || !file.size) return error("Choose a bill photo first.");
+  if (file.size > MAX_FILE_BYTES) return error("Please choose a photo under 10 MB.");
+  const mime = String(file.type || "").toLowerCase();
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) {
+    return error("For the faster reader, please use a JPG, PNG or WEBP photo. PDFs can still use the standard reader.");
+  }
+  if (!env.AI) return error("Bill reading is temporarily unavailable.", 503);
+
+  const prompt = purpose === "shopping_list"
+    ? "Read this shopping list image carefully. Extract only visible items. Do not invent prices or items. Preserve quantities and units exactly when legible. If quantity or unit is unclear, use qty 1 and unit pcs. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:0,amount:0}]}}. Use YYYY-MM-DD dates only when clearly printed; otherwise use today's date."
+    : "Read this priced Indian grocery bill/list carefully. Extract only visible rows. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Prefer printed line totals for amount. Compute unit price only when quantity and line total are both legible. Do not invent prices or add invisible items.";
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
+  const readPromise = env.AI.run(AI_MODEL, {
+    messages: [
+      { role: "system", content: `You accurately read Indian grocery and household shopping bills. Currency is INR. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Never guess unreadable text or prices. ${prompt}` },
+      { role: "user", content: [
+        { type: "text", text: "Read the attached shopping bill image and return the requested JSON." },
+        { type: "image_url", image_url: { url: imageDataUrl } },
+      ] },
+    ],
+    temperature: 0.05,
+    max_tokens: 1400,
+  });
+  // Upload to Drive at the same time as AI reads the original image.
+  const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
+  const [modelResult, uploaded] = await Promise.all([readPromise, uploadPromise]);
+  const parsed = parseModelJson(extractModelText(modelResult));
+  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
+    throw new Error("The bill could not be interpreted. Try a clearer, straight photo.");
+  }
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
+  ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, mime, uploaded.size).run();
+  return json({ draft: parsed.draft, file_uri: `cf-file:${id}` });
+}
+
 async function handleAI(request, env, user) {
   if (request.method !== "POST") return error("Method not allowed.", 405);
   let body;
@@ -654,6 +697,7 @@ export async function handleNativeApi(request, env) {
     if (url.pathname === "/api/profile") return await handleProfile(request, env, user);
     if (url.pathname === "/api/drive/status") return request.method === "GET" ? await handleDriveStatus(env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/drive/initialize") return request.method === "POST" ? await handleDriveInitialize(env, user) : error("Method not allowed.", 405);
+    if (url.pathname === "/api/ai/read-bill") return request.method === "POST" ? await handleDirectBillRead(request, env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/ai") return await handleAI(request, env, user);
     if (url.pathname === "/api/migration/status") return await handleMigrationStatus(request, env, user);
     if (url.pathname === "/api/migration/import") return await handleMigrationImport(request, env, user);
