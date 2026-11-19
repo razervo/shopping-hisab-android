@@ -127,7 +127,7 @@ export function RecordForm({
       g: { group: "mass", factor: 1 },
       kg: { group: "mass", factor: 1000 },
       ml: { group: "volume", factor: 1 },
-      l: { group: "volume", factor: 1000 },
+      L: { group: "volume", factor: 1000 },
     };
 
     const nextItems = items.map((item) => ({ ...item }));
