@@ -486,10 +486,14 @@ async function handleAI(request, env, user) {
   if (action === "suggestMarketRate") {
     const name = String(data.name || "").trim().slice(0, 100);
     const unit = String(data.unit || "pcs").trim().slice(0, 20);
+    const brandType = ["branded", "local_brand", "unbranded"].includes(data.brandType) ? data.brandType : "unbranded";
+    const brand = String(data.brand || "").trim().slice(0, 80);
+    const variety = String(data.variety || "").trim().slice(0, 80);
     if (!name) return error("Enter an item name.");
+    if (brandType !== "unbranded" && !brand) return error("Enter the exact brand name before estimating.");
     const parsed = await callTextModel(env,
-      "Estimate a normal Indian retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (so ₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (so ₹100/L = ₹0.10/ml); L means one litre. Never return a per-kg or per-litre price when the requested unit is g or ml. Use a conservative approximate range, not a live quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
-      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
+      "Estimate an indicative Indian retail grocery price in INR for exactly ONE requested unit. This is an AI estimate, NOT a live online price or verified retailer quote. Respect product identity: never substitute another brand. For branded/local-brand items, estimate only the exact brand supplied; if uncertain, do not guess. For unbranded items, estimate the named loose/unbranded variety only. Unit discipline: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
+      `Item: ${name}\nBrand type: ${brandType}\nExact brand: ${brand || "None - loose/unbranded"}\nVariety/quality: ${variety || "Not specified"}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
       450,
     );
     const suggestion = parsed.suggestion;
