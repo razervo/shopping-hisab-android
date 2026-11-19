@@ -1,5 +1,5 @@
 import { Lock, LogIn, Mail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthError, AuthLink, GoogleButton, OrDivider, SubmitButton } from "@/components/auth/parts";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,14 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // A previous declined/failed consent attempt must not block a fresh login.
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("shopping-hisab-drive-consent:")) sessionStorage.removeItem(key);
+    }
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
