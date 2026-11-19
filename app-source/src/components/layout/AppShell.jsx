@@ -21,9 +21,9 @@ function DrivePermissionCheck({ userId }) {
         }
         if (sessionStorage.getItem(attemptKey)) return;
 
-        // Only one automatic attempt per user per tab, preventing a redirect loop
-        // if the user declines Google's permission screen.
-        sessionStorage.setItem(attemptKey, "started");
+        // Ask only after the signed-in session exists. Mark the attempt only
+        // when Better Auth returns a real authorization URL, so transient
+        // errors do not permanently suppress the next login attempt.
         const result = await authClient.linkSocial({
           provider: "google",
           scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"],
@@ -32,7 +32,10 @@ function DrivePermissionCheck({ userId }) {
           additionalParams: { access_type: "offline", prompt: "consent" },
         });
         if (result?.error) throw new Error(result.error.message || "Google Drive permission was not granted.");
-        if (result?.data?.url) window.location.assign(result.data.url);
+        if (result?.data?.url) {
+          sessionStorage.setItem(attemptKey, "started");
+          window.location.assign(result.data.url);
+        }
       } catch (error) {
         console.warn("Google Drive permission check failed:", error);
       }
