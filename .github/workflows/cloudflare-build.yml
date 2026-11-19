@@ -45,20 +45,23 @@ jobs:
         if: github.ref_name == 'cloudflare-native-migration'
         run: |
           rm -rf .native-worker-bundle
-          npx wrangler deploy --dry-run --config .wrangler/deploy/config.json
-          test -s .wrangler/deploy/config.json
-          echo "Generated deployment config:"
-          cat .wrangler/deploy/config.json
-          test -n "$(find dist -type f -size +0c -print -quit)"
-          echo "Generated Worker and client files:"
-          find dist .wrangler/deploy -maxdepth 3 -type f -size +0c -printf '%p (%s bytes)\n' | sort
+          echo "Inspecting Cloudflare Vite build output:"
+          find dist -maxdepth 5 -type f -size +0c -printf '%p (%s bytes)\n' | sort
+          test -s dist/server/wrangler.json
+          test -n "$(find dist/server -type f -name '*.js' -size +0c -print -quit)"
+          echo "Validating the generated native Worker configuration without deployment:"
+          npx wrangler deploy --dry-run --config dist/server/wrangler.json
+          mkdir -p .native-worker-bundle
+          cp -R dist/. .native-worker-bundle/
+          cp dist/server/wrangler.json .native-worker-bundle/wrangler.json
+          echo "Validated Worker and client files:"
+          find .native-worker-bundle -maxdepth 5 -type f -size +0c -printf '%p (%s bytes)\n' | sort
       - name: Upload native Worker bundle
         if: github.ref_name == 'cloudflare-native-migration'
         uses: actions/upload-artifact@v4
         with:
           name: shopping-hisab-native-worker
           path: |
-            app-source/dist/**
-            app-source/.wrangler/deploy/**
+            app-source/.native-worker-bundle/**
           if-no-files-found: error
           retention-days: 7
