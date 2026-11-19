@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
-    "deploy:native": "npm run build && wrangler deploy --config wrangler.native.jsonc"
+    "deploy:native": "npm run build:native && wrangler deploy",
+    "build:native": "node scripts/build-native.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
