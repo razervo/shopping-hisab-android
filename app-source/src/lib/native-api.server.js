@@ -570,7 +570,12 @@ async function handleMigrationFile(request, env, user) {
   const existing = await env.DB.prepare(
     "SELECT id FROM uploaded_files WHERE user_id = ? AND legacy_file_uri = ?",
   ).bind(user.id, legacyUri).first();
-  if (existing) return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
+  if (existing) {
+    await env.DB.prepare(
+      "UPDATE shopping_records SET bill_file_id = ?, legacy_bill_file_uri = NULL WHERE user_id = ? AND legacy_bill_file_uri = ?",
+    ).bind(existing.id, user.id, legacyUri).run();
+    return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
+  }
 
   const id = crypto.randomUUID();
   const originalName = String(file.name || "attachment").slice(0, 180);
@@ -578,6 +583,9 @@ async function handleMigrationFile(request, env, user) {
   await env.DB.prepare(
     "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)",
   ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, type, uploaded.size, legacyUri).run();
+  await env.DB.prepare(
+    "UPDATE shopping_records SET bill_file_id = ?, legacy_bill_file_uri = NULL WHERE user_id = ? AND legacy_bill_file_uri = ?",
+  ).bind(id, user.id, legacyUri).run();
   return json({ file_uri: `cf-file:${id}`, already_imported: false }, 201);
 }
 
