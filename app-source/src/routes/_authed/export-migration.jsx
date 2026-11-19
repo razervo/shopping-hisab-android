@@ -10,7 +10,9 @@ export const Route = createFileRoute("/_authed/export-migration")({
   component: ExportMigrationPage,
 });
 
-const MAX_RECORD_PAGES = 1000;
+const PAGE_SIZE = 500;
+const MAX_RECORD_PAGES = 400;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 70 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
@@ -42,23 +44,16 @@ function filenameFrom(uri, index, type) {
 
 async function fetchAllRecords(setProgress) {
   const records = [];
-  let cursor = null;
-  const seenCursors = new Set();
-
-  for (let pageNumber = 1; pageNumber <= MAX_RECORD_PAGES; pageNumber += 1) {
-    setProgress(`Reading shopping records · page ${pageNumber}…`);
-    const page = await base44.entities.ShoppingRecord.list({
-      sort: "-date",
-      limit: 200,
-      ...(cursor ? { cursor } : {}),
-    });
-    records.push(...(page?.items || []));
-    if (!page?.has_more) return records;
-    if (!page.next_cursor || seenCursors.has(page.next_cursor)) {
-      throw new Error("Base44 pagination stopped unexpectedly. No backup was created; retry or contact support.");
+  for (let pageNumber = 0; pageNumber < MAX_RECORD_PAGES; pageNumber += 1) {
+    const skip = pageNumber * PAGE_SIZE;
+    setProgress(`Reading shopping records · page ${pageNumber + 1}…`);
+    // Base44 SDK list() returns an array and uses positional sort, limit, skip arguments.
+    const page = await base44.entities.ShoppingRecord.list("-date", PAGE_SIZE, skip);
+    if (!Array.isArray(page)) {
+      throw new Error("Base44 returned an unexpected records response. No backup was created.");
     }
-    seenCursors.add(page.next_cursor);
-    cursor = page.next_cursor;
+    records.push(...page);
+    if (page.length < PAGE_SIZE) return records;
   }
   throw new Error("This account has more than 200,000 records. Export in smaller date ranges with a supported export tool.");
 }
@@ -79,6 +74,9 @@ async function downloadPrivateFile(fileUri, index, setProgress) {
     throw new Error(`Attachment ${index + 1} has unsupported type "${type || "unknown"}". The native importer accepts JPG, PNG, WEBP and PDF; no files were skipped silently.`);
   }
   if (!blob.size) throw new Error(`Attachment ${index + 1} downloaded empty.`);
+  if (blob.size > MAX_FILE_BYTES) {
+    throw new Error(`Attachment ${index + 1} is larger than 10 MB. The Cloudflare importer accepts up to 10 MB per file, so no backup was created.`);
+  }
   return { bytes: new Uint8Array(await blob.arrayBuffer()), type, size: blob.size };
 }
 
