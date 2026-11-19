@@ -38,6 +38,7 @@ export function createNativeAuth(env) {
     socialProviders.google = {
       clientId: env.GOOGLE_CLIENT_ID,
       clientSecret: env.GOOGLE_CLIENT_SECRET,
+      // Drive access is requested only when a user chooses "Connect Google Drive".
     };
   }
 
