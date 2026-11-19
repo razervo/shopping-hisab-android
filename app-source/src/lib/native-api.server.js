@@ -444,13 +444,20 @@ async function handleAI(request, env, user) {
     const unit = String(data.unit || "pcs").trim().slice(0, 20);
     if (!name) return error("Enter an item name.");
     const parsed = await callTextModel(env,
-      "You estimate typical retail grocery prices in India, in INR per the exact requested unit. These are rough estimates, not live quotations. Be conservative and do not claim real-time market data. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
-      `Item: ${name}\nUnit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nReturn a reasonable broad range in INR.`,
+      "Estimate a normal Indian retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (so ₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (so ₹100/L = ₹0.10/ml); L means one litre. Never return a per-kg or per-litre price when the requested unit is g or ml. Use a conservative approximate range, not a live quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
+      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
       450,
     );
     const suggestion = parsed.suggestion;
-    if (!suggestion || !(Number(suggestion.rate) > 0)) return error("No reliable estimate was available for this item.", 503);
-    return json({ suggestion });
+    const rate = Number(suggestion?.rate);
+    const unitKey = unit.toLowerCase();
+    const ceiling = /^(g|gram|grams|ml|millilitre|milliliter)$/.test(unitKey) ? 5
+      : /^(kg|kilogram|kilograms|l|litre|liter)$/.test(unitKey) ? 5000
+      : /^(pcs|pc|piece|pieces)$/.test(unitKey) ? 50000 : 10000;
+    if (!Number.isFinite(rate) || rate <= 0 || rate > ceiling) {
+      return error("The market estimate looked unrealistic for this unit. Please enter a local shop rate instead.", 422);
+    }
+    return json({ suggestion: { ...suggestion, rate } });
   }
 
   if (action === "estimateMarketRates") {
@@ -458,13 +465,20 @@ async function handleAI(request, env, user) {
     if (!items.length) return error("Add items to estimate.");
     const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: String(item.unit || "pcs").slice(0, 20) }));
     const parsed = await callTextModel(env,
-      "You estimate typical retail grocery prices in India in INR per the supplied unit. Estimates are approximate, not live market quotations. Keep the same item order and indexes. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when a plausible estimate exists.",
-      `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}\nItems: ${JSON.stringify(promptItems)}`,
+      "Estimate Indian retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep item order and indexes. Estimates are approximate, not live quotations. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when plausible.",
+      `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}\nEach rate must be INR per ONE exact unit shown. Items: ${JSON.stringify(promptItems)}`,
       1600,
     );
     const rates = Array.isArray(parsed.rates) ? parsed.rates
-      .filter((r) => Number.isInteger(r.index) && r.index >= 0 && r.index < items.length && Number(r.rate) > 0)
-      .map((r) => ({ index: r.index, rate: Math.round(Number(r.rate) * 100) / 100 })) : [];
+      .filter((r) => {
+        if (!Number.isInteger(r.index) || r.index < 0 || r.index >= items.length) return false;
+        const unit = String(items[r.index].unit || "pcs").toLowerCase();
+        const ceiling = /^(g|gram|grams|ml|millilitre|milliliter)$/.test(unit) ? 5
+          : /^(kg|kilogram|kilograms|l|litre|liter)$/.test(unit) ? 5000
+          : /^(pcs|pc|piece|pieces)$/.test(unit) ? 50000 : 10000;
+        return Number.isFinite(Number(r.rate)) && Number(r.rate) > 0 && Number(r.rate) <= ceiling;
+      })
+      .map((r) => ({ index: r.index, rate: Math.round(Number(r.rate) * 10000) / 10000 })) : [];
     return json({ rates });
   }
 
