@@ -170,9 +170,96 @@ async function handleRecords(request, env, user, url) {
   return error("Method not allowed.", 405);
 }
 
-async function handleFiles(request, env, user, url) {
-  if (!env.FILES) return error("Private file storage is not configured.", 503);
+async function getGoogleDriveToken(db, userId, env) {
+  const account = await db.prepare(
+    "SELECT id, accessToken, refreshToken, accessTokenExpiresAt FROM account WHERE userId = ? AND providerId = 'google' ORDER BY updatedAt DESC LIMIT 1",
+  ).bind(userId).first();
+  if (!account) throw new Error("Connect Google Drive from your profile before uploading files.");
+  const expiresAt = account.accessTokenExpiresAt ? new Date(account.accessTokenExpiresAt).getTime() : 0;
+  if (account.accessToken && (!expiresAt || expiresAt > Date.now() + 60_000)) return account.accessToken;
+  if (!account.refreshToken || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new Error("Your Google Drive connection needs to be renewed. Reconnect Google Drive from your profile.");
+  }
+  const form = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    refresh_token: account.refreshToken,
+    grant_type: "refresh_token",
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form,
+  });
+  const tokens = await response.json().catch(() => ({}));
+  if (!response.ok || !tokens.access_token) {
+    throw new Error("Google Drive authorization expired. Reconnect Google Drive from your profile.");
+  }
+  const nextExpiry = new Date(Date.now() + Number(tokens.expires_in || 3600) * 1000).toISOString();
+  await db.prepare(
+    "UPDATE account SET accessToken = ?, accessTokenExpiresAt = ?, updatedAt = ? WHERE id = ?",
+  ).bind(tokens.access_token, nextExpiry, new Date().toISOString(), account.id).run();
+  return tokens.access_token;
+}
 
+async function driveRequest(token, url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
+  });
+  return response;
+}
+
+async function ensureGoogleDriveFolder(db, userId, token) {
+  const user = await db.prepare('SELECT googleDriveFolderId FROM "user" WHERE id = ?').bind(userId).first();
+  if (user?.googleDriveFolderId) return user.googleDriveFolderId;
+  const query = new URLSearchParams({
+    q: "name = 'Shopping Hisab' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+    fields: "files(id,name)",
+    pageSize: "10",
+  });
+  const listed = await driveRequest(token, `https://www.googleapis.com/drive/v3/files?${query}`);
+  const listing = await listed.json().catch(() => ({}));
+  if (!listed.ok) throw new Error("Could not check your Google Drive folder. Please reconnect Google Drive.");
+  let folderId = listing.files?.[0]?.id;
+  if (!folderId) {
+    const created = await driveRequest(token, "https://www.googleapis.com/drive/v3/files?fields=id,name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Shopping Hisab", mimeType: "application/vnd.google-apps.folder" }),
+    });
+    const folder = await created.json().catch(() => ({}));
+    if (!created.ok || !folder.id) throw new Error("Could not create the Shopping Hisab folder in your Google Drive.");
+    folderId = folder.id;
+  }
+  await db.prepare('UPDATE "user" SET googleDriveFolderId = ? WHERE id = ?').bind(folderId, userId).run();
+  return folderId;
+}
+
+async function uploadGoogleDriveFile(db, userId, env, file, originalName) {
+  const token = await getGoogleDriveToken(db, userId, env);
+  const folderId = await ensureGoogleDriveFolder(db, userId, token);
+  const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId] };
+  const form = new FormData();
+  form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+  form.append("file", new Blob([await file.arrayBuffer()], { type: file.type || "application/octet-stream" }), metadata.name);
+  const response = await driveRequest(token,
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size",
+    { method: "POST", body: form },
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.id) throw new Error("Google Drive could not save this attachment. Check your Drive storage and reconnect if needed.");
+  return { driveFileId: result.id, size: Number(result.size) || file.size, name: result.name || metadata.name };
+}
+
+async function downloadGoogleDriveFile(db, userId, env, driveFileId) {
+  const token = await getGoogleDriveToken(db, userId, env);
+  const response = await driveRequest(token, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`);
+  if (!response.ok) throw new Error("Could not open this file from your Google Drive. Check that the file still exists and reconnect Drive if needed.");
+  return response;
+}
+
+async function handleFiles(request, env, user, url) {
   if (url.pathname === "/api/files" && request.method === "POST") {
     const form = await request.formData();
     const file = form.get("file");
@@ -182,39 +269,30 @@ async function handleFiles(request, env, user, url) {
     const allowed = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
     if (!allowed.has(type)) return error("Supported formats are JPG, PNG, WEBP and PDF.");
     const id = crypto.randomUUID();
-    const key = `users/${user.id}/${id}`;
-    await env.FILES.put(key, file.stream(), {
-      httpMetadata: {
-        contentType: type,
-        contentDisposition: "inline",
-      },
-      customMetadata: { ownerId: user.id, originalName: String(file.name || "upload").slice(0, 180) },
-    });
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "upload");
     await env.DB.prepare(
-      "INSERT INTO uploaded_files (id, user_id, r2_key, original_name, content_type, size_bytes) VALUES (?, ?, ?, ?, ?, ?)",
-    ).bind(id, user.id, key, String(file.name || "upload").slice(0, 180), type, file.size).run();
+      "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
+    ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, type, uploaded.size).run();
     return json({ file_uri: `cf-file:${id}`, file_id: id }, 201);
   }
 
-  const match = /^\/api\/files\/([a-f0-9-]{36})\/(content|signed)$/i.exec(url.pathname);
+  const match = /^\\/api\\/files\\/([a-f0-9-]{36})\\/(content|signed)$/i.exec(url.pathname);
   if (!match) return error("Not found.", 404);
   const [, id, action] = match;
   const file = await env.DB.prepare(
-    "SELECT id, r2_key, original_name, content_type, size_bytes FROM uploaded_files WHERE id = ? AND user_id = ?",
+    "SELECT id, drive_file_id, storage_provider, original_name, content_type, size_bytes FROM uploaded_files WHERE id = ? AND user_id = ?",
   ).bind(id, user.id).first();
   if (!file) return error("File not found.", 404);
 
   if (action === "signed" && request.method === "GET") {
-    // This is an authenticated same-origin URL, not a public or bearer URL.
     return json({ signed_url: `/api/files/${id}/content` });
   }
 
   if (action === "content" && request.method === "GET") {
-    const object = await env.FILES.get(file.r2_key);
-    if (!object) return error("File content is missing.", 404);
+    if (file.storage_provider !== "google_drive" || !file.drive_file_id) return error("This attachment is not available in Google Drive.", 404);
+    const object = await downloadGoogleDriveFile(env.DB, user.id, env, file.drive_file_id);
     const headers = new Headers({
       "Content-Type": file.content_type,
-      "Content-Length": String(file.size_bytes),
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.original_name)}`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
@@ -222,6 +300,14 @@ async function handleFiles(request, env, user, url) {
     return new Response(object.body, { headers });
   }
   return error("Method not allowed.", 405);
+}
+
+async function handleDriveStatus(env, user) {
+  const account = await env.DB.prepare(
+    "SELECT scope, refreshToken FROM account WHERE userId = ? AND providerId = 'google' ORDER BY updatedAt DESC LIMIT 1",
+  ).bind(user.id).first();
+  const scopes = String(account?.scope || "").split(/[ ,]+/);
+  return json({ connected: !!account && scopes.includes("https://www.googleapis.com/auth/drive.file"), email: user.email || null });
 }
 
 async function handleProfile(request, env, user) {
@@ -282,13 +368,12 @@ async function handleAI(request, env, user) {
 
   if (action === "readShoppingBill") {
     const fileId = parseFileId(data.fileUri);
-    if (!fileId) return error("The uploaded bill is not stored in this Cloudflare account.");
+    if (!fileId) return error("The uploaded bill is not stored in Shopping Hisab.");
     const file = await env.DB.prepare(
-      "SELECT r2_key, original_name, content_type FROM uploaded_files WHERE id = ? AND user_id = ?",
+      "SELECT drive_file_id, storage_provider, original_name, content_type FROM uploaded_files WHERE id = ? AND user_id = ?",
     ).bind(fileId, user.id).first();
-    if (!file) return error("Uploaded bill not found.", 404);
-    const object = await env.FILES.get(file.r2_key);
-    if (!object) return error("Uploaded bill content is missing.", 404);
+    if (!file || file.storage_provider !== "google_drive" || !file.drive_file_id) return error("Uploaded bill not found in Google Drive.", 404);
+    const object = await downloadGoogleDriveFile(env.DB, user.id, env, file.drive_file_id);
     if (!env.AI?.toMarkdown) return error("Cloudflare document conversion is not enabled.", 503);
     const converted = await env.AI.toMarkdown().transform({
       name: file.original_name,
@@ -459,7 +544,6 @@ async function handleMigrationImport(request, env, user) {
 
 async function handleMigrationFile(request, env, user) {
   if (request.method !== "POST") return error("Method not allowed.", 405);
-  if (!env.FILES) return error("Private file storage is not configured.", 503);
   const form = await request.formData();
   const file = form.get("file");
   const legacyUri = String(form.get("legacy_file_uri") || "").trim().slice(0, 1200);
@@ -475,15 +559,11 @@ async function handleMigrationFile(request, env, user) {
   if (existing) return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
 
   const id = crypto.randomUUID();
-  const key = `users/${user.id}/${id}`;
   const originalName = String(file.name || "attachment").slice(0, 180);
-  await env.FILES.put(key, file.stream(), {
-    httpMetadata: { contentType: type, contentDisposition: "inline" },
-    customMetadata: { ownerId: user.id, originalName },
-  });
+  const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName);
   await env.DB.prepare(
-    "INSERT INTO uploaded_files (id, user_id, r2_key, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).bind(id, user.id, key, originalName, type, file.size, legacyUri).run();
+    "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)",
+  ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, type, uploaded.size, legacyUri).run();
   return json({ file_uri: `cf-file:${id}`, already_imported: false }, 201);
 }
 
@@ -501,6 +581,7 @@ export async function handleNativeApi(request, env) {
       return await handleFiles(request, env, user, url);
     }
     if (url.pathname === "/api/profile") return await handleProfile(request, env, user);
+    if (url.pathname === "/api/drive/status") return request.method === "GET" ? await handleDriveStatus(env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/ai") return await handleAI(request, env, user);
     if (url.pathname === "/api/migration/status") return await handleMigrationStatus(request, env, user);
     if (url.pathname === "/api/migration/import") return await handleMigrationImport(request, env, user);
