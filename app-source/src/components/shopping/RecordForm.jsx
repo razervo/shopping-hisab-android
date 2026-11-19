@@ -111,19 +111,23 @@ export function RecordForm({
         .replace(/(es|s)$/i, "");
     const matchedIds = new Set();
     const missed = [];
+    const unitAliases = {
+      gm: "g", gms: "g", gram: "g", grams: "g",
+      kilo: "kg", kgs: "kg", kilogram: "kg", kilograms: "kg",
+      millilitre: "ml", milliliter: "ml", millilitres: "ml", milliliters: "ml",
+      litre: "l", liter: "l", litres: "l", liters: "l",
+      packet: "pkt", packets: "pkt", pack: "pkt", packs: "pkt",
+      piece: "pcs", pieces: "pcs", pc: "pcs",
+    };
+    const normalizeUnit = (unit) => {
+      const key = String(unit || "").trim().toLowerCase().replace(/\\s+/g, "");
+      return unitAliases[key] || key;
+    };
     const unitScale = {
       g: { group: "mass", factor: 1 },
-      gram: { group: "mass", factor: 1 },
-      grams: { group: "mass", factor: 1 },
       kg: { group: "mass", factor: 1000 },
-      kilogram: { group: "mass", factor: 1000 },
-      kilograms: { group: "mass", factor: 1000 },
       ml: { group: "volume", factor: 1 },
-      millilitre: { group: "volume", factor: 1 },
-      milliliter: { group: "volume", factor: 1 },
       l: { group: "volume", factor: 1000 },
-      litre: { group: "volume", factor: 1000 },
-      liter: { group: "volume", factor: 1000 },
     };
 
     const nextItems = items.map((item) => ({ ...item }));
@@ -140,18 +144,19 @@ export function RecordForm({
 
       const quantity = Number(priced.qty) > 0 ? Number(priced.qty) : 1;
       const lineAmount = Number(priced.amount) > 0 ? Number(priced.amount) : 0;
-      const rateInUploadedUnit =
-        Number(priced.price) > 0
+      // The uploaded list's right-hand price is normally the row total.
+      // Prefer amount (line total) and derive the per-unit rate; this prevents
+      // a ₹200 total for 5 kg rice being treated as ₹200 per kg.
+      const rateInUploadedUnit = lineAmount > 0
+        ? lineAmount / quantity
+        : Number(priced.price) > 0
           ? Number(priced.price)
-          : lineAmount > 0
-            ? lineAmount / quantity
-            : 0;
+          : 0;
       if (rateInUploadedUnit <= 0) {
         if (priced.name) missed.push(String(priced.name));
         return;
       }
 
-      const normalizeUnit = (unit) => String(unit || "").trim().toLowerCase();
       const uploadedUnit = normalizeUnit(priced.unit || nextItems[index].unit);
       const plannedUnit = normalizeUnit(nextItems[index].unit || priced.unit);
       let actualRate = rateInUploadedUnit;
