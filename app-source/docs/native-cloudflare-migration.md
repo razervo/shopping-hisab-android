@@ -10,17 +10,17 @@ Do not point the production Cloudflare project at this branch until the new D1 d
 
 - Cloudflare Workers: web server and same-origin API.
 - D1: Better Auth users/sessions/accounts, shopping records and file metadata.
-- R2: private bills and profile photos. No public bucket URL is exposed.
+- Google Drive API: each user stores bills and profile photos in a private `Shopping Hisab` folder in their own Drive. The app requests only the `drive.file` scope.
 - Workers AI: document/image-to-Markdown conversion and structured receipt interpretation.
 - Better Auth: independent email/password and Google OAuth.
 
 ## New resources only
 
-Create a NEW D1 database named `shopping-hisab-native` and a NEW private R2 bucket named `shopping-hisab-private`. Do not reuse, overwrite or delete any existing database or bucket.
+Create a NEW D1 database named `shopping-hisab-native`. File uploads use each signed-in user's Google Drive; no R2 bucket is required. Do not reuse, overwrite or delete any existing database or bucket.
 
 The initial schema is in `migrations-native/0001_initial.sql`.
 
-After creating the D1 database, copy `wrangler.native.example.jsonc` to `wrangler.native.jsonc`, replace the placeholder with the new D1 database ID, and set the actual app URL in `APP_BASE_URL`. Keep the R2 bucket private.
+After creating the D1 database, copy `wrangler.native.example.jsonc` to `wrangler.native.jsonc`, replace the placeholder with the new D1 database ID, and set the actual app URL in `APP_BASE_URL`.
 
 Apply only to the new database:
 
@@ -39,7 +39,7 @@ npx wrangler deploy --config wrangler.native.jsonc
 Set the following Worker secrets (never commit their values):
 
 - `BETTER_AUTH_SECRET`: at least 32 random characters.
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth web client credentials. Add the new app callback URL `/api/auth/callback/google` to the authorized redirect URIs.
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth web client credentials. Add the new app callback URL `/api/auth/callback/google` to the authorized redirect URIs. Enable the Google Drive API. Users connect Drive from their profile; the app requests the `drive.file` scope.
 - `RESEND_API_KEY` and `MAIL_FROM`: transactional email for password-reset messages.
 
 Google sign-in will remain unavailable until its OAuth credentials and redirect URI are configured. Password reset email also requires the mail secrets.
@@ -62,4 +62,4 @@ Before enabling migration for any user, generate a full Base44 data export and v
 6. Read a shopping list and a priced bill. Compare extracted fields with the source and require the user to confirm before save.
 7. Estimate item market prices in INR, clearly marked as estimates, and allow manual correction.
 8. Monthly reports and all record exports reconcile to the imported data.
-9. Restore/recover from a D1 export and an R2 backup before cutover.
+9. Restore/recover from a D1 export and verify users can still access their own Google Drive files before cutover.
