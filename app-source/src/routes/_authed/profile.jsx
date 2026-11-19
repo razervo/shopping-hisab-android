@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Camera, ChevronLeft, MapPin, Phone, Save, UserRound } from "lucide-react";
+import { Camera, ChevronLeft, HardDrive, MapPin, Phone, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/cloudflareClient";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/AuthContext";
+import { authClient } from "@/lib/native-auth-client";
 import { prepareBillFile } from "@/lib/billFile";
 
 export const Route = createFileRoute("/_authed/profile")({
@@ -31,6 +32,34 @@ function ProfilePage() {
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/drive/status", { credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (!cancelled) setDriveConnected(!!result?.connected); })
+      .catch(() => { if (!cancelled) setDriveConnected(false); });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const connectGoogleDrive = async () => {
+    setDriveBusy(true);
+    try {
+      const result = await authClient.linkSocial({
+        provider: "google",
+        scopes: ["https://www.googleapis.com/auth/drive.file"],
+        callbackURL: "/profile",
+        additionalParams: { access_type: "offline", prompt: "consent" },
+      });
+      if (result?.error) throw new Error(result.error.message || "Could not connect Google Drive.");
+      if (result?.data?.url) window.location.assign(result.data.url);
+    } catch (error) {
+      toast.error(error?.message || "Could not connect Google Drive. Please try again.");
+      setDriveBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -163,6 +192,22 @@ function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <section className="flex items-center justify-between gap-3 rounded-[20px] border border-border bg-white p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary">
+            <HardDrive className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold">Google Drive storage</p>
+            <p className="text-[11px] text-muted-foreground">{driveConnected ? "Connected · receipts save to your Drive" : "Connect to store receipts in your own Drive"}</p>
+          </div>
+        </div>
+        <button type="button" onClick={connectGoogleDrive} disabled={driveBusy || driveConnected}
+          className="shrink-0 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground disabled:opacity-60">
+          {driveConnected ? "Connected" : driveBusy ? "Connecting…" : "Connect"}
+        </button>
+      </section>
 
       <form onSubmit={saveProfile} className="space-y-4 rounded-[24px] border border-border bg-white p-4">
         <div className="flex items-center justify-between gap-3">
