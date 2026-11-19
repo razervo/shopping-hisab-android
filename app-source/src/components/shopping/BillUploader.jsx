@@ -41,29 +41,39 @@ export function BillUploader({
       return;
     }
 
-    let fileUri = "";
     try {
-      const uploaded = await base44.integrations.Core.UploadPrivateFile({ file });
-      fileUri = uploaded?.file_uri || "";
-      if (!fileUri) throw new Error("no file uri");
-    } catch {
-      setError("The bill could not be uploaded. Check your internet connection and try again.");
-      setBusy(false);
-      return;
-    }
-
-    try {
-      const result = await readShoppingBill({ data: { fileUri, purpose } });
-      if (result?.draft) {
-        onExtracted(result.draft, fileUri);
+      const directImage = ["image/jpeg", "image/png", "image/webp"].includes(
+        String(file.type || "").toLowerCase(),
+      );
+      if (directImage) {
+        // Send the photo straight to the vision model while saving the original to Drive.
+        const form = new FormData();
+        form.append("file", file, file.name || "shopping-list.jpg");
+        form.append("purpose", purpose);
+        const response = await fetch("/api/ai/read-bill", {
+          method: "POST",
+          body: form,
+          credentials: "include",
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.error || "Bill reading failed.");
+        if (!result?.draft || !result?.file_uri) {
+          throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
+        }
+        onExtracted(result.draft, result.file_uri);
       } else {
-        setError(
-          result?.error ||
-            "We could not read this bill. Try a clearer, straight photo, or enter the items manually.",
-        );
+        // Keep the existing PDF/other supported-file route unchanged.
+        const uploaded = await base44.integrations.Core.UploadPrivateFile({ file });
+        const fileUri = uploaded?.file_uri || "";
+        if (!fileUri) throw new Error("The bill could not be uploaded.");
+        const result = await readShoppingBill({ data: { fileUri, purpose } });
+        if (!result?.draft) {
+          throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
+        }
+        onExtracted(result.draft, fileUri);
       }
-    } catch {
-      setError("We could not read this bill. Please try again or enter the items manually.");
+    } catch (cause) {
+      setError(cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
       setBusy(false);
     }
