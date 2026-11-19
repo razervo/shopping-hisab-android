@@ -26,10 +26,24 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
 
   const askMarketRate = async () => {
     if (!unit || !String(item.name).trim() || asking) return;
+    if (item.brandType === "branded" && !String(item.brand || "").trim()) {
+      setMarket({ error: "Enter the exact brand before checking its price." });
+      return;
+    }
+    if (item.brandType === "local_brand" && !String(item.brand || "").trim()) {
+      setMarket({ error: "Enter the local brand name before checking its price." });
+      return;
+    }
     setAsking(true);
     setMarket(null);
     try {
-      const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit } });
+      const res = await fetchMarketRate({ data: {
+        name: String(item.name).trim(),
+        unit,
+        brandType: item.brandType || "unbranded",
+        brand: String(item.brand || "").trim(),
+        variety: String(item.variety || "").trim(),
+      } });
       setMarket(res?.suggestion ? { suggestion: res.suggestion } : { error: res?.error || "" });
     } catch {
       setMarket({ error: "Could not fetch a market rate right now." });
@@ -114,6 +128,42 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div>
+          <span className="micro mb-1 block text-muted-foreground">Brand type</span>
+          <Select value={item.brandType || "unbranded"} onValueChange={(v) => {
+            onChange({ brandType: v, brand: "" });
+            setMarket(null);
+          }}>
+            <SelectTrigger className="h-10 border-0 bg-white text-[13px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="branded">Branded product</SelectItem>
+              <SelectItem value="local_brand">Local brand</SelectItem>
+              <SelectItem value="unbranded">No brand / loose</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <span className="micro mb-1 block text-muted-foreground">Brand name</span>
+          <Input
+            value={item.brand || ""}
+            onChange={(e) => { onChange({ brand: e.target.value }); setMarket(null); }}
+            disabled={(item.brandType || "unbranded") === "unbranded"}
+            placeholder={item.brandType === "local_brand" ? "Enter local brand" : item.brandType === "branded" ? "Enter exact brand" : "Not applicable"}
+            className="h-10 border-0 bg-white text-[13px]"
+          />
+        </div>
+      </div>
+      <div className="mt-2">
+        <span className="micro mb-1 block text-muted-foreground">Variety / quality (optional)</span>
+        <Input
+          value={item.variety || ""}
+          onChange={(e) => { onChange({ variety: e.target.value }); setMarket(null); }}
+          placeholder="e.g. Sona Masoori, premium, small grain"
+          className="h-10 border-0 bg-white text-[13px]"
+        />
       </div>
 
       <div className="mt-2">

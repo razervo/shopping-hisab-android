@@ -3,6 +3,7 @@ import { createNativeAuth } from "@/lib/native-auth.server";
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
+const FAST_TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -369,9 +370,9 @@ function parseModelJson(value) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function callTextModel(env, system, userContent, maxTokens = 1800) {
+async function callTextModel(env, system, userContent, maxTokens = 1800, model = AI_MODEL) {
   if (!env.AI) throw new Error("Workers AI binding is not configured.");
-  const result = await env.AI.run(AI_MODEL, {
+  const result = await env.AI.run(model, {
     messages: [
       { role: "system", content: system },
       { role: "user", content: userContent },
@@ -485,10 +486,14 @@ async function handleAI(request, env, user) {
   if (action === "suggestMarketRate") {
     const name = String(data.name || "").trim().slice(0, 100);
     const unit = String(data.unit || "pcs").trim().slice(0, 20);
+    const brandType = ["branded", "local_brand", "unbranded"].includes(data.brandType) ? data.brandType : "unbranded";
+    const brand = String(data.brand || "").trim().slice(0, 80);
+    const variety = String(data.variety || "").trim().slice(0, 80);
     if (!name) return error("Enter an item name.");
+    if (brandType !== "unbranded" && !brand) return error("Enter the exact brand name before estimating.");
     const parsed = await callTextModel(env,
-      "Estimate a normal Indian retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (so ₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (so ₹100/L = ₹0.10/ml); L means one litre. Never return a per-kg or per-litre price when the requested unit is g or ml. Use a conservative approximate range, not a live quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
-      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
+      "Estimate an indicative Indian retail grocery price in INR for exactly ONE requested unit. This is an AI estimate, NOT a live online price or verified retailer quote. Respect product identity: never substitute another brand. For branded/local-brand items, estimate only the exact brand supplied; if uncertain, do not guess. For unbranded items, estimate the named loose/unbranded variety only. Unit discipline: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
+      `Item: ${name}\nBrand type: ${brandType}\nExact brand: ${brand || "None - loose/unbranded"}\nVariety/quality: ${variety || "Not specified"}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
       450,
     );
     const suggestion = parsed.suggestion;
@@ -515,7 +520,8 @@ async function handleAI(request, env, user) {
     const parsed = await callTextModel(env,
       "Estimate Indian retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep item order and indexes. Estimates are approximate, not live quotations. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when plausible.",
       `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}\nEach rate must be INR per ONE exact unit shown. Items: ${JSON.stringify(promptItems)}`,
-      1600,
+      900,
+      FAST_TEXT_MODEL,
     );
     const rates = Array.isArray(parsed.rates) ? parsed.rates
       .filter((r) => {
