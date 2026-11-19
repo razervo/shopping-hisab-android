@@ -23,7 +23,7 @@ export function qtyOptions(unit) {
 }
 
 export function normalizeShoppingUnit(value) {
-  const key = String(value || "").trim().toLowerCase().replace(/\\s+/g, "");
+  const key = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
   const aliases = {
     gm: "g", gms: "g", gram: "g", grams: "g",
     kilo: "kg", kgs: "kg", kilogram: "kg", kilograms: "kg",
