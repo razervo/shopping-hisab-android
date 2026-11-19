@@ -343,6 +343,15 @@ async function handleProfile(request, env, user) {
   return json(updated);
 }
 
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function extractModelText(result) {
   return result?.response
     ?? result?.result?.response
@@ -388,18 +397,44 @@ async function handleAI(request, env, user) {
     ).bind(fileId, user.id).first();
     if (!file || file.storage_provider !== "google_drive" || !file.drive_file_id) return error("Uploaded bill not found in Google Drive.", 404);
     const object = await downloadGoogleDriveFile(env.DB, user.id, env, file.drive_file_id);
-    if (!env.AI?.toMarkdown) return error("Cloudflare document conversion is not enabled.", 503);
-    const converted = await env.AI.toMarkdown().transform({
-      name: file.original_name,
-      blob: new Blob([await object.arrayBuffer()], { type: file.content_type }),
-    });
-    const extractedText = (converted?.data || converted?.results?.[0]?.data || "").slice(0, 28000);
-    if (!extractedText.trim()) return error("No readable text was found. Try a clearer photo.");
     const purpose = data.purpose === "priced_list" ? "priced_list" : "shopping_list";
     const prompt = purpose === "shopping_list"
-      ? "Extract the shopping list. Do not invent prices. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:0,amount:0}]}}. If quantity or unit is unreadable, use qty 1 and unit pcs. Use YYYY-MM-DD dates only when clearly printed; otherwise use today's date."
-      : "Extract the shop's actual priced bill/list. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Prefer the printed line total for amount and compute unit price only when possible. Do not add items that are not visible.";
-    const parsed = await callTextModel(env, `You accurately read Indian grocery and household shopping bills. The currency is Indian rupees (INR). Normalize common Indian quantity units (kg, g, L, ml, pcs, pkt, dozen, box). ${prompt}`, extractedText, 2600);
+      ? "Read this shopping list image carefully. Extract only visible items. Do not invent prices or items. Preserve quantities and units exactly when legible. If quantity or unit is unclear, use qty 1 and unit pcs. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:0,amount:0}]}}. Use YYYY-MM-DD dates only when clearly printed; otherwise use today's date."
+      : "Read this priced Indian grocery bill/list carefully. Extract only visible rows. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Prefer printed line totals for amount. Compute unit price only when quantity and line total are both legible. Do not invent prices or add invisible items.";
+    let parsed;
+    const mime = String(file.content_type || "").toLowerCase();
+    if (mime.startsWith("image/")) {
+      const bytes = new Uint8Array(await object.arrayBuffer());
+      if (!bytes.length || bytes.length > MAX_FILE_BYTES) return error("The bill image is empty or too large. Please choose an image under 10 MB.");
+      const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
+      const result = await env.AI.run(AI_MODEL, {
+        messages: [
+          { role: "system", content: `You accurately read Indian grocery and household shopping bills. Currency is INR. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Never guess unreadable text or prices. ${prompt}` },
+          { role: "user", content: [
+            { type: "text", text: "Read the attached shopping bill image and return the requested JSON." },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ] },
+        ],
+        temperature: 0.05,
+        max_tokens: 2200,
+      });
+      parsed = parseModelJson(extractModelText(result));
+    } else if (mime === "application/pdf") {
+      if (!env.AI?.toMarkdown) return error("PDF reading is not enabled. Please upload a clear JPG or PNG photo instead.", 503);
+      const converted = await env.AI.toMarkdown().transform({
+        name: file.original_name,
+        blob: new Blob([await object.arrayBuffer()], { type: mime }),
+      });
+      const extractedText = (converted?.data || converted?.results?.[0]?.data || "").slice(0, 28000);
+      if (!extractedText.trim()) return error("No readable text was found in this PDF. Try a clear photo.");
+      parsed = await callTextModel(env,
+        `You accurately read Indian grocery and household shopping bills. Currency is INR. Normalize common units. ${prompt}`,
+        extractedText,
+        2200,
+      );
+    } else {
+      return error("This bill format cannot be read. Please upload a JPG, PNG, WEBP photo or PDF.");
+    }
     if (!parsed?.draft || !Array.isArray(parsed.draft.items)) return error("The bill could not be interpreted. Try a clearer, straight photo.");
     return json({ draft: parsed.draft });
   }
