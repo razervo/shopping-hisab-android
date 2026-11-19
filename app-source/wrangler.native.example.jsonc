@@ -18,12 +18,6 @@
       "migrations_dir": "migrations-native"
     }
   ],
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "shopping-hisab-private"
-    }
-  ],
   "ai": {
     "binding": "AI"
   }
