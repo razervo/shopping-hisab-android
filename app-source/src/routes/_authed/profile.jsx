@@ -211,9 +211,9 @@ function ProfilePage() {
             <p className="text-[11px] text-muted-foreground">{driveConnected ? "Connected · receipts save to your Drive" : "Connect to store receipts in your own Drive"}</p>
           </div>
         </div>
-        <button type="button" onClick={connectGoogleDrive} disabled={driveBusy || driveConnected}
+        <button type="button" onClick={connectGoogleDrive} disabled={driveBusy}
           className="shrink-0 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground disabled:opacity-60">
-          {driveConnected ? "Connected" : driveBusy ? "Connecting…" : "Connect"}
+          {driveBusy ? "Connecting…" : driveConnected ? "Reconnect" : "Connect"}
         </button>
       </section>
 
