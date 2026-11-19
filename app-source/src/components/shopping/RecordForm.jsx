@@ -209,6 +209,13 @@ export function RecordForm({
 
   const runEstimate = async () => {
     const targets = items.filter((i) => String(i.name).trim() && !(Number(i.price) > 0));
+    const missingBrand = targets.find((i) =>
+      (i.brandType === "branded" || i.brandType === "local_brand") && !String(i.brand || "").trim()
+    );
+    if (missingBrand) {
+      setEstimateMsg(`Enter the brand name for "${missingBrand.name}" before estimating its price.`);
+      return;
+    }
     if (!targets.length) {
       setEstimateMsg("Every item already has a price. Edit any of them to re-estimate.");
       return;
