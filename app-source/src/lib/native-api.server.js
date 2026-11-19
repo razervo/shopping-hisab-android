@@ -243,12 +243,17 @@ async function uploadGoogleDriveFile(db, userId, env, file, originalName) {
   const token = await getGoogleDriveToken(db, userId, env);
   const folderId = await ensureGoogleDriveFolder(db, userId, token);
   const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId] };
-  const form = new FormData();
-  form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-  form.append("file", new Blob([await file.arrayBuffer()], { type: file.type || "application/octet-stream" }), metadata.name);
+  const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
+  const fileBytes = await file.arrayBuffer();
+  const multipartBody = new Blob([
+    `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n${JSON.stringify(metadata)}\\r\\n`,
+    `--${boundary}\\r\\nContent-Type: ${file.type || "application/octet-stream"}\\r\\n\\r\\n`,
+    fileBytes,
+    `\\r\\n--${boundary}--`,
+  ], { type: `multipart/related; boundary=${boundary}` });
   const response = await driveRequest(token,
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size",
-    { method: "POST", body: form },
+    { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody },
   );
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.id) throw new Error("Google Drive could not save this attachment. Check your Drive storage and reconnect if needed.");
