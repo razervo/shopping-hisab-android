@@ -172,9 +172,12 @@ async function handleRecords(request, env, user, url) {
 
 async function getGoogleDriveToken(db, userId, env) {
   const account = await db.prepare(
-    "SELECT id, accessToken, refreshToken, accessTokenExpiresAt FROM account WHERE userId = ? AND providerId = 'google' ORDER BY updatedAt DESC LIMIT 1",
+    "SELECT id, accessToken, refreshToken, accessTokenExpiresAt, scope FROM account WHERE userId = ? AND providerId = 'google' ORDER BY updatedAt DESC LIMIT 1",
   ).bind(userId).first();
   if (!account) throw new Error("Connect Google Drive from your profile before uploading files.");
+  if (!String(account.scope || "").split(/[ ,]+/).includes("https://www.googleapis.com/auth/drive.file")) {
+    throw new Error("Grant Google Drive file access from your profile before uploading files.");
+  }
   const expiresAt = account.accessTokenExpiresAt ? new Date(account.accessTokenExpiresAt).getTime() : 0;
   if (account.accessToken && (!expiresAt || expiresAt > Date.now() + 60_000)) return account.accessToken;
   if (!account.refreshToken || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
