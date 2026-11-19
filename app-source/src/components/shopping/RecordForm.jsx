@@ -221,6 +221,9 @@ export function RecordForm({
           items: targets.map((i) => ({
             name: String(i.name).trim().slice(0, 80),
             unit: String(i.unit || "pcs").slice(0, 12),
+            brandType: i.brandType || "unbranded",
+            brand: String(i.brand || "").trim().slice(0, 80),
+            variety: String(i.variety || "").trim().slice(0, 80),
           })),
         },
       });
