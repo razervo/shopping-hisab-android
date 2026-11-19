@@ -33,6 +33,11 @@ jobs:
       - name: Verify isolated deployment target
         run: |
           node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('wrangler.native.jsonc','utf8')); if(c.name!=='shopping-hisab-native') process.exit(1)"
+      - name: Rotate exposed pre-launch auth secret
+        run: openssl rand -hex 48 | npx wrangler secret put BETTER_AUTH_SECRET --config wrangler.native.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
       - name: Deploy only the native Worker
         run: npx wrangler deploy --config wrangler.native.jsonc
         env:
