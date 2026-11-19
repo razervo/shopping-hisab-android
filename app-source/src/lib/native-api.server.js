@@ -318,6 +318,12 @@ async function handleDriveStatus(env, user) {
   return json({ connected: !!account && scopes.includes("https://www.googleapis.com/auth/drive.file"), email: user.email || null });
 }
 
+async function handleDriveInitialize(env, user) {
+  const token = await getGoogleDriveToken(env.DB, user.id, env);
+  const folderId = await ensureGoogleDriveFolder(env.DB, user.id, token);
+  return json({ connected: true, folder_ready: true, folder_id: folderId });
+}
+
 async function handleProfile(request, env, user) {
   if (request.method === "GET") {
     return json(user);
@@ -590,6 +596,7 @@ export async function handleNativeApi(request, env) {
     }
     if (url.pathname === "/api/profile") return await handleProfile(request, env, user);
     if (url.pathname === "/api/drive/status") return request.method === "GET" ? await handleDriveStatus(env, user) : error("Method not allowed.", 405);
+    if (url.pathname === "/api/drive/initialize") return request.method === "POST" ? await handleDriveInitialize(env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/ai") return await handleAI(request, env, user);
     if (url.pathname === "/api/migration/status") return await handleMigrationStatus(request, env, user);
     if (url.pathname === "/api/migration/import") return await handleMigrationImport(request, env, user);
