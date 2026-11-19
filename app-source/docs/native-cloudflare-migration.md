@@ -4,7 +4,7 @@
 
 This migration is developed on the `cloudflare-native-migration` Git branch. The current `main` branch, deployed Worker, Base44 application, Base44 users, ShoppingRecord rows and private uploads are not modified by this work.
 
-Do not point the production Cloudflare project at this branch until the new D1 database, R2 bucket, OAuth settings, application tests and legacy-data import have all been verified.
+Do not point the production Cloudflare project at this branch until the new D1 database, Google OAuth settings, application tests and legacy-data import have all been verified.
 
 ## Target services
 
@@ -16,7 +16,7 @@ Do not point the production Cloudflare project at this branch until the new D1 d
 
 ## New resources only
 
-Create a NEW D1 database named `shopping-hisab-native`. File uploads use each signed-in user's Google Drive; no R2 bucket is required. Do not reuse, overwrite or delete any existing database or bucket.
+Create a NEW D1 database named `shopping-hisab-native`. File uploads use each signed-in user's Google Drive; no R2 bucket is required. Do not reuse, overwrite or delete any existing database.
 
 The initial schema is in `migrations-native/0001_initial.sql`.
 
