@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
-import { amountOf, emptyItem, toFormItems } from "@/lib/shopping";
+import { amountOf, emptyItem, normalizeShoppingUnit, toFormItems } from "@/lib/shopping";
 import { ItemRow } from "@/components/shopping/ItemRow";
 import { EstimateBar } from "@/components/shopping/EstimateBar";
 import { BillUploader } from "@/components/shopping/BillUploader";
@@ -121,7 +121,7 @@ export function RecordForm({
     };
     const normalizeUnit = (unit) => {
       const key = String(unit || "").trim().toLowerCase().replace(/\\s+/g, "");
-      return unitAliases[key] || key;
+      return normalizeShoppingUnit(unit) || unitAliases[key] || key;
     };
     const unitScale = {
       g: { group: "mass", factor: 1 },
