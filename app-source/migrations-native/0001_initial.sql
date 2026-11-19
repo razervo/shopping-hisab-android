@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS "user" (
   phone TEXT,
   preferredMarket TEXT,
   profilePictureId TEXT,
+  googleDriveFolderId TEXT,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -87,7 +88,9 @@ CREATE INDEX IF NOT EXISTS idx_shopping_records_user_shop
 CREATE TABLE IF NOT EXISTS uploaded_files (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-  r2_key TEXT NOT NULL UNIQUE,
+  r2_key TEXT UNIQUE,
+  storage_provider TEXT NOT NULL DEFAULT 'google_drive',
+  drive_file_id TEXT,
   original_name TEXT NOT NULL,
   content_type TEXT NOT NULL,
   size_bytes INTEGER NOT NULL,
