@@ -276,7 +276,7 @@ async function handleFiles(request, env, user, url) {
     return json({ file_uri: `cf-file:${id}`, file_id: id }, 201);
   }
 
-  const match = /^\\/api\\/files\\/([a-f0-9-]{36})\\/(content|signed)$/i.exec(url.pathname);
+  const match = /^\/api\/files\/([a-f0-9-]{36})\/(content|signed)$/i.exec(url.pathname);
   if (!match) return error("Not found.", 404);
   const [, id, action] = match;
   const file = await env.DB.prepare(
