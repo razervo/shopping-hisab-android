@@ -417,7 +417,8 @@ async function handleDirectBillRead(request, env, user) {
   // Upload to Drive at the same time as AI reads the original image.
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
   const [modelResult, uploaded] = await Promise.all([readPromise, uploadPromise]);
-  const parsed = parseModelJson(extractModelText(modelResult));
+  // callVisionModel already parses the model's answer into the draft object.
+  const parsed = modelResult;
   if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
     throw new Error("The bill could not be interpreted. Try a clearer, straight photo.");
   }
