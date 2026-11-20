@@ -120,6 +120,7 @@ export async function handleShoppingEngine(request, env) {
   const sessionId = sessionMatch[1], subpath = sessionMatch[2] || "";
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
+  if (session.status === "completed" && method !== "GET") return fail("This shopping session is completed and read-only.",409);
 
   if (!subpath && method === "GET") return json(await sessionDetail(db,userId,sessionId));
   if (!subpath && method === "PATCH") {
@@ -248,7 +249,7 @@ export async function handleShoppingEngine(request, env) {
   }
 
 
-  if (session.status === "completed" && method !== "GET") return fail("This shopping session is completed and read-only.",409);
+
 
   if (subpath === "estimates" && method === "POST") {
     const lines = Array.isArray(body.lines) ? body.lines : [];
