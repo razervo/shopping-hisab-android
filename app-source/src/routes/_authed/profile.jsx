@@ -83,7 +83,9 @@ function ProfilePage() {
     user?.display_name,
     user?.full_name,
     user?.phone,
-    user?.preferred_market,\n    user?.postal_code,\n    user?.postalCode,
+    user?.preferred_market,
+    user?.postal_code,
+    user?.postalCode,
     user?.profile_picture_uri,
   ]);
 
@@ -153,7 +155,11 @@ function ProfilePage() {
       toast.error("Phone number must be 24 characters or fewer.");
       return;
     }
-    if (postalCode.trim() && !/^\\d{6}$/.test(postalCode.trim())) {\n      toast.error("Enter a valid 6-digit Indian PIN code.");\n      return;\n    }\n    if (preferredMarket.trim().length > 80) {
+    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) {
+      toast.error("Enter a valid 6-digit Indian PIN code.");
+      return;
+    }
+    if (preferredMarket.trim().length > 80) {
       toast.error("Preferred market must be 80 characters or fewer.");
       return;
     }
@@ -163,7 +169,8 @@ function ProfilePage() {
       await base44.auth.updateMe({
         display_name: displayName.trim(),
         phone: phone.trim(),
-        preferred_market: preferredMarket.trim(),\n        postal_code: postalCode.trim(),
+        preferred_market: preferredMarket.trim(),
+        postal_code: postalCode.trim(),
         profile_picture_uri: photoUri,
       });
       await refresh();
@@ -282,6 +289,24 @@ function ProfilePage() {
             placeholder="Your mobile number"
             className="h-11"
           />
+        </div>
+
+        <div>
+          <Label htmlFor="profile-postal-code" className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" /> PIN code (optional)
+          </Label>
+          <Input
+            id="profile-postal-code"
+            value={postalCode}
+            onChange={(event) => setPostalCode(event.target.value.replace(/\\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6-digit area PIN code"
+            className="h-11"
+          />
+          <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
+            Used to estimate local grocery prices. You can also choose location access when comparing prices.
+          </p>
         </div>
 
         <div>
