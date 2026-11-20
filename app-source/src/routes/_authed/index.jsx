@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { TodayHero } from "@/components/dashboard/TodayHero";
@@ -57,6 +57,14 @@ function HomePage() {
           >
             <Plus className="h-5 w-5" strokeWidth={2.8} />
             Add Shopping
+          </Link>
+
+          <Link
+            to="/sessions"
+            className="mt-2 flex items-center justify-center gap-2 rounded-full border border-border bg-white px-6 py-3.5 text-[13.5px] font-bold text-foreground transition-colors hover:bg-secondary/50"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Shopping Sessions · New workflow
           </Link>
 
           <SummaryCards
