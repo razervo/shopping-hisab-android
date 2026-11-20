@@ -33,8 +33,21 @@ async function sessionDetail(db, userId, sessionId) {
   const [lists, items, bills, estimates] = await Promise.all([
     db.prepare("SELECT * FROM shopping_source_lists WHERE user_id=? AND session_id=? ORDER BY created_at,id")
       .bind(userId, sessionId).all(),
-    db.prepare("SELECT * FROM shopping_items WHERE user_id=? AND session_id=? ORDER BY created_at,id")
-      .bind(userId, sessionId).all(),
+    db.prepare(`SELECT i.*,
+      COALESCE(p.purchased_quantity,0) AS purchased_quantity,
+      MAX(i.planned_quantity-COALESCE(p.purchased_quantity,0),0) AS remaining_quantity,
+      COALESCE(p.purchase_count,0) AS purchase_count
+      FROM shopping_items i
+      LEFT JOIN (
+        SELECT pl.shopping_item_id,SUM(pl.quantity) AS purchased_quantity,COUNT(*) AS purchase_count
+        FROM shopping_purchase_lines pl
+        INNER JOIN shopping_actual_bills b ON b.id=pl.bill_id AND b.user_id=pl.user_id AND b.session_id=pl.session_id
+        WHERE pl.user_id=? AND pl.session_id=? AND pl.shopping_item_id IS NOT NULL
+          AND b.included_in_actual=1 AND b.bill_status NOT IN ('duplicate','void')
+        GROUP BY pl.shopping_item_id
+      ) p ON p.shopping_item_id=i.id
+      WHERE i.user_id=? AND i.session_id=? ORDER BY i.created_at,i.id`)
+      .bind(userId, sessionId, userId, sessionId).all(),
     db.prepare(`SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,
       included_in_actual,duplicate_of_bill_id,uploaded_at FROM shopping_actual_bills
       WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id`).bind(userId, sessionId).all(),
