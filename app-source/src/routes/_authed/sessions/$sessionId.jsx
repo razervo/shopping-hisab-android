@@ -186,7 +186,7 @@ function SessionDetailPage() {
           purchase_date: billForm.purchase_date || null,
           receipt_number: billForm.receipt_number.trim(),
           bill_total_paise: Math.round(rupees * 100),
-          duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
+          duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
           original_ocr: { entry_method: "manual" },
         }),
       });
@@ -245,7 +245,7 @@ function SessionDetailPage() {
       let billId = uploadedBillId;
       if (!billId) {
         const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri);
-        const shopKey = uploadedBillShop.trim().toLowerCase().replace(/\\s+/g, " ");
+        const shopKey = uploadedBillShop.trim().toLowerCase().replace(/\s+/g, " ");
         const duplicateFingerprint = [shopKey, uploadedBillDate, Math.round(totalRupees * 100)].join("|").slice(0, 200);
         const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
           method: "POST",
