@@ -39,6 +39,9 @@ function SessionDetailPage() {
   const [rows, setRows] = useState([blankRow()]);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
+  const [billLineForms, setBillLineForms] = useState({});
+  const [billLineSaving, setBillLineSaving] = useState("");
+  const [billLineDetails, setBillLineDetails] = useState({});
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -89,6 +92,54 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not add this bill.");
     } finally {
       setBillSaving(false);
+    }
+  };
+
+  const updateBillLine = (billId, key, value) => setBillLineForms((current) => ({
+    ...current,
+    [billId]: { product_name: "", quantity: "1", unit: "pcs", amount: "", shopping_item_id: "", ...(current[billId] || {}), [key]: value },
+  }));
+
+  const saveBillLine = async (event, billId) => {
+    event.preventDefault();
+    const line = { product_name: "", quantity: "1", unit: "pcs", amount: "", shopping_item_id: "", ...(billLineForms[billId] || {}) };
+    const quantity = Number(line.quantity);
+    const amountRupees = line.amount.trim() === "" ? null : Number(line.amount);
+    if (!line.product_name.trim()) return toast.error("Enter the bill item name.");
+    if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid item quantity.");
+    if (amountRupees !== null && (!Number.isFinite(amountRupees) || amountRupees < 0 || !Number.isSafeInteger(Math.round(amountRupees * 100)))) return toast.error("Enter a valid item amount.");
+    setBillLineSaving(billId);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{
+          product_name: line.product_name.trim(),
+          quantity,
+          unit: line.unit.trim() || "pcs",
+          line_amount_paise: amountRupees === null ? null : Math.round(amountRupees * 100),
+          shopping_item_id: line.shopping_item_id || null,
+          is_extra: !line.shopping_item_id,
+          match_method: line.shopping_item_id ? "confirmed" : "extra",
+          original_ocr: { entry_method: "manual" },
+        }] }),
+      });
+      const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
+      setBillLineDetails((current) => ({ ...current, [billId]: details.purchase_lines || [] }));
+      setBillLineForms((current) => ({ ...current, [billId]: { product_name: "", quantity: "1", unit: "pcs", amount: "", shopping_item_id: "" } }));
+      toast.success("Bill item added. Bill total remains the actual spending amount.");
+    } catch (cause) {
+      toast.error(cause.message || "Could not add this bill item.");
+    } finally {
+      setBillLineSaving("");
+    }
+  };
+
+  const loadBillLines = async (billId) => {
+    try {
+      const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
+      setBillLineDetails((current) => ({ ...current, [billId]: details.purchase_lines || [] }));
+    } catch (cause) {
+      toast.error(cause.message || "Could not load bill items.");
     }
   };
 
@@ -312,9 +363,45 @@ function SessionDetailPage() {
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Actual bills</h2>
         {(session.bills || []).length ? (
           <div className="space-y-2">{session.bills.map((bill) => (
-            <div key={bill.id} className="flex items-center justify-between rounded-[18px] border border-border bg-white px-4 py-3">
-              <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
-              <p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>
+            <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
+                <p className="shrink-0 text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>
+              </div>
+              <button type="button" onClick={() => loadBillLines(bill.id)} className="mt-3 text-[11.5px] font-bold text-primary underline">Load / refresh bill items</button>
+              {billLineDetails[bill.id] ? (
+                <div className="mt-2 space-y-1.5">
+                  {billLineDetails[bill.id].length ? billLineDetails[bill.id].map((line) => (
+                    <div key={line.id} className="flex justify-between gap-2 rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
+                      <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
+                      <span className="shrink-0 font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
+                    </div>
+                  )) : <p className="text-[11px] text-muted-foreground">No item details recorded yet.</p>}
+                </div>
+              ) : null}
+              {!completed ? (
+                <form onSubmit={(event) => saveBillLine(event, bill.id)} className="mt-3 space-y-2 border-t border-border pt-3">
+                  <p className="text-[11.5px] font-bold">Add a bill item</p>
+                  <input value={(billLineForms[bill.id] || {}).product_name || ""} onChange={(event) => updateBillLine(bill.id, "product_name", event.target.value)}
+                    placeholder="Product name" maxLength={160} className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[12px]" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input type="number" min="0" step="0.01" value={(billLineForms[bill.id] || {}).quantity || "1"} onChange={(event) => updateBillLine(bill.id, "quantity", event.target.value)}
+                      aria-label="Bill item quantity" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                    <input value={(billLineForms[bill.id] || {}).unit || "pcs"} onChange={(event) => updateBillLine(bill.id, "unit", event.target.value)}
+                      aria-label="Bill item unit" placeholder="Unit" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                    <input type="number" min="0" step="0.01" value={(billLineForms[bill.id] || {}).amount || ""} onChange={(event) => updateBillLine(bill.id, "amount", event.target.value)}
+                      aria-label="Bill item amount in rupees" placeholder="₹ amount" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                  </div>
+                  <select value={(billLineForms[bill.id] || {}).shopping_item_id || ""} onChange={(event) => updateBillLine(bill.id, "shopping_item_id", event.target.value)}
+                    className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[12px]">
+                    <option value="">Extra / not matched to list</option>
+                    {items.map((item) => <option key={item.id} value={item.id}>Match to: {item.product_name} ({item.planned_quantity} {item.unit})</option>)}
+                  </select>
+                  <button type="submit" disabled={billLineSaving === bill.id} className="w-full rounded-full border border-primary py-2 text-[11.5px] font-bold text-primary disabled:opacity-60">
+                    {billLineSaving === bill.id ? "Saving item…" : "Add bill item"}
+                  </button>
+                </form>
+              ) : null}
             </div>
           ))}</div>
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Bill capture will be connected next.</p>}
