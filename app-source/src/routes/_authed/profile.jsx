@@ -28,6 +28,8 @@ function ProfilePage() {
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [preferredMarket, setPreferredMarket] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [locationBusy, setLocationBusy] = useState(false);
   const [photoUri, setPhotoUri] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -73,14 +75,15 @@ function ProfilePage() {
     if (!user) return;
     setDisplayName(user.display_name || user.full_name || "");
     setPhone(user.phone || "");
-    setPreferredMarket(user.preferred_market || "");
+    setPreferredMarket(user.preferred_market || user.preferredMarket || "");
+    setPostalCode(user.postal_code || user.postalCode || "");
     setPhotoUri(user.profile_picture_uri || "");
   }, [
     user?.id,
     user?.display_name,
     user?.full_name,
     user?.phone,
-    user?.preferred_market,
+    user?.preferred_market,\n    user?.postal_code,\n    user?.postalCode,
     user?.profile_picture_uri,
   ]);
 
@@ -150,7 +153,7 @@ function ProfilePage() {
       toast.error("Phone number must be 24 characters or fewer.");
       return;
     }
-    if (preferredMarket.trim().length > 80) {
+    if (postalCode.trim() && !/^\\d{6}$/.test(postalCode.trim())) {\n      toast.error("Enter a valid 6-digit Indian PIN code.");\n      return;\n    }\n    if (preferredMarket.trim().length > 80) {
       toast.error("Preferred market must be 80 characters or fewer.");
       return;
     }
@@ -160,7 +163,7 @@ function ProfilePage() {
       await base44.auth.updateMe({
         display_name: displayName.trim(),
         phone: phone.trim(),
-        preferred_market: preferredMarket.trim(),
+        preferred_market: preferredMarket.trim(),\n        postal_code: postalCode.trim(),
         profile_picture_uri: photoUri,
       });
       await refresh();
