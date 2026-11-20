@@ -29,7 +29,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
     setAsking(true);
     setMarket(null);
     try {
-      const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit } });
+      const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit, productType: item.productType || "unsure", brand: item.brand || "", packSize: item.packSize || "" } });
       setMarket(res?.suggestion ? { suggestion: res.suggestion } : { error: res?.error || "" });
     } catch {
       setMarket({ error: "Estimate unavailable. Check your connection or AI service quota, then retry." });
