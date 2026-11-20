@@ -173,12 +173,13 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-accent px-3 py-2">
             <p className="text-[11.5px] leading-snug">
               <span className="font-bold">
-                Market {inr(market.suggestion.rate)} / {unit}
+                Approx. {inr(market.suggestion.rate)} / {unit}
               </span>
               <span className="text-muted-foreground">
                 {" "}
                 ({inr(market.suggestion.min)}–{inr(market.suggestion.max)})
               </span>
+              <span className="block text-muted-foreground">AI estimate · not a live shop price</span>
               {market.suggestion.note ? (
                 <span className="block text-muted-foreground">{market.suggestion.note}</span>
               ) : null}
