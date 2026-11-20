@@ -340,7 +340,7 @@ export async function handleShoppingEngine(request, env) {
     const fingerprint=text(body.duplicate_fingerprint,200)||null;
     const possibleDuplicate=fingerprint?await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND duplicate_fingerprint=? LIMIT 1").bind(userId,sessionId,fingerprint).first():null;
     const requestedStatus=["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status)?body.bill_status:"uploaded";
-    const billId=id(),timestamp=now(),status=possibleDuplicate?"needs_review":requestedStatus;
+    const billId=id(),timestamp=now(),status=["duplicate","void"].includes(requestedStatus)?requestedStatus:(possibleDuplicate?"needs_review":requestedStatus);
     const includedInActual=["duplicate","void"].includes(status)?0:1;
     await db.prepare(`INSERT INTO shopping_actual_bills
       (id,user_id,session_id,shop_name,purchase_date,file_id,original_file_uri,receipt_number,subtotal_paise,tax_paise,discount_paise,other_charges_paise,bill_total_paise,line_total_paise,reconciliation_difference_paise,bill_status,included_in_actual,duplicate_fingerprint,original_ocr_json,uploaded_at,updated_at)
