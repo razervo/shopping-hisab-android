@@ -54,6 +54,7 @@ function SessionDetailPage() {
   const [scannedListSaving, setScannedListSaving] = useState(false);
   const [confirmationTotal, setConfirmationTotal] = useState("");
   const [confirmationSaving, setConfirmationSaving] = useState(false);
+  const [mergeTargets, setMergeTargets] = useState({});
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
   const [uploadedBillShop, setUploadedBillShop] = useState("");
@@ -352,6 +353,22 @@ function SessionDetailPage() {
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not update bill status.");
+    }
+  };
+
+  const mergePlannedItem = async (sourceItemId) => {
+    const targetItemId = mergeTargets[sourceItemId];
+    if (!targetItemId) return toast.error("Choose which planned item to merge into.");
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items/${sourceItemId}/merge`, {
+        method: "POST",
+        body: JSON.stringify({ target_item_id: targetItemId }),
+      });
+      toast.success("Items merged. Original source records are preserved.");
+      setMergeTargets((current) => ({ ...current, [sourceItemId]: "" }));
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not merge these items.");
     }
   };
 
@@ -663,6 +680,19 @@ function SessionDetailPage() {
                     {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
                     {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
                   </p>
+                  {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled") ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
+                        aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                        <option value="">Keep separate / choose merge target</option>
+                        {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled").map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={() => mergePlannedItem(item.id)} disabled={!mergeTargets[item.id]}
+                        className="rounded-full border border-primary px-3 py-1.5 text-[10.5px] font-bold text-primary disabled:opacity-40">Merge</button>
+                    </div>
+                  ) : null}
                 </div>
                 <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
                   {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
