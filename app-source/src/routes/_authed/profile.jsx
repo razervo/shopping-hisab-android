@@ -173,8 +173,14 @@ function ProfilePage() {
         postal_code: postalCode.trim(),
         profile_picture_uri: photoUri,
       });
-      await refresh();
+      const updated = await refresh();
+      const savedUser = updated?.user;
+      const complete = !!savedUser &&
+        String(savedUser.displayName || savedUser.display_name || "").trim().length > 0 &&
+        /^\\d{6}$/.test(String(savedUser.postalCode || savedUser.postal_code || "").trim()) &&
+        String(savedUser.preferredMarket || savedUser.preferred_market || "").trim().length > 0;
       toast.success("Profile saved");
+      if (complete) navigate({ to: "/" });
     } catch (error) {
       toast.error(error?.message || "Could not save your profile. Please try again.");
     } finally {
@@ -182,17 +188,28 @@ function ProfilePage() {
     }
   };
 
+  const profileComplete =
+    displayName.trim().length > 0 &&
+    /^\\d{6}$/.test(postalCode.trim()) &&
+    preferredMarket.trim().length > 0;
   const profileTitle = displayName.trim() || user?.full_name || "Your profile";
 
   return (
     <div className="space-y-4 pb-4">
-      <button
-        type="button"
-        onClick={() => navigate({ to: "/" })}
-        className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronLeft className="h-4 w-4" /> Home
-      </button>
+      {profileComplete ? (
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/" })}
+          className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" /> Home
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <h1 className="text-[17px] font-extrabold">Complete your profile</h1>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Add your name, 6-digit PIN code and nearest market to continue. This helps Shopping Hisab tailor local grocery estimates to your area.</p>
+        </div>
+      )}
 
       <div className="rounded-[26px] bg-primary px-5 py-5 text-primary-foreground">
         <div className="flex items-center gap-4">
@@ -249,7 +266,7 @@ function ProfilePage() {
 
         <div>
           <Label htmlFor="profile-display-name" className="micro mb-1.5 block text-muted-foreground">
-            Display name
+            Full name (required)
           </Label>
           <Input
             id="profile-display-name"
@@ -258,6 +275,7 @@ function ProfilePage() {
             maxLength={80}
             placeholder="Your name"
             className="h-11"
+            required
           />
         </div>
 
@@ -293,7 +311,7 @@ function ProfilePage() {
 
         <div>
           <Label htmlFor="profile-postal-code" className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" /> PIN code (optional)
+            <MapPin className="h-3.5 w-3.5" /> PIN code (required)
           </Label>
           <Input
             id="profile-postal-code"
@@ -303,6 +321,7 @@ function ProfilePage() {
             maxLength={6}
             placeholder="6-digit area PIN code"
             className="h-11"
+            required
           />
           <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
             Used to estimate local grocery prices. You can also choose location access when comparing prices.
@@ -311,7 +330,7 @@ function ProfilePage() {
 
         <div>
           <Label htmlFor="profile-market" className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" /> Preferred local market (optional)
+            <MapPin className="h-3.5 w-3.5" /> Locality / nearest market (required)
           </Label>
           <Input
             id="profile-market"
@@ -320,9 +339,10 @@ function ProfilePage() {
             maxLength={80}
             placeholder="e.g. Jagiroad, Morigaon, Assam"
             className="h-11"
+            required
           />
           <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
-            This can help tailor grocery price estimates to your area.
+            Enter your town, locality or nearest market.
           </p>
         </div>
 
