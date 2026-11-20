@@ -1,10 +1,8 @@
 name: Deploy Shopping Hisab native Worker
 
 on:
+  # Deliberately manual only: do not apply D1 migrations or deploy on push.
   workflow_dispatch:
-  push:
-    branches:
-      - cloudflare-native-migration
 
 permissions:
   contents: read
