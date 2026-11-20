@@ -42,6 +42,8 @@ function SessionDetailPage() {
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
+  const [estimatePrices, setEstimatePrices] = useState({});
+  const [estimateSaving, setEstimateSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -65,6 +67,43 @@ function SessionDetailPage() {
   const addRow = () => setRows((current) => [...current, blankRow()]);
   const removeRow = (index) => setRows((current) => current.length === 1
     ? [blankRow()] : current.filter((_, i) => i !== index));
+
+  const saveEstimate = async (event) => {
+    event.preventDefault();
+    const currentItems = session?.items || [];
+    if (!currentItems.length) return toast.error("Add planned items before creating an estimate.");
+    const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
+    if (missing.length) return toast.error("Enter an estimated unit price for every planned item.");
+    const lines = [];
+    for (const item of currentItems) {
+      const rupees = Number(estimatePrices[item.id]);
+      if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
+        return toast.error(`Enter a valid estimated price for ${item.product_name}.`);
+      }
+      const unitPrice = Math.round(rupees * 100);
+      lines.push({
+        shopping_item_id: item.id,
+        quantity: Number(item.planned_quantity || 0),
+        unit: item.unit || "pcs",
+        estimated_unit_price_paise: unitPrice,
+        estimated_line_total_paise: Math.round(Number(item.planned_quantity || 0) * unitPrice),
+        price_source: "manual",
+      });
+    }
+    setEstimateSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/estimates`, {
+        method: "POST",
+        body: JSON.stringify({ calculation_source: "manual", notes: "Manually entered by user", lines }),
+      });
+      toast.success("Estimate version saved. Previous versions are preserved.");
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not save this estimate.");
+    } finally {
+      setEstimateSaving(false);
+    }
+  };
 
   const saveBill = async (event) => {
     event.preventDefault();
@@ -224,6 +263,8 @@ function SessionDetailPage() {
   const items = session.items || [];
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
+  const latestEstimate = (session.estimates || [])[0] || null;
+  const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
 
   return (
     <div className="pb-5">
@@ -329,6 +370,51 @@ function SessionDetailPage() {
         )}
       </section>
 
+      {!completed ? (
+        <form onSubmit={saveEstimate} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Create cost estimate</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Enter an estimated price per unit for each planned item. This is a manual estimate; no market price is being invented.</p>
+          </div>
+          {items.length ? items.map((item) => (
+            <div key={item.id} className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
+                <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · price per {item.unit}</p>
+              </div>
+              <div className="w-28 shrink-0">
+                <input type="number" inputMode="decimal" min="0" step="0.01"
+                  value={estimatePrices[item.id] ?? ""}
+                  onChange={(event) => setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value }))}
+                  placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
+                  className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+              </div>
+            </div>
+          )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
+          <button type="submit" disabled={estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+            {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {estimateSaving ? "Saving estimate…" : "Save new estimate version"}
+          </button>
+        </form>
+      ) : null}
+
+      <section className="mt-6">
+        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Cost comparison</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-[18px] border border-border bg-white p-3">
+            <p className="text-[11px] text-muted-foreground">Latest estimate</p>
+            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
+            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
+          </div>
+          <div className="rounded-[18px] border border-border bg-white p-3">
+            <p className="text-[11px] text-muted-foreground">Actual spending</p>
+            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
+            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
+          </div>
+        </div>
+        <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Actual spending uses included bill totals only. Bill item amounts are not added again.</p>
+      </section>
+
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Source lists</h2>
         {lists.length ? <div className="space-y-2">
@@ -422,7 +508,7 @@ function SessionDetailPage() {
               <p className="text-[13px] font-extrabold tabular-nums">{inr(estimate.estimated_total_paise)}</p>
             </div>
           ))}</div>
-        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your first estimate will appear here after price estimation is connected.</p>}
+        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Create an estimate above. Each saved version is retained; newer estimates do not overwrite older ones.</p>}
       </section>
     </div>
   );
