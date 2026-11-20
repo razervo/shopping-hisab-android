@@ -53,7 +53,7 @@ export function AppShell() {
 
   const profileComplete =
     String(user?.display_name || user?.displayName || "").trim().length > 0 &&
-    /^\\d{6}$/.test(String(user?.postal_code || user?.postalCode || "").trim()) &&
+    /^\d{6}$/.test(String(user?.postal_code || user?.postalCode || "").trim()) &&
     String(user?.preferred_market || user?.preferredMarket || "").trim().length > 0;
   const firstName = (user?.display_name || user?.full_name || "").trim().split(" ")[0];
 
