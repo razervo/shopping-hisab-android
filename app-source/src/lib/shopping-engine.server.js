@@ -150,7 +150,7 @@ export async function handleShoppingEngine(request, env) {
     if (!list) return fail("Source list not found.",404);
     const lines=Array.isArray(body.lines)?body.lines:[body];
     if (!lines.length || lines.length>200) return fail("Add between 1 and 200 source lines.");
-    const timestamp=now(), statements=[];
+    const timestamp=now(), statements=[], createdLineIds=[];
     for (let index=0;index<lines.length;index++) {
       const line=lines[index]||{};
       const originalName=text(line.original_name ?? line.name,160);
@@ -161,6 +161,7 @@ export async function handleShoppingEngine(request, env) {
       const confidence=line.ocr_confidence==null?null:Number(line.ocr_confidence);
       if (confidence!==null && (!Number.isFinite(confidence)||confidence<0||confidence>1)) return fail(`Line ${index+1} has invalid OCR confidence.`);
       const lineId=id();
+      createdLineIds.push(lineId);
       statements.push(db.prepare(`INSERT INTO shopping_source_lines
         (id,user_id,session_id,source_list_id,line_number,original_name,recognized_name,brand,product_type,pack_size,quantity,unit,ocr_confidence,original_ocr_json,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(lineId,userId,sessionId,listId,
@@ -171,7 +172,7 @@ export async function handleShoppingEngine(request, env) {
     await db.batch(statements);
     await db.prepare("UPDATE shopping_source_lists SET ocr_status='completed' WHERE id=? AND user_id=?").bind(listId,userId).run();
     await audit(db,userId,sessionId,"source_list",listId,"source_lines_added",{count:lines.length});
-    return json({source_list_id:listId,created_count:lines.length},201);
+    return json({source_list_id:listId,created_count:lines.length,line_ids:createdLineIds},201);
   }
 
   if (subpath === "items" && method === "POST") {
