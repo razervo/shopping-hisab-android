@@ -283,7 +283,7 @@ export function RecordForm({
         ),
       );
       setEstimatedIds((prev) => new Set([...prev, ...rates.keys()]));
-      setEstimateMsg("Rough total ready. Update each suggested price with the actual shop rate before saving.");
+      setEstimateMsg(`AI estimates added for ${rates.size} of ${targets.length} item(s). These are indicative, not live shop prices. Check local rates and replace them before saving.`);
     } catch {
       setEstimateMsg("Could not estimate prices right now. Enter them yourself.");
     } finally {
