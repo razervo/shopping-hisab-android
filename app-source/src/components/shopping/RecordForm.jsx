@@ -327,6 +327,9 @@ export function RecordForm({
               items: batch.map((i) => ({
                 name: String(i.name).trim().slice(0, 80),
                 unit: String(i.unit || "pcs").slice(0, 12),
+                productType: i.productType || "unsure",
+                brand: String(i.brand || "").slice(0, 60),
+                packSize: String(i.packSize || "").slice(0, 40),
               })),
             },
           });
