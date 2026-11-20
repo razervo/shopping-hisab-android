@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS shopping_actual_bills (
   FOREIGN KEY (session_id, user_id)
     REFERENCES shopping_sessions(id, user_id) ON DELETE CASCADE,
   FOREIGN KEY (duplicate_of_bill_id, session_id, user_id)
-    REFERENCES shopping_actual_bills(id, session_id, user_id) ON DELETE SET NULL
+    REFERENCES shopping_actual_bills(id, session_id, user_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_shopping_actual_bills_session_date
@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS shopping_purchase_lines (
   FOREIGN KEY (bill_id, session_id, user_id)
     REFERENCES shopping_actual_bills(id, session_id, user_id) ON DELETE CASCADE,
   FOREIGN KEY (shopping_item_id, session_id, user_id)
-    REFERENCES shopping_items(id, session_id, user_id) ON DELETE SET NULL
+    REFERENCES shopping_items(id, session_id, user_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_shopping_purchase_lines_bill
@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS shopping_expense_confirmations (
   FOREIGN KEY (session_id, user_id)
     REFERENCES shopping_sessions(id, user_id) ON DELETE CASCADE,
   FOREIGN KEY (estimate_id, session_id, user_id)
-    REFERENCES shopping_estimates(id, session_id, user_id) ON DELETE SET NULL
+    REFERENCES shopping_estimates(id, session_id, user_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_shopping_expense_confirmations_session
