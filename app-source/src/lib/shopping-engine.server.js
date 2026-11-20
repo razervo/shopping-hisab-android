@@ -53,7 +53,7 @@ async function sessionDetail(db, userId, sessionId) {
       ) p ON p.shopping_item_id=i.id
       WHERE i.user_id=? AND i.session_id=? ORDER BY i.created_at,i.id`)
       .bind(userId, sessionId, userId, sessionId).all(),
-    db.prepare(`SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,
+    db.prepare(`SELECT id,shop_name,purchase_date,file_id,original_file_uri,receipt_number,bill_total_paise,bill_status,
       included_in_actual,duplicate_of_bill_id,uploaded_at FROM shopping_actual_bills
       WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id`).bind(userId, sessionId).all(),
     db.prepare("SELECT id,version_number,estimated_total_paise,calculation_source,market_area,notes,created_at FROM shopping_estimates WHERE user_id=? AND session_id=? ORDER BY version_number DESC")
