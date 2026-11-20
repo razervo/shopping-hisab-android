@@ -817,7 +817,7 @@ export async function handleNativeApi(request, env) {
     if (url.pathname === "/api/profile") return await handleProfile(request, env, user);
     if (url.pathname === "/api/drive/status") return request.method === "GET" ? await handleDriveStatus(env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/drive/initialize") return request.method === "POST" ? await handleDriveInitialize(env, user) : error("Method not allowed.", 405);
-    if (url.pathname === "/api/ai/read-bill") return request.method === "POST" ? await handleDirectBillRead(request, env, user) : error("Method not allowed.", 405);
+    if (url.pathname === "/api/ai/gemini-test") return request.method === "POST" ? await handleGeminiOcrTest(request, env, user) : error("Method not allowed.", 405);\n    if (url.pathname === "/api/ai/read-bill") return request.method === "POST" ? await handleDirectBillRead(request, env, user) : error("Method not allowed.", 405);
     if (url.pathname === "/api/ai") return await handleAI(request, env, user);
     if (url.pathname === "/api/migration/status") return await handleMigrationStatus(request, env, user);
     if (url.pathname === "/api/migration/import") return await handleMigrationImport(request, env, user);
