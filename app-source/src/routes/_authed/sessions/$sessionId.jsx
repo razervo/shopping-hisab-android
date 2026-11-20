@@ -52,6 +52,8 @@ function SessionDetailPage() {
   const [scannedListName, setScannedListName] = useState("Scanned shopping list");
   const [scannedRows, setScannedRows] = useState([]);
   const [scannedListSaving, setScannedListSaving] = useState(false);
+  const [confirmationTotal, setConfirmationTotal] = useState("");
+  const [confirmationSaving, setConfirmationSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -67,6 +69,9 @@ function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => {
+    if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
+  }, [session?.actual_total_paise]);
 
   const updateRow = (index, key, value) => {
     setRows((current) => current.map((row, i) => i === index ? { ...row, [key]: value } : row));
@@ -222,6 +227,45 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not add this bill item.");
     } finally {
       setBillLineSaving("");
+    }
+  };
+
+  const updateBillStatus = async (billId, billStatus) => {
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ bill_status: billStatus }),
+      });
+      toast.success(billStatus === "duplicate" || billStatus === "void"
+        ? "Bill excluded from actual spending."
+        : "Bill status updated.");
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not update bill status.");
+    }
+  };
+
+  const confirmSession = async (event) => {
+    event.preventDefault();
+    const rupees = Number(confirmationTotal);
+    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
+      return toast.error("Enter a valid final expense amount.");
+    }
+    if (Number(session?.bills_amount_pending || 0) > 0) {
+      return toast.error("Resolve every bill with a pending amount before completing this session.");
+    }
+    setConfirmationSaving(true);
+    try {
+      const result = await api(`/api/shopping/sessions/${sessionId}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ confirmed_total_paise: Math.round(rupees * 100) }),
+      });
+      toast.success(`Shopping session completed. Confirmation v${result.revision_number} saved.`);
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not complete this session.");
+    } finally {
+      setConfirmationSaving(false);
     }
   };
 
@@ -507,6 +551,7 @@ function SessionDetailPage() {
                   <p className="mt-1 text-[11px] font-medium text-muted-foreground">
                     Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
                     {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
+                    {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
@@ -620,6 +665,19 @@ function SessionDetailPage() {
                 <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
                 <p className="shrink-0 text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>
               </div>
+              {!completed ? (
+                <div className="mt-2">
+                  <label className="mb-1 block text-[10.5px] font-semibold text-muted-foreground" htmlFor={`bill-status-${bill.id}`}>Bill status</label>
+                  <select id={`bill-status-${bill.id}`} value={bill.bill_status} onChange={(event) => updateBillStatus(bill.id, event.target.value)}
+                    className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[11.5px]">
+                    <option value="uploaded">Uploaded / counted</option>
+                    <option value="needs_review">Needs review / counted</option>
+                    <option value="verified">Verified / counted</option>
+                    <option value="duplicate">Duplicate / exclude</option>
+                    <option value="void">Void / exclude</option>
+                  </select>
+                </div>
+              ) : null}
               <button type="button" onClick={() => loadBillLines(bill.id)} className="mt-3 text-[11.5px] font-bold text-primary underline">Load / refresh bill items</button>
               {billLineDetails[bill.id] ? (
                 <div className="mt-2 space-y-1.5">
@@ -658,6 +716,46 @@ function SessionDetailPage() {
           ))}</div>
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Bill capture will be connected next.</p>}
       </section>
+
+      {!completed ? (
+        <form onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Finish shopping session</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Review the actual bill totals, then confirm the final expense. Any unpurchased planned items will remain visible in the completion record.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+            <div className="rounded-xl bg-secondary/50 p-3">
+              <p className="text-muted-foreground">Bills counted</p>
+              <p className="mt-1 text-[15px] font-extrabold">{(session.bills || []).filter((bill) => Number(bill.included_in_actual) === 1 && !["duplicate", "void"].includes(bill.bill_status)).length}</p>
+            </div>
+            <div className="rounded-xl bg-secondary/50 p-3">
+              <p className="text-muted-foreground">Items still pending</p>
+              <p className="mt-1 text-[15px] font-extrabold">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length}</p>
+            </div>
+          </div>
+          {Number(session.bills_amount_pending || 0) > 0 ? (
+            <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-[11.5px] font-semibold text-destructive">
+              {session.bills_amount_pending} bill amount(s) are unreadable or missing. Enter or correct those amounts before completing the session.
+            </p>
+          ) : null}
+          <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final confirmed expense (₹)</label>
+          <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
+            onChange={(event) => setConfirmationTotal(event.target.value)}
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
+          <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
+          <button type="submit" disabled={confirmationSaving || Number(session.bills_amount_pending || 0) > 0}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
+            {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
+            {confirmationSaving ? "Completing session…" : "Confirm expense and finish"}
+          </button>
+        </form>
+      ) : (
+        <section className="mt-6 rounded-[24px] border border-border bg-white p-4">
+          <p className="text-[15px] font-extrabold">Session completed</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. The completion snapshot is stored and this session is read-only.</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length} planned item(s) remain unpurchased or partially purchased.</p>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate versions</h2>
