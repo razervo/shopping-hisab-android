@@ -393,7 +393,22 @@ async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400
     temperature: 0.05,
     max_tokens: maxTokens,
   });
-  const answer = result?.answer ?? result?.result?.answer ?? "";
+  let answer = result?.answer ?? result?.result?.answer ?? "";
+
+  // Retry once with a short plain-transcription request if the first inference
+  // returns no answer. Keeping OCR and JSON structuring separate is more reliable.
+  if (!String(answer ?? "").trim()) {
+    const retry = await env.AI.run(VISION_MODEL, {
+      task: "query",
+      image: imageDataUrl,
+      question: "Transcribe every handwritten shopping-list line in this image exactly. Include item names and quantities. Do not summarize. If a word is unclear, write [unclear].",
+      reasoning: true,
+      temperature: 0.2,
+      max_tokens: 1800,
+    });
+    answer = retry?.answer ?? retry?.result?.answer ?? "";
+  }
+
   try {
     const parsed = parseModelJson(answer);
     if (parsed?.draft && Array.isArray(parsed.draft.items)) return parsed;
@@ -401,7 +416,10 @@ async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400
     // Moondream query answers may be plain OCR text rather than JSON.
   }
   const transcription = typeof answer === "string" ? answer.trim() : JSON.stringify(answer);
-  if (!transcription) throw new Error("The image reader returned an empty answer. Try a clearer, straight photo.");
+  if (!transcription) {
+    const finishReason = result?.finish_reason ?? result?.result?.finish_reason ?? "unknown";
+    throw new Error(`The image reader returned no text (finish reason: ${finishReason}). Please retry once; if it repeats, we need to inspect the model response.`);
+  }
   return callTextModel(
     env,
     "Convert this OCR transcription into valid JSON only for an Indian shopping list. Preserve all visible items and quantities. Never invent prices or items. If no price is visible, set price=0 and amount=0. If a row total is visible, put it in amount and calculate price=amount/qty only when quantity is clear. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Return exactly {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}.",
