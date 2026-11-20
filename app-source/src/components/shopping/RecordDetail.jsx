@@ -91,6 +91,28 @@ export function RecordDetail({ record, onDeleted }) {
         </div>
       </section>
 
+      {Array.isArray(record.receipts) && record.receipts.length > 0 ? (
+        <section className="rounded-[22px] border border-border bg-white p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[13px] font-extrabold">Receipts ({record.receipts.length})</h2>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${record.reconciliation_status === "complete" ? "bg-emerald-50 text-emerald-700" : record.reconciliation_status === "pending" ? "bg-amber-50 text-amber-800" : "bg-secondary text-muted-foreground"}`}>
+              {record.reconciliation_status === "complete" ? "Reconciled" : record.reconciliation_status === "pending" ? "Pending actual bill" : record.reconciliation_status === "partial" ? "Partially reconciled" : "Receipt records"}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {record.receipts.map((receipt, index) => (
+              <div key={receipt.id || index} className="flex items-center justify-between gap-3 rounded-xl bg-secondary/40 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-bold">{receipt.kind === "actual" ? "Actual bill" : `Receipt ${index + 1}`}</p>
+                  <p className="text-[10.5px] text-muted-foreground">{receipt.status === "pending" ? "Actual bill still needed" : receipt.status === "skipped" ? "Actual bill skipped" : `${receipt.item_count || 0} item(s) recorded`}</p>
+                </div>
+                <span className="tnum shrink-0 text-[12px] font-bold">{receipt.amount > 0 ? inr(receipt.amount) : "Amount not recorded"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {record.notes ? (
         <div className="rounded-[20px] border border-border bg-white px-5 py-4">
           <p className="micro text-muted-foreground">Notes</p>
