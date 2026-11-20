@@ -32,7 +32,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
       const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit } });
       setMarket(res?.suggestion ? { suggestion: res.suggestion } : { error: res?.error || "" });
     } catch {
-      setMarket({ error: "Could not fetch a market rate right now." });
+      setMarket({ error: "Could not generate an estimate right now." });
     } finally {
       setAsking(false);
     }
@@ -137,7 +137,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
             ) : (
               <Sparkles className="h-3 w-3" />
             )}
-            {asking ? "Checking…" : "Market rate"}
+            {asking ? "Estimating…" : "Estimate"}
           </button>
         </div>
         <Input
