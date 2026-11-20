@@ -8,7 +8,8 @@ const now = () => new Date().toISOString();
 const text = (value, max = 160) => String(value ?? "").trim().slice(0, max);
 const safeJson = (value, fallback = {}) => {
   if (value && typeof value === "object") return value;
-  try { return JSON.parse(value || "{}"); } catch { return fallback; }
+  if (value == null || value === "") return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
 };
 const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && !Number.isNaN(Date.parse(value));
 
@@ -111,7 +112,7 @@ export async function handleShoppingEngine(request, env) {
       patch.shopping_date = body.shopping_date;
     }
     if (body.status !== undefined) {
-      if (!["open","ready_to_confirm","completed"].includes(body.status)) return fail("Invalid session status.");
+      if (!["open","ready_to_confirm"].includes(body.status)) return fail("A session can only be completed through explicit expense confirmation.");
       patch.status = body.status;
     }
     if (!Object.keys(patch).length) return fail("No supported session changes were supplied.");
@@ -179,19 +180,22 @@ export async function handleShoppingEngine(request, env) {
     const quantity=body.planned_quantity==null?0:Number(body.planned_quantity);
     if (!Number.isFinite(quantity)||quantity<0||quantity>1000000) return fail("Invalid planned quantity.");
     const itemId=id(),timestamp=now();
+    let source = null;
+    if (body.source_line_id) {
+      const sourceId=text(body.source_line_id,80);
+      source=await db.prepare("SELECT id,quantity FROM shopping_source_lines WHERE id=? AND user_id=? AND session_id=?")
+        .bind(sourceId,userId,sessionId).first();
+      if (!source) return fail("Source line not found.",404);
+    }
     const normalized=text(body.normalized_name||name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," "),160).toLowerCase();
     await db.prepare(`INSERT INTO shopping_items
       (id,user_id,session_id,product_name,normalized_name,brand,product_type,pack_size,planned_quantity,unit,item_status,notes,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,'planned',?,?,?)`)
       .bind(itemId,userId,sessionId,name,normalized,text(body.brand,100),text(body.product_type||"unsure",40),
         text(body.pack_size,60),quantity,text(body.unit||"pcs",24),text(body.notes,1000),timestamp,timestamp).run();
-    if (body.source_line_id) {
-      const sourceId=text(body.source_line_id,80);
-      const source=await db.prepare("SELECT id,quantity FROM shopping_source_lines WHERE id=? AND user_id=? AND session_id=?")
-        .bind(sourceId,userId,sessionId).first();
-      if (!source) return fail("Source line not found.",404);
+    if (source) {
       await db.prepare("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,merged_quantity,created_at) VALUES (?,?,?,?,?,?,?)")
-        .bind(id(),userId,sessionId,itemId,sourceId,quantity,timestamp).run();
+        .bind(id(),userId,sessionId,itemId,source.id,quantity,timestamp).run();
     }
     await audit(db,userId,sessionId,"shopping_item",itemId,"item_created",{product_name:name,planned_quantity:quantity,unit:text(body.unit||"pcs",24)});
     return json({id:itemId,session_id:sessionId,product_name:name,normalized_name:normalized,planned_quantity:quantity,unit:text(body.unit||"pcs",24),item_status:"planned",created_at:timestamp,updated_at:timestamp},201);
