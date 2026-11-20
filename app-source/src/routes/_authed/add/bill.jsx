@@ -41,7 +41,7 @@ function AddBillPage() {
   const save = async (values) => {
     setSaving(true);
     try {
-      const payload = buildPayload({ ...values, source: "bill", billFileUri: billUri });
+      const payload = buildPayload({ ...values, source: "bill", billFileUri: billUri, receipts: values.receipts, reconciliationStatus: values.reconciliationStatus });
       const created = await base44.entities.ShoppingRecord.create(payload);
       clearDraft();
       toast.success("Shopping saved");
