@@ -37,6 +37,8 @@ function SessionDetailPage() {
   const [error, setError] = useState("");
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
+  const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
+  const [billSaving, setBillSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -60,6 +62,35 @@ function SessionDetailPage() {
   const addRow = () => setRows((current) => [...current, blankRow()]);
   const removeRow = (index) => setRows((current) => current.length === 1
     ? [blankRow()] : current.filter((_, i) => i !== index));
+
+  const saveBill = async (event) => {
+    event.preventDefault();
+    const rupees = Number(billForm.bill_total);
+    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
+      toast.error("Enter a valid bill total.");
+      return;
+    }
+    setBillSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/bills`, {
+        method: "POST",
+        body: JSON.stringify({
+          shop_name: billForm.shop_name.trim(),
+          purchase_date: billForm.purchase_date || null,
+          receipt_number: billForm.receipt_number.trim(),
+          bill_total_paise: Math.round(rupees * 100),
+          original_ocr: { entry_method: "manual" },
+        }),
+      });
+      toast.success("Bill added to actual spending.");
+      setBillForm({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not add this bill.");
+    } finally {
+      setBillSaving(false);
+    }
+  };
 
   const saveList = async (event) => {
     event.preventDefault();
@@ -252,6 +283,30 @@ function SessionDetailPage() {
           ))}
         </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Lists added to this session will appear here.</p>}
       </section>
+
+      {!completed ? (
+        <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Add actual bill</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Record the amount you paid at each shop. This amount is counted immediately in actual spending.</p>
+          </div>
+          <input value={billForm.shop_name} onChange={(event) => setBillForm((v) => ({ ...v, shop_name: event.target.value }))}
+            placeholder="Shop name" maxLength={160} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={billForm.purchase_date} onChange={(event) => setBillForm((v) => ({ ...v, purchase_date: event.target.value }))}
+              className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-[12px]" />
+            <input value={billForm.receipt_number} onChange={(event) => setBillForm((v) => ({ ...v, receipt_number: event.target.value }))}
+              placeholder="Receipt no. (optional)" maxLength={100} className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-[12px]" />
+          </div>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={billForm.bill_total}
+            onChange={(event) => setBillForm((v) => ({ ...v, bill_total: event.target.value }))}
+            placeholder="Total paid (₹)" required className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
+          <button type="submit" disabled={billSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+            {billSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {billSaving ? "Adding bill…" : "Add bill amount"}
+          </button>
+        </form>
+      ) : null}
 
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Actual bills</h2>
