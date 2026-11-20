@@ -13,7 +13,7 @@ export const authQuery = queryOptions({
     const user = {
       ...raw,
       full_name: raw.name || "",
-      display_name: raw.displayName || raw.name || "",
+      display_name: raw.displayName || "",
       preferred_market: raw.preferredMarket || "",
       postal_code: raw.postalCode || "",
       profile_picture_uri: raw.profilePictureId ? `cf-file:${raw.profilePictureId}` : "",
