@@ -866,6 +866,7 @@ function SessionDetailPage() {
                   </select>
                 </div>
               ) : null}
+              {bill.file_id ? <a href={`/api/files/${bill.file_id}/content`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11.5px] font-bold text-primary underline">View saved bill photo / PDF</a> : null}
               <button type="button" onClick={() => loadBillLines(bill.id)} className="mt-3 text-[11.5px] font-bold text-primary underline">Load / refresh bill items</button>
               {billLineDetails[bill.id] ? (
                 <div className="mt-2 space-y-1.5">
