@@ -67,7 +67,7 @@ export function BillUploader({
             lastError = new Error(message);
           } catch (cause) {
             lastError = cause;
-            if (attempt === 2 || (cause?.name !== "TypeError" && cause?.name !== "AbortError" && !(response && (response.status >= 500 || response.status === 429))) {
+            if (attempt === 2 || (cause?.name !== "TypeError" && cause?.name !== "AbortError" && !(response && (response.status >= 500 || response.status === 429)))) {
               throw new Error(cause?.name === "AbortError" ? "Receipt reading timed out. Try a smaller or clearer photo." : (cause?.message || "Network error while uploading the receipt."));
             }
           }
