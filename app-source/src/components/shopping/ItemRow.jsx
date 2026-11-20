@@ -32,7 +32,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
       const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit } });
       setMarket(res?.suggestion ? { suggestion: res.suggestion } : { error: res?.error || "" });
     } catch {
-      setMarket({ error: "Could not generate an estimate right now." });
+      setMarket({ error: "Estimate unavailable. Check your connection or AI service quota, then retry." });
     } finally {
       setAsking(false);
     }
