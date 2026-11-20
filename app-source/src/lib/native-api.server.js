@@ -207,11 +207,19 @@ async function getGoogleDriveToken(db, userId, env) {
 }
 
 async function driveRequest(token, url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
-  });
-  return response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
+      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === 2) return response;
+      lastError = new Error(`Google Drive temporary error (${response.status}).`);
+    } catch (cause) {
+      lastError = cause;
+      if (attempt === 2) throw new Error("Network connection to Google Drive failed. Please retry the receipt upload.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+  throw lastError || new Error("Google Drive upload failed. Please retry.");
 }
 
 async function ensureGoogleDriveFolder(db, userId, token) {
@@ -606,7 +614,11 @@ async function handleDirectBillRead(request, env, user) {
   const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200);
   // Upload to Drive at the same time as AI reads the original image.
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
-  const [modelResult, uploaded] = await Promise.all([readPromise, uploadPromise]);
+  const [readResult, uploadResult] = await Promise.allSettled([readPromise, uploadPromise]);
+  if (uploadResult.status === "rejected") throw new Error(`Receipt could not be saved to Google Drive: ${uploadResult.reason?.message || "Please reconnect Drive and retry."}`);
+  if (readResult.status === "rejected") throw new Error(`Receipt was uploaded, but AI could not read it: ${readResult.reason?.message || "Try a clearer photo."}`);
+  const modelResult = readResult.value;
+  const uploaded = uploadResult.value;
   // callVisionModel already parses the model's answer into the draft object.
   const parsed = modelResult;
   if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
@@ -673,8 +685,8 @@ async function handleAI(request, env, user) {
     const packSize = String(data.packSize || "").slice(0, 40);
     if (!name) return error("Enter an item name.");
     const parsed = await callTextModel(env,
-      "Estimate a plausible Indian local-retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre values for g or ml. If the item or pack size is ambiguous, state that in note and use a conservative generic loose/unbranded assumption. This is an AI estimate, not a live store quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
-      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nPIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}\nUse everyday Indian retail prices, not wholesale rates. The rate must be INR per ONE ${unit}. For g or ml, convert from per-kg/per-litre prices to a single gram/millilitre.`,
+      "Estimate a plausible Indian local-retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre values for g or ml. Respect the supplied product type and brand. For loose items estimate loose retail rates; for branded/local products use the named brand where possible. For pkt estimate the whole packet price using pack size. This is an AI estimate, not a live store quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
+      `Item: ${name}\\nProduct type: ${productType}\\nBrand/local shop: ${brand || "not supplied"}\\nPacket size: ${packSize || "not supplied"}\\nExact price unit: ${unit}\\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\\nPIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}\\nUse everyday Indian retail prices, not wholesale rates. The rate must be INR per ONE ${unit}. For g or ml, convert from per-kg/per-litre prices to a single gram/millilitre. For pkt, estimate the whole packet price matching the supplied pack size.`,
       450,
     );
     const suggestion = parsed.suggestion;
