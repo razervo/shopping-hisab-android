@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, ChevronRight, Loader2, Plus, RefreshCw, ShoppingBasket } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +26,7 @@ const prettyDate = (value) => {
 };
 
 function SessionsPage() {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -68,6 +69,7 @@ function SessionsPage() {
       if (!response.ok) throw new Error(result.error || "Could not create this session.");
       setName("");
       toast.success("Shopping session created");
+      navigate({ to: "/sessions/$sessionId", params: { sessionId: result.id } });
       await loadSessions();
     } catch (cause) {
       toast.error(cause.message || "Could not create this session.");
@@ -137,7 +139,7 @@ function SessionsPage() {
       ) : (
         <div className="space-y-2.5">
           {sessions.map((session) => (
-            <div key={session.id} className="rounded-[20px] border border-border bg-white p-4">
+            <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="block rounded-[20px] border border-border bg-white p-4 transition-colors hover:bg-secondary/30">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14.5px] font-extrabold">{session.name || "Shopping session"}</p>
@@ -154,10 +156,8 @@ function SessionsPage() {
                 </div>
                 <span className="text-[13px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</span>
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Session detail and item entry are the next interface step.
-              </p>
-            </div>
+              <p className="mt-2 text-[11px] font-semibold text-primary">Open session →</p>
+            </Link>
           ))}
         </div>
       )}
