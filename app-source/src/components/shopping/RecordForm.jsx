@@ -334,12 +334,27 @@ export function RecordForm({
             },
           });
           if (res?.error) throw new Error(res.error);
+          const returned = new Set();
           (res?.rates || []).forEach((r) => {
             const target = batch[r.index];
             const rate = Number(r.rate);
-            if (target && Number.isFinite(rate) && rate > 0) collected.set(target.id, rate);
+            if (target && Number.isFinite(rate) && rate > 0) {
+              collected.set(target.id, rate);
+              returned.add(target.id);
+            }
           });
-          if (!(res?.rates || []).length) failures.push(...batch.map((item) => item.name));
+          const missing = batch.filter((item) => !returned.has(item.id));
+          for (const item of missing) {
+            try {
+              const single = await estimateFn({ data: { name: String(item.name).trim().slice(0, 80), unit: String(item.unit || "pcs").slice(0, 12), productType: item.productType || "unsure", brand: String(item.brand || "").slice(0, 60), packSize: String(item.packSize || "").slice(0, 40) } });
+              const rate = Number(single?.suggestion?.rate ?? single?.rate);
+              if (!single?.error && Number.isFinite(rate) && rate > 0) collected.set(item.id, rate);
+              else failures.push(item.name);
+            } catch (retryError) {
+              failures.push(item.name);
+              console.warn("Individual estimate retry failed:", item.name, retryError);
+            }
+          }
         } catch (cause) {
           failures.push(...batch.map((item) => item.name));
           console.warn("Shopping Hisab estimate batch failed:", cause);
