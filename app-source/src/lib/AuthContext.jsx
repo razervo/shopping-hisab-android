@@ -15,6 +15,7 @@ export const authQuery = queryOptions({
       full_name: raw.name || "",
       display_name: raw.displayName || raw.name || "",
       preferred_market: raw.preferredMarket || "",
+      postal_code: raw.postalCode || "",
       profile_picture_uri: raw.profilePictureId ? `cf-file:${raw.profilePictureId}` : "",
     };
     return { user, error: null };
