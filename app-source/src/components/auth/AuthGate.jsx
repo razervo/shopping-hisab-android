@@ -25,7 +25,7 @@ export async function requireSignedIn({ context, location }) {
   if (user) {
     const profileComplete =
       String(user.displayName || user.display_name || "").trim().length > 0 &&
-      /^\\d{6}$/.test(String(user.postalCode || user.postal_code || "").trim()) &&
+      /^\d{6}$/.test(String(user.postalCode || user.postal_code || "").trim()) &&
       String(user.preferredMarket || user.preferred_market || "").trim().length > 0;
     if (!profileComplete && location.pathname !== "/profile") {
       throw redirect({ to: "/profile", search: { setup: "1" } });
