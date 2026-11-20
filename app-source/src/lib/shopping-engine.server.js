@@ -234,9 +234,9 @@ export async function handleShoppingEngine(request, env) {
     const mergedNote=text([target.notes,source.notes].filter(Boolean).join(" · "),1000);
     await db.batch([
       db.prepare("UPDATE shopping_items SET planned_quantity=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(combinedQuantity,mergedNote,timestamp,targetId,userId,sessionId),
-      db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,sourceId,userId,sessionId),
+      db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND source_line_id NOT IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?) AND user_id=? AND session_id=?").bind(targetId,sourceId,targetId,userId,sessionId),
       db.prepare("UPDATE shopping_purchase_lines SET shopping_item_id=?,is_extra=0,match_method='confirmed',updated_at=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,timestamp,sourceId,userId,sessionId),
-      db.prepare("UPDATE shopping_items SET item_status='cancelled',notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(text(`Merged into ${target.product_name} (${targetId})`,1000),timestamp,sourceId,userId,sessionId),
+      db.prepare("UPDATE shopping_items SET item_status='cancelled',merged_into_item_id=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(targetId,text(`Merged into ${target.product_name} (${targetId})`,1000),timestamp,sourceId,userId,sessionId),
     ]);
     await audit(db,userId,sessionId,"shopping_item",targetId,"items_merged",{source_item_id:sourceId,added_quantity:Number(source.planned_quantity||0),combined_quantity:combinedQuantity});
     await audit(db,userId,sessionId,"shopping_item",sourceId,"item_merged_into",{target_item_id:targetId});
