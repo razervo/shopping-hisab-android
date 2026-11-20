@@ -46,7 +46,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^5.2.0",
-    "@tanstack/react-query": "^5.84.1",
+    "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "^1.170.0",
     "@tanstack/react-router-ssr-query": "1.167.3",
     "@tanstack/react-start": "^1.168.60",
@@ -98,6 +98,7 @@
   },
   "overrides": {
     "undici": "7.30.1",
-    "@tanstack/start-plugin-core": "1.171.56"
+    "@tanstack/start-plugin-core": "1.171.56",
+    "@tanstack/query-core": "5.107.1"
   }
 }
