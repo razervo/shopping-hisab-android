@@ -45,3 +45,6 @@ Android 8.0 (API 26) or later. The build uses JDK 17, Kotlin 2.1.0, ONNX Runtime
 1.21.1 and OpenCV 4.5.3, matching PaddleOCR's documented Android SDK requirements.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream licenses and pins.
+
+
+The current CI debug APK is packaged for `arm64-v8a` only to avoid shipping unused x86 and 32-bit OpenCV/ONNX native libraries. Build with the appropriate ABI filter for other test devices.
