@@ -427,6 +427,96 @@ async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400
     maxTokens,
   );
 }
+
+async function handleGeminiOcrTest(request, env, user) {
+  if (!env.GEMINI_API_KEY) return error("Gemini test is not configured. Add the GEMINI_API_KEY Worker secret.", 503);
+  const form = await request.formData();
+  const file = form.get("file");
+  const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
+  if (!(file instanceof File) || !file.size) return error("Choose a bill photo first.");
+  if (file.size > MAX_FILE_BYTES) return error("Please choose a photo under 10 MB.");
+  const mime = String(file.type || "").toLowerCase();
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) return error("Choose a JPG, PNG or WEBP photo.");
+
+  const prompt = purpose === "shopping_list"
+    ? "Read this handwritten English shopping list. Extract every visible row, item name, quantity, unit and any price written on that same row. Never invent an item, quantity or price. A right-side price is the TOTAL for that row quantity; put it in amount and calculate price=amount/qty only when both are clear. If no price is visible, use price=0 and amount=0. Normalize kg/kilo to kg; gm/gram to g; litre/ltr to L; packet to pkt; piece to pcs. Preserve half kg as qty 0.5 kg. If unclear, mark the name as [unclear] or use qty=0; do not guess."
+    : "Read this priced handwritten English grocery list. The rightmost number on a row is the TOTAL amount for that entire row quantity, not unit price. Put it in amount. Calculate price=amount/qty only when quantity is clear. If quantity is unclear, set qty=0 and price=0 but preserve a clearly visible amount. Never invent items or prices. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box.";
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const imageBase64 = bytesToBase64(bytes);
+  const started = Date.now();
+  const modelPromise = (async () => {
+    const modelStarted = Date.now();
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { text: prompt + " Return only JSON matching {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Use an empty shopName and null date if absent. Currency is INR. Do not add commentary." },
+          { inlineData: { mimeType: mime, data: imageBase64 } },
+        ] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 3000,
+          responseMimeType: "application/json",
+          responseJsonSchema: {
+            type: "OBJECT",
+            properties: {
+              draft: {
+                type: "OBJECT",
+                properties: {
+                  shopName: { type: "STRING" },
+                  date: { type: "STRING", nullable: true },
+                  notes: { type: "STRING" },
+                  items: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        name: { type: "STRING" },
+                        qty: { type: "NUMBER" },
+                        unit: { type: "STRING" },
+                        price: { type: "NUMBER" },
+                        amount: { type: "NUMBER" }
+                      },
+                      required: ["name", "qty", "unit", "price", "amount"]
+                    }
+                  }
+                },
+                required: ["shopName", "date", "notes", "items"]
+              }
+            },
+            required: ["draft"]
+          }
+        }
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload?.error?.message || "Gemini API request failed.";
+      throw new Error(detail.slice(0, 500));
+    }
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+    const parsed = parseModelJson(text);
+    if (!parsed?.draft || !Array.isArray(parsed.draft.items)) throw new Error("Gemini returned an unexpected shopping-list format.");
+    return { parsed, ms: Date.now() - modelStarted };
+  })();
+  const uploadPromise = (async () => {
+    const uploadStarted = Date.now();
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "gemini-ocr-test.jpg");
+    const id = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
+    ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, mime, uploaded.size).run();
+    return { file_uri: `cf-file:${id}`, ms: Date.now() - uploadStarted };
+  })();
+  const [model, uploaded] = await Promise.all([modelPromise, uploadPromise]);
+  return json({
+    draft: model.parsed.draft,
+    file_uri: uploaded.file_uri,
+    timing: { gemini_ms: model.ms, drive_upload_ms: uploaded.ms, total_ms: Date.now() - started }
+  });
+}
+
 async function handleDirectBillRead(request, env, user) {
   const form = await request.formData();
   const file = form.get("file");
