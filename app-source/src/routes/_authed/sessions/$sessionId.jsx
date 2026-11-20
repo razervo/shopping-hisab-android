@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { BillUploader } from "@/components/shopping/BillUploader";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Session · Shopping Hisab" }] }),
@@ -46,6 +47,11 @@ function SessionDetailPage() {
   const [estimateSources, setEstimateSources] = useState({});
   const [estimateSaving, setEstimateSaving] = useState(false);
   const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
+  const [scannedDraft, setScannedDraft] = useState(null);
+  const [scannedFileUri, setScannedFileUri] = useState("");
+  const [scannedListName, setScannedListName] = useState("Scanned shopping list");
+  const [scannedRows, setScannedRows] = useState([]);
+  const [scannedListSaving, setScannedListSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -228,6 +234,79 @@ function SessionDetailPage() {
     }
   };
 
+  const handleScannedList = (draft, fileUri) => {
+    const draftItems = Array.isArray(draft?.items) ? draft.items : [];
+    if (!draftItems.length) {
+      toast.error("No list items were detected. You can enter the list manually.");
+      return;
+    }
+    setScannedDraft(draft);
+    setScannedFileUri(fileUri || "");
+    setScannedListName(draft.shopName || "Scanned shopping list");
+    setScannedRows(draftItems.map((item) => ({
+      name: String(item?.name || ""),
+      quantity: String(item?.qty ?? 1),
+      unit: String(item?.unit || "pcs"),
+      original: item,
+    })));
+  };
+
+  const updateScannedRow = (index, key, value) => setScannedRows((current) =>
+    current.map((row, i) => i === index ? { ...row, [key]: value } : row));
+
+  const saveScannedList = async (event) => {
+    event.preventDefault();
+    const validRows = scannedRows.map((row) => ({ ...row, name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit.trim() || "pcs" }));
+    if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
+    if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
+    setScannedListSaving(true);
+    try {
+      const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(scannedFileUri);
+      const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
+        method: "POST",
+        body: JSON.stringify({
+          source_type: "handwritten_scan",
+          file_id: fileMatch?.[1] || null,
+          original_file_uri: scannedFileUri || null,
+          source_metadata: { title: scannedListName.trim() || "Scanned shopping list", import_method: "existing_bill_uploader" },
+        }),
+      });
+      const lineResult = await api(`/api/shopping/sessions/${sessionId}/lists/${sourceList.id}/lines`, {
+        method: "POST",
+        body: JSON.stringify({ lines: validRows.map((row, index) => ({
+          line_number: index + 1,
+          original_name: String(row.original?.name || row.name),
+          recognized_name: row.name,
+          quantity: row.quantity,
+          unit: row.unit,
+          original_ocr: row.original || {},
+        })) }),
+      });
+      for (let index = 0; index < validRows.length; index++) {
+        const row = validRows[index];
+        await api(`/api/shopping/sessions/${sessionId}/items`, {
+          method: "POST",
+          body: JSON.stringify({
+            product_name: row.name,
+            planned_quantity: row.quantity,
+            unit: row.unit,
+            source_line_id: lineResult.line_ids[index],
+          }),
+        });
+      }
+      toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
+      setScannedDraft(null);
+      setScannedFileUri("");
+      setScannedRows([]);
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not save the scanned list.");
+      await loadSession();
+    } finally {
+      setScannedListSaving(false);
+    }
+  };
+
   const saveList = async (event) => {
     event.preventDefault();
     const validRows = rows.map((row) => ({
@@ -334,10 +413,38 @@ function SessionDetailPage() {
       </div>
 
       {!completed ? (
+        <>
+        <section className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
+          </div>
+          <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
+        </section>
+        {scannedDraft ? (
+          <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
+            <div>
+              <p className="text-[15px] font-extrabold">Review scanned list</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Nothing is added until you save. Original scan data is retained with the source list.</p>
+            </div>
+            <input value={scannedListName} onChange={(event) => setScannedListName(event.target.value)} maxLength={120} aria-label="Scanned list name" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+            {scannedRows.map((row, index) => (
+              <div key={index} className="grid grid-cols-[minmax(0,1fr)_82px_72px] gap-2">
+                <input value={row.name} onChange={(event) => updateScannedRow(index, "name", event.target.value)} aria-label={`Scanned item ${index + 1} name`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+                <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateScannedRow(index, "quantity", event.target.value)} aria-label={`Scanned item ${index + 1} quantity`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+                <input value={row.unit} onChange={(event) => updateScannedRow(index, "unit", event.target.value)} aria-label={`Scanned item ${index + 1} unit`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+              </div>
+            ))}
+            <button type="submit" disabled={scannedListSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+              {scannedListSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
+            </button>
+          </form>
+        ) : null}
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
-            <p className="text-[15px] font-extrabold">Add a shopping list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Enter items manually now. Scanned handwritten lists will connect here in the next step.</p>
+            <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">You can add another list at any time. Each list remains saved separately.</p>
           </div>
           <div>
             <label htmlFor="list-name" className="mb-1 block text-[11.5px] font-bold text-muted-foreground">List name</label>
@@ -382,6 +489,7 @@ function SessionDetailPage() {
             {saving ? "Saving list…" : "Save shopping list"}
           </button>
         </form>
+        </>
       ) : null}
 
       <section className="mt-6">
