@@ -37,6 +37,8 @@ export function RecordForm({
   const [bulkError, setBulkError] = useState("");
   const [receiptCount, setReceiptCount] = useState(1);
   const [receiptMessage, setReceiptMessage] = useState("");
+  const [receipts, setReceipts] = useState(() => Array.isArray(initial?.receipts) ? initial.receipts : (billFileUri ? [{ id: "receipt-1", file_uri: billFileUri, kind: "shopping_list", status: "attached", amount: 0 }] : []));
+  const [pendingActualBill, setPendingActualBill] = useState(false);
   const estimateFn = estimateMarketRates;
 
   // A list built at home is kept on this phone, so the real shop prices can be
@@ -143,61 +145,35 @@ export function RecordForm({
 
   const appendReceipt = (extracted, fileUri) => {
     const incoming = (extracted?.items || []).filter((entry) => String(entry.name || "").trim());
-    if (!incoming.length) {
-      setReceiptMessage("No readable items were found on this receipt.");
-      return;
-    }
-    setItems((current) => {
-      const next = current.filter((item) => String(item.name || "").trim()).map((item) => ({ ...item }));
-      incoming.forEach((entry) => {
-        const unit = normalizeShoppingUnit(entry.unit || "pcs");
-        const nameKey = String(entry.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const candidateIndex = next.findIndex((item) =>
-          String(item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "") === nameKey &&
-          normalizeShoppingUnit(item.unit || "pcs") === unit
-        );
-        const fresh = {
-          ...emptyItem(),
-          name: String(entry.name || "").trim(),
-          qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1,
-          unit,
-          price: Number(entry.price) > 0 ? String(entry.price) : "",
-          receiptRefs: [fileUri].filter(Boolean),
-        };
-        if (candidateIndex < 0) {
-          next.push(fresh);
-          return;
-        }
-        const existing = next[candidateIndex];
-        const merge = window.confirm(
-          `Possible duplicate: ${existing.name}\n\nExisting: ${existing.qty} ${existing.unit} @ ₹${existing.price || "not priced"}\nNew receipt: ${fresh.qty} ${fresh.unit} @ ₹${fresh.price || "not priced"}\n\nOK = merge quantities and totals. Cancel = keep as a separate item.`
-        );
-        if (!merge) {
-          next.push(fresh);
-          return;
-        }
-        const oldQty = Number(existing.qty) || 0;
-        const newQty = Number(fresh.qty) || 0;
-        const oldRate = Number(existing.price) || 0;
-        const newRate = Number(fresh.price) || 0;
-        const totalQty = oldQty + newQty;
-        const combinedRate = totalQty > 0 && (oldRate > 0 || newRate > 0)
-          ? ((oldQty * oldRate) + (newQty * newRate)) / totalQty
-          : 0;
-        next[candidateIndex] = {
-          ...existing,
-          qty: totalQty,
-          price: combinedRate > 0 ? String(Math.round(combinedRate * 10000) / 10000) : "",
-          receiptRefs: [...new Set([...(existing.receiptRefs || []), ...(fresh.receiptRefs || [])])],
-        };
-      });
-      return next;
+    if (!incoming.length) { setReceiptMessage("No readable items were found on this receipt."); return; }
+    const next = items.filter((item) => String(item.name || "").trim()).map((item) => ({ ...item }));
+    const mergedNames = [];
+    incoming.forEach((entry) => {
+      const unit = normalizeShoppingUnit(entry.unit || "pcs");
+      const nameKey = String(entry.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const candidateIndex = next.findIndex((item) => String(item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "") === nameKey && normalizeShoppingUnit(item.unit || "pcs") === unit);
+      const fresh = { ...emptyItem(), name: String(entry.name || "").trim(), qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1, unit, price: Number(entry.price) > 0 ? String(entry.price) : "", receiptRefs: [fileUri].filter(Boolean) };
+      if (candidateIndex < 0) { next.push(fresh); return; }
+      const existing = next[candidateIndex];
+      if (!window.confirm(`Possible duplicate: ${existing.name}\n\nExisting: ${existing.qty} ${existing.unit} @ ₹${existing.price || "not priced"}\nNew receipt: ${fresh.qty} ${fresh.unit} @ ₹${fresh.price || "not priced"}\n\nOK = merge quantities and totals. Cancel = keep separate.`)) { next.push(fresh); return; }
+      mergedNames.push(existing.name);
+      const oldQty = Number(existing.qty) || 0, newQty = Number(fresh.qty) || 0;
+      const totalQty = oldQty + newQty;
+      const oldAmount = oldQty * (Number(existing.price) || 0), newAmount = newQty * (Number(fresh.price) || 0);
+      next[candidateIndex] = { ...existing, qty: totalQty, price: totalQty && (oldAmount + newAmount) ? String(Math.round(((oldAmount + newAmount) / totalQty) * 10000) / 10000) : "", receiptRefs: [...new Set([...(existing.receiptRefs || []), ...(fresh.receiptRefs || [])])] };
     });
+    setItems(next);
+    const receipt = { id: `receipt-${Date.now()}`, file_uri: fileUri || "", kind: "shopping_list", status: mergedNames.length ? "pending" : "attached", amount: Math.round(incoming.reduce((sum, item) => sum + (Number(item.amount) || (Number(item.qty) || 1) * (Number(item.price) || 0)), 0) * 100) / 100, item_count: incoming.length, merged_items: mergedNames, created_at: new Date().toISOString() };
+    setReceipts((prev) => [...prev, receipt]);
     setReceiptCount((count) => count + 1);
-    setReceiptMessage(`Receipt ${receiptCount + 1} added. Review new items and any duplicate decisions before saving.`);
+    if (mergedNames.length) {
+      setPendingActualBill(true);
+      setReceiptMessage(`Receipt added. Merged: ${mergedNames.join(", ")}. The second actual bill is still required.`);
+      window.setTimeout(() => { if (window.confirm("You merged items from another receipt. Upload the second actual bill now?\n\nOK = upload now. Cancel = do it later.")) setPendingActualBill(true); }, 0);
+    } else setReceiptMessage(`Receipt ${receiptCount + 1} added. Review the items before saving.`);
     if (fileUri) onActualListUploaded?.(fileUri);
   };
-
+  
   const applyActualList = (pricedDraft, fileUri) => {
     const normalizeName = (value) =>
       String(value || "")
@@ -285,6 +261,8 @@ export function RecordForm({
         `Updated actual prices for ${matchedIds.size} item(s).${missed.length ? ` Not matched or no price found: ${missed.join(", ")}. Update those manually.` : " Review the updated prices and total before saving."}`,
       );
       if (fileUri) onActualListUploaded?.(fileUri);
+      setReceipts((prev) => [...prev.map((receipt) => receipt.status === "pending" ? { ...receipt, status: "attached" } : receipt), { id: `actual-${Date.now()}`, file_uri: fileUri || "", kind: "actual", status: "attached", amount: Number(pricedDraft?.total) || 0, item_count: matchedIds.size, merged_items: [], created_at: new Date().toISOString() }]);
+      setPendingActualBill(false);
     } else {
       setActualUploadMessage(
         "No priced items could be matched. Check that the uploaded list has the same item names, then enter prices manually.",
@@ -410,7 +388,8 @@ export function RecordForm({
     }
     if (total <= 0) return setError("Add a price for at least one item.");
     setError("");
-    onSave({ shopName, date, notes, items: filled });
+    const reconciliationStatus = pendingActualBill || receipts.some((receipt) => receipt.status === "pending") ? "pending" : receipts.some((receipt) => receipt.status === "skipped") ? "partial" : receipts.some((receipt) => receipt.kind === "actual") ? "complete" : "not_required";
+    onSave({ shopName, date, notes, items: filled, receipts, reconciliationStatus });
   };
 
   return (
@@ -538,6 +517,7 @@ export function RecordForm({
             </div>
             <BillUploader compact purpose="shopping_list" onExtracted={appendReceipt} />
             {receiptMessage ? <p className="text-[11px] font-semibold text-primary">{receiptMessage}</p> : null}
+            {pendingActualBill ? <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-[12px] font-bold text-amber-900">Second actual bill required</p><p className="text-[11px] leading-relaxed text-amber-900/80">Merged items are not fully reconciled. Upload the second actual bill now, or save this record as pending.</p><BillUploader compact purpose="priced_list" onExtracted={applyActualList} /><button type="button" onClick={() => { setPendingActualBill(false); setReceipts((prev) => prev.map((receipt) => receipt.status === "pending" ? { ...receipt, status: "skipped" } : receipt)); setReceiptMessage("Second actual bill skipped. This record will be marked partially reconciled."); }} className="text-[11px] font-bold text-amber-900 underline">Skip for now</button></div> : null}
           </div>
         ) : null}
 
