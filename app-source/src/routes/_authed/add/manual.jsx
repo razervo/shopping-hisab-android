@@ -19,7 +19,7 @@ function AddManualPage() {
   const save = async (values) => {
     setSaving(true);
     try {
-      const payload = buildPayload({ ...values, source: "manual" });
+      const payload = buildPayload({ ...values, source: "manual", receipts: values.receipts, reconciliationStatus: values.reconciliationStatus });
       const created = await base44.entities.ShoppingRecord.create(payload);
       clearDraft();
       toast.success("Shopping saved");
