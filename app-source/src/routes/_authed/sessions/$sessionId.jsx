@@ -207,7 +207,7 @@ function SessionDetailPage() {
     setUploadedBillDraft(draft);
     setUploadedBillFileUri(fileUri || "");
     setUploadedBillShop(String(draft.shopName || ""));
-    setUploadedBillDate(/^\\d{4}-\\d{2}-\\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
+    setUploadedBillDate(/^\d{4}-\d{2}-\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
     setUploadedBillTotal("");
     setUploadedBillRows(extracted.map((item) => ({
       product_name: String(item?.name || ""),
