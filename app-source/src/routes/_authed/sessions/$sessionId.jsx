@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
@@ -43,7 +43,9 @@ function SessionDetailPage() {
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
   const [estimatePrices, setEstimatePrices] = useState({});
+  const [estimateSources, setEstimateSources] = useState({});
   const [estimateSaving, setEstimateSaving] = useState(false);
+  const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -87,14 +89,16 @@ function SessionDetailPage() {
         unit: item.unit || "pcs",
         estimated_unit_price_paise: unitPrice,
         estimated_line_total_paise: Math.round(Number(item.planned_quantity || 0) * unitPrice),
-        price_source: "manual",
+        price_source: estimateSources[item.id] || "manual",
       });
     }
     setEstimateSaving(true);
     try {
+      const sources = new Set(lines.map((line) => line.price_source));
+      const calculationSource = sources.size > 1 ? "mixed" : (sources.values().next().value || "manual");
       await api(`/api/shopping/sessions/${sessionId}/estimates`, {
         method: "POST",
-        body: JSON.stringify({ calculation_source: "manual", notes: "Manually entered by user", lines }),
+        body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
       });
       toast.success("Estimate version saved. Previous versions are preserved.");
       await loadSession();
@@ -102,6 +106,48 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not save this estimate.");
     } finally {
       setEstimateSaving(false);
+    }
+  };
+
+  const generateAiEstimate = async () => {
+    const currentItems = session?.items || [];
+    if (!currentItems.length) return toast.error("Add planned items before creating an estimate.");
+    setAiEstimateSaving(true);
+    try {
+      const result = await api("/api/ai", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "estimateMarketRates",
+          data: { items: currentItems.map((item) => ({
+            name: item.product_name,
+            unit: item.unit || "pcs",
+            brand: item.brand || "",
+            packSize: item.pack_size || "",
+            productType: item.product_type || "unsure",
+          })) },
+        }),
+      });
+      const rates = Array.isArray(result.rates) ? result.rates : [];
+      const updates = {};
+      const sources = {};
+      for (const entry of rates) {
+        const item = currentItems[entry.index];
+        const rate = Number(entry.rate);
+        if (!item || !Number.isFinite(rate) || rate <= 0) continue;
+        updates[item.id] = String(rate);
+        sources[item.id] = "ai_estimate";
+      }
+      if (!Object.keys(updates).length) {
+        return toast.error("The AI could not produce reliable prices for these items. Enter local prices manually.");
+      }
+      setEstimatePrices((current) => ({ ...current, ...updates }));
+      setEstimateSources((current) => ({ ...current, ...sources }));
+      const missingCount = currentItems.length - Object.keys(updates).length;
+      toast.success(`AI estimated ${Object.keys(updates).length} of ${currentItems.length} items. Review the prices${missingCount ? `; enter the remaining ${missingCount} manually` : ""} before saving.`);
+    } catch (cause) {
+      toast.error(cause.message || "AI estimation is temporarily unavailable.");
+    } finally {
+      setAiEstimateSaving(false);
     }
   };
 
@@ -374,7 +420,7 @@ function SessionDetailPage() {
         <form onSubmit={saveEstimate} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Create cost estimate</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Enter an estimated price per unit for each planned item. This is a manual estimate; no market price is being invented.</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Generate indicative AI market prices or enter your own. Review every price before saving; AI prices are estimates, not live shop quotes.</p>
           </div>
           {items.length ? items.map((item) => (
             <div key={item.id} className="flex items-center gap-3">
@@ -385,16 +431,22 @@ function SessionDetailPage() {
               <div className="w-28 shrink-0">
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={estimatePrices[item.id] ?? ""}
-                  onChange={(event) => setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value }))}
+                  onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); }}
                   placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
               </div>
             </div>
           )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
-          <button type="submit" disabled={estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
-            {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {estimateSaving ? "Saving estimate…" : "Save new estimate version"}
-          </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" onClick={generateAiEstimate} disabled={aiEstimateSaving || estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/30 bg-accent py-3 text-[13px] font-bold text-primary disabled:opacity-60">
+              {aiEstimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {aiEstimateSaving ? "Estimating…" : "AI Estimate prices"}
+            </button>
+            <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+              {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {estimateSaving ? "Saving estimate…" : "Save estimate version"}
+            </button>
+          </div>
         </form>
       ) : null}
 
