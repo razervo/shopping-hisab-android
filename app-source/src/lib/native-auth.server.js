@@ -60,6 +60,7 @@ export function createNativeAuth(env) {
         displayName: { type: "string", required: false, input: true },
         phone: { type: "string", required: false, input: true },
         preferredMarket: { type: "string", required: false, input: true },
+        postalCode: { type: "string", required: false, input: true },
         profilePictureId: { type: "string", required: false, input: false },
       },
     },
