@@ -59,7 +59,7 @@ async function sessionDetail(db, userId, sessionId) {
     db.prepare("SELECT id,version_number,estimated_total_paise,calculation_source,market_area,notes,created_at FROM shopping_estimates WHERE user_id=? AND session_id=? ORDER BY version_number DESC")
       .bind(userId, sessionId).all(),
   ]);
-  const total = await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
+  const total = await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
     SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS bills_amount_pending
     FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId, sessionId).first();
   return {
@@ -429,7 +429,7 @@ export async function handleShoppingEngine(request, env) {
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
     if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
-    const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
+    const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
       SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
       FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
     const billRows=await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id FROM shopping_actual_bills WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id").bind(userId,sessionId).all();
