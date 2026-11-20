@@ -310,10 +310,14 @@ export async function handleShoppingEngine(request, env) {
   }
 
   const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
-  if (billMatch && method === "PATCH") {
+  if (billMatch && ["GET","PATCH"].includes(method)) {
     const billId=billMatch[1];
     const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
     if(!existing) return fail("Bill not found.",404);
+    if(method==="GET"){
+      const lines=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=? ORDER BY created_at,id").bind(billId,userId,sessionId).all();
+      return json({...existing,purchase_lines:lines.results||[]});
+    }
     const patch={};
     for(const key of ["shop_name","receipt_number","original_file_uri"]) if(body[key]!==undefined) patch[key]=text(body[key],key==="original_file_uri"?1200:160);
     if(body.purchase_date!==undefined){if(body.purchase_date&&!validDate(body.purchase_date))return fail("Invalid bill purchase date.");patch.purchase_date=body.purchase_date||null;}
@@ -369,6 +373,35 @@ export async function handleShoppingEngine(request, env) {
     }
     await audit(db,userId,sessionId,"actual_bill",billId,"bill_lines_added",{line_count:prepared.length,line_total_paise:sum});
     return json({bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length},201);
+  }
+
+
+  const purchaseLineMatch=/^bills\/[a-f0-9-]{36}\/lines\/([a-f0-9-]{36})$/.exec(subpath);
+  if(purchaseLineMatch && method==="PATCH"){
+    const lineId=purchaseLineMatch[1];
+    const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
+    if(!line)return fail("Bill line not found.",404);
+    const patch={};
+    if(body.product_name!==undefined){patch.product_name=text(body.product_name,160);if(!patch.product_name)return fail("Product name cannot be empty.");patch.normalized_name=patch.product_name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();}
+    for(const key of ["brand","pack_size","unit"])if(body[key]!==undefined)patch[key]=text(body[key],100);
+    if(body.quantity!==undefined){patch.quantity=Number(body.quantity);if(!Number.isFinite(patch.quantity)||patch.quantity<0||patch.quantity>1000000)return fail("Invalid quantity.");}
+    for(const key of ["unit_price_paise","line_amount_paise"]){if(body[key]!==undefined){const n=body[key]==null?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`Invalid ${key}.`);patch[key]=n;}}
+    if(body.shopping_item_id!==undefined){const itemId=text(body.shopping_item_id,80)||null;if(itemId&&!await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first())return fail("Shopping item not found.",404);patch.shopping_item_id=itemId;}
+    if(body.is_extra!==undefined){if(typeof body.is_extra!=="boolean")return fail("is_extra must be true or false.");patch.is_extra=body.is_extra?1:0;}
+    if(body.match_method!==undefined){if(!["exact","confirmed","suggested","unmatched","extra"].includes(body.match_method))return fail("Invalid match method.");patch.match_method=body.match_method;}
+    if(!Object.keys(patch).length)return fail("No supported bill-line changes were supplied.");
+    patch.corrected_values_json=JSON.stringify({...safeJson(line.corrected_values_json,{}),...patch});
+    patch.updated_at=now();
+    const before=Object.fromEntries(Object.keys(patch).filter(k=>k in line).map(k=>[k,line[k]]));
+    await db.prepare(`UPDATE shopping_purchase_lines SET ${Object.keys(patch).map(k=>k+"=?").join(",")} WHERE id=? AND user_id=? AND session_id=?`).bind(...Object.values(patch),lineId,userId,sessionId).run();
+    const sums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
+    if(Number(sums?.line_count||0)===Number(sums?.priced_count||0)){
+      const bill=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
+      await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
+        .bind(Number(sums.line_total||0),bill?.bill_total_paise==null?null:Number(bill.bill_total_paise)-Number(sums.line_total||0),now(),line.bill_id,userId,sessionId).run();
+    }
+    await audit(db,userId,sessionId,"purchase_line",lineId,"bill_line_corrected",patch,before);
+    return json(await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first());
   }
 
   if(subpath==="confirm" && method==="POST"){
