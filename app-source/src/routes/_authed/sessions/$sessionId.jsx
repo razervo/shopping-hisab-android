@@ -54,6 +54,13 @@ function SessionDetailPage() {
   const [scannedListSaving, setScannedListSaving] = useState(false);
   const [confirmationTotal, setConfirmationTotal] = useState("");
   const [confirmationSaving, setConfirmationSaving] = useState(false);
+  const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
+  const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
+  const [uploadedBillShop, setUploadedBillShop] = useState("");
+  const [uploadedBillDate, setUploadedBillDate] = useState(new Date().toISOString().slice(0, 10));
+  const [uploadedBillTotal, setUploadedBillTotal] = useState("");
+  const [uploadedBillRows, setUploadedBillRows] = useState([]);
+  const [uploadedBillSaving, setUploadedBillSaving] = useState(false);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -188,6 +195,88 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not add this bill.");
     } finally {
       setBillSaving(false);
+    }
+  };
+
+  const handleUploadedBill = (draft, fileUri) => {
+    const extracted = Array.isArray(draft?.items) ? draft.items : [];
+    if (!extracted.length) {
+      toast.error("No bill items were detected. You can still enter the bill total manually.");
+      return;
+    }
+    setUploadedBillDraft(draft);
+    setUploadedBillFileUri(fileUri || "");
+    setUploadedBillShop(String(draft.shopName || ""));
+    setUploadedBillDate(/^\\d{4}-\\d{2}-\\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
+    setUploadedBillTotal("");
+    setUploadedBillRows(extracted.map((item) => ({
+      product_name: String(item?.name || ""),
+      quantity: String(item?.qty ?? 1),
+      unit: String(item?.unit || "pcs"),
+      amount: Number(item?.amount) > 0 ? String(item.amount) : "",
+      shopping_item_id: "",
+      original: item,
+    })));
+  };
+
+  const updateUploadedBillRow = (index, key, value) => setUploadedBillRows((current) =>
+    current.map((row, i) => i === index ? { ...row, [key]: value } : row));
+
+  const saveUploadedBill = async (event) => {
+    event.preventDefault();
+    const totalRupees = Number(uploadedBillTotal);
+    if (!Number.isFinite(totalRupees) || totalRupees < 0 || !Number.isSafeInteger(Math.round(totalRupees * 100))) {
+      return toast.error("Enter the total paid exactly as shown on the bill.");
+    }
+    const lines = uploadedBillRows.map((row) => ({
+      ...row,
+      product_name: row.product_name.trim(),
+      quantity: Number(row.quantity),
+      unit: row.unit.trim() || "pcs",
+      amountRupees: row.amount.trim() === "" ? null : Number(row.amount),
+    }));
+    if (!lines.length || lines.some((line) => !line.product_name)) return toast.error("Check every extracted bill item name.");
+    if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity < 0)) return toast.error("Check every extracted quantity.");
+    if (lines.some((line) => line.amountRupees !== null && (!Number.isFinite(line.amountRupees) || line.amountRupees < 0))) return toast.error("Check every extracted item amount.");
+    setUploadedBillSaving(true);
+    try {
+      const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri);
+      const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
+        method: "POST",
+        body: JSON.stringify({
+          shop_name: uploadedBillShop.trim(),
+          purchase_date: uploadedBillDate || null,
+          bill_total_paise: Math.round(totalRupees * 100),
+          file_id: fileMatch?.[1] || null,
+          original_file_uri: uploadedBillFileUri || null,
+          bill_status: "needs_review",
+          original_ocr: { entry_method: "existing_bill_uploader", draft: uploadedBillDraft },
+        }),
+      });
+      await api(`/api/shopping/sessions/${sessionId}/bills/${bill.id}/lines`, {
+        method: "POST",
+        body: JSON.stringify({ lines: lines.map((line) => ({
+          product_name: line.product_name,
+          quantity: line.quantity,
+          unit: line.unit,
+          line_amount_paise: line.amountRupees === null ? null : Math.round(line.amountRupees * 100),
+          shopping_item_id: line.shopping_item_id || null,
+          is_extra: !line.shopping_item_id,
+          match_method: line.shopping_item_id ? "confirmed" : "extra",
+          original_ocr: line.original || {},
+        })) }),
+      });
+      toast.success("Bill photo and reviewed item details saved. The bill total is counted once.");
+      setUploadedBillDraft(null);
+      setUploadedBillFileUri("");
+      setUploadedBillRows([]);
+      setUploadedBillTotal("");
+      setUploadedBillShop("");
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not save the uploaded bill.");
+    } finally {
+      setUploadedBillSaving(false);
     }
   };
 
@@ -654,6 +743,54 @@ function SessionDetailPage() {
             {billSaving ? "Adding bill…" : "Add bill amount"}
           </button>
         </form>
+      ) : null}
+
+      {!completed ? (
+        <section className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Upload actual bill / priced receipt</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Use the existing reader, review its item details, and enter the exact grand total printed on the bill. The bill total—not the sum of item lines—is counted as spending.</p>
+          </div>
+          <BillUploader purpose="priced_list" compact onExtracted={handleUploadedBill} />
+          {uploadedBillDraft ? (
+            <form onSubmit={saveUploadedBill} className="space-y-3 rounded-[18px] border border-primary/25 bg-background p-3">
+              <p className="text-[13px] font-extrabold">Review uploaded bill</p>
+              <input value={uploadedBillShop} onChange={(event) => setUploadedBillShop(event.target.value)} placeholder="Shop name" maxLength={160}
+                className="h-10 w-full rounded-xl border border-border bg-white px-3 text-[12px]" />
+              <input type="date" value={uploadedBillDate} onChange={(event) => setUploadedBillDate(event.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-white px-3 text-[12px]" />
+              <div className="space-y-2">
+                {uploadedBillRows.map((row, index) => (
+                  <div key={index} className="space-y-2 rounded-xl bg-white p-2.5">
+                    <input value={row.product_name} onChange={(event) => updateUploadedBillRow(index, "product_name", event.target.value)}
+                      aria-label={`Bill item ${index + 1} name`} className="h-9 w-full rounded-lg border border-border px-2.5 text-[12px]" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateUploadedBillRow(index, "quantity", event.target.value)}
+                        aria-label="Bill item quantity" className="h-9 min-w-0 rounded-lg border border-border px-2 text-[11px]" />
+                      <input value={row.unit} onChange={(event) => updateUploadedBillRow(index, "unit", event.target.value)}
+                        aria-label="Bill item unit" className="h-9 min-w-0 rounded-lg border border-border px-2 text-[11px]" />
+                      <input type="number" min="0" step="0.01" value={row.amount} onChange={(event) => updateUploadedBillRow(index, "amount", event.target.value)}
+                        aria-label="Bill item amount in rupees" placeholder="₹ amount" className="h-9 min-w-0 rounded-lg border border-border px-2 text-[11px]" />
+                    </div>
+                    <select value={row.shopping_item_id} onChange={(event) => updateUploadedBillRow(index, "shopping_item_id", event.target.value)}
+                      className="h-9 w-full rounded-lg border border-border bg-white px-2 text-[11px]">
+                      <option value="">Extra / not matched</option>
+                      {items.map((item) => <option key={item.id} value={item.id}>Match: {item.product_name} ({item.unit})</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <label className="block text-[11.5px] font-bold" htmlFor="uploaded-bill-total">Grand total paid (₹) — read from the bill</label>
+              <input id="uploaded-bill-total" type="number" inputMode="decimal" min="0" step="0.01" required value={uploadedBillTotal}
+                onChange={(event) => setUploadedBillTotal(event.target.value)} placeholder="Enter exact bill total"
+                className="h-11 w-full rounded-xl border border-border bg-white px-3 text-[14px] font-semibold" />
+              <button type="submit" disabled={uploadedBillSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[12px] font-bold text-primary-foreground disabled:opacity-60">
+                {uploadedBillSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {uploadedBillSaving ? "Saving bill…" : "Confirm reviewed bill"}
+              </button>
+            </form>
+          ) : null}
+        </section>
       ) : null}
 
       <section className="mt-6">
