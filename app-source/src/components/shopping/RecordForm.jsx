@@ -252,40 +252,58 @@ export function RecordForm({
       return;
     }
     setEstimating(true);
-    setEstimateMsg("");
+    setEstimateMsg(`Estimating 0 of ${targets.length} items…`);
+    const collected = new Map();
+    const failures = [];
     try {
-      const res = await estimateFn({
-        data: {
-          items: targets.map((i) => ({
-            name: String(i.name).trim().slice(0, 80),
-            unit: String(i.unit || "pcs").slice(0, 12),
-          })),
-        },
-      });
-      if (res?.error) {
-        setEstimateMsg(res.error);
-        return;
+      // Small batches reduce output truncation and let successful results survive
+      // a temporary failure on another batch.
+      const batches = [];
+      for (let i = 0; i < targets.length; i += 8) batches.push(targets.slice(i, i + 8));
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batch = batches[batchIndex];
+        try {
+          const res = await estimateFn({
+            data: {
+              items: batch.map((i) => ({
+                name: String(i.name).trim().slice(0, 80),
+                unit: String(i.unit || "pcs").slice(0, 12),
+              })),
+            },
+          });
+          if (res?.error) throw new Error(res.error);
+          (res?.rates || []).forEach((r) => {
+            const target = batch[r.index];
+            const rate = Number(r.rate);
+            if (target && Number.isFinite(rate) && rate > 0) collected.set(target.id, rate);
+          });
+          if (!(res?.rates || []).length) failures.push(...batch.map((item) => item.name));
+        } catch (cause) {
+          failures.push(...batch.map((item) => item.name));
+          console.warn("Shopping Hisab estimate batch failed:", cause);
+        }
+        setEstimateMsg(`Estimating ${Math.min((batchIndex + 1) * 8, targets.length)} of ${targets.length} items…`);
       }
-      const rates = new Map();
-      (res?.rates || []).forEach((r) => {
-        const target = targets[r.index];
-        if (target && r.rate > 0) rates.set(target.id, r.rate);
-      });
-      if (!rates.size) {
-        setEstimateMsg("Could not estimate these items. Enter the prices yourself.");
-        return;
+      if (collected.size) {
+        setItems((prev) =>
+          prev.map((i) =>
+            collected.has(i.id)
+              ? { ...i, price: String(collected.get(i.id)), estimatedPrice: String(collected.get(i.id)) }
+              : i,
+          ),
+        );
+        setEstimatedIds((prev) => new Set([...prev, ...collected.keys()]));
       }
-      setItems((prev) =>
-        prev.map((i) =>
-          rates.has(i.id)
-            ? { ...i, price: rates.get(i.id), estimatedPrice: rates.get(i.id) }
-            : i,
-        ),
-      );
-      setEstimatedIds((prev) => new Set([...prev, ...rates.keys()]));
-      setEstimateMsg(`AI estimates added for ${rates.size} of ${targets.length} item(s). These are indicative, not live shop prices. Check local rates and replace them before saving.`);
-    } catch {
-      setEstimateMsg("Could not estimate prices right now. Enter them yourself.");
+      if (failures.length) {
+        const names = [...new Set(failures)].slice(0, 4).join(", ");
+        setEstimateMsg(
+          collected.size
+            ? `Estimated ${collected.size} of ${targets.length}. Still need rates for: ${names}${failures.length > 4 ? " and others" : ""}. Tap Estimate again to retry only unpriced items.`
+            : `No prices returned. ${names ? `Items: ${names}. ` : ""}Check your connection or AI service availability, then retry.`,
+        );
+      } else {
+        setEstimateMsg(`AI estimates added for all ${collected.size} item(s). These are indicative, not live shop prices. Check local rates and replace them before saving.`);
+      }
     } finally {
       setEstimating(false);
     }
