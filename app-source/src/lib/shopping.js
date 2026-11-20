@@ -84,7 +84,7 @@ export function toFormItems(items) {
   }));
 }
 
-export function buildPayload({ shopName, date, notes, items, source, billFileUri }) {
+export function buildPayload({ shopName, date, notes, items, source, billFileUri, receipts = [], reconciliationStatus = "not_required" }) {
   const cleaned = cleanItems(items);
   return {
     shop_name: String(shopName || "").trim(),
@@ -95,5 +95,7 @@ export function buildPayload({ shopName, date, notes, items, source, billFileUri
     total: round2(cleaned.reduce((s, i) => s + (Number(i.amount) || 0), 0)),
     source: source || "manual",
     ...(billFileUri ? { bill_file_uri: billFileUri } : {}),
+    receipts,
+    reconciliation_status: reconciliationStatus,
   };
 }
