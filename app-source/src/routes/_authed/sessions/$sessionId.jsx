@@ -680,7 +680,7 @@ function SessionDetailPage() {
                     {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
                     {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
                   </p>
-                  {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled") ? (
+                  {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
                         aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
