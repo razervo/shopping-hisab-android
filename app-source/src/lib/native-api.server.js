@@ -393,7 +393,21 @@ async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400
     temperature: 0.05,
     max_tokens: maxTokens,
   });
-  return parseModelJson(result?.answer ?? result?.result?.answer ?? "");
+  const answer = result?.answer ?? result?.result?.answer ?? "";
+  try {
+    const parsed = parseModelJson(answer);
+    if (parsed?.draft && Array.isArray(parsed.draft.items)) return parsed;
+  } catch {
+    // Moondream query answers may be plain OCR text rather than JSON.
+  }
+  const transcription = typeof answer === "string" ? answer.trim() : JSON.stringify(answer);
+  if (!transcription) throw new Error("The image reader returned an empty answer. Try a clearer, straight photo.");
+  return callTextModel(
+    env,
+    "Convert this OCR transcription into valid JSON only for an Indian shopping list. Preserve all visible items and quantities. Never invent prices or items. If no price is visible, set price=0 and amount=0. If a row total is visible, put it in amount and calculate price=amount/qty only when quantity is clear. Normalize units to kg, g, L, ml, pcs, pkt, dozen or box. Return exactly {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}.",
+    `Rules: ${instructions}\nOCR transcription: ${transcription}`,
+    maxTokens,
+  );
 }
 async function handleDirectBillRead(request, env, user) {
   const form = await request.formData();
