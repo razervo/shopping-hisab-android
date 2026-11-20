@@ -50,13 +50,30 @@ export function BillUploader({
         const form = new FormData();
         form.append("file", file, file.name || "shopping-list.jpg");
         form.append("purpose", purpose);
-        const response = await fetch("/api/ai/read-bill", {
-          method: "POST",
-          body: form,
-          credentials: "include",
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result?.error || "Bill reading failed.");
+        let response;
+        let result = {};
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 90000);
+            try {
+              response = await fetch("/api/ai/read-bill", { method: "POST", body: form, credentials: "include", signal: controller.signal });
+            } finally { clearTimeout(timeout); }
+            result = await response.json().catch(() => ({}));
+            if (response.ok) break;
+            const message = result?.error || `Bill reading failed (${response.status}).`;
+            if ((response.status < 500 && response.status !== 429) || attempt === 2) throw new Error(message);
+            lastError = new Error(message);
+          } catch (cause) {
+            lastError = cause;
+            if (attempt === 2 || (cause?.name !== "TypeError" && cause?.name !== "AbortError" && !(response && (response.status >= 500 || response.status === 429))) {
+              throw new Error(cause?.name === "AbortError" ? "Receipt reading timed out. Try a smaller or clearer photo." : (cause?.message || "Network error while uploading the receipt."));
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        }
+        if (!response?.ok) throw lastError || new Error("Receipt upload failed. Please retry.");
         if (!result?.draft || !result?.file_uri) {
           throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
         }
