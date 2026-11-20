@@ -631,7 +631,7 @@ async function handleAI(request, env, user) {
     const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: normalizeRateUnit(item.unit) }));
     const parsed = await callTextModel(env,
       "Estimate Indian retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep item order and indexes. Estimates are approximate, not live quotations. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when plausible.",
-      `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}\nEach rate must be INR per ONE exact unit shown. Items: ${JSON.stringify(promptItems)}`,
+      `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}; PIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}. Prefer local Assam/nearby market context when location details support it, but do not fabricate a shop quotation.\nEach rate must be INR per ONE exact unit shown. Include loose/unbranded and local/regional brand assumptions where appropriate. Items: ${JSON.stringify(promptItems)}`,
       1600,
     );
     const rates = Array.isArray(parsed.rates) ? parsed.rates
