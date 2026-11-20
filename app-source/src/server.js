@@ -1,6 +1,7 @@
 import handler from "@tanstack/react-start/server-entry";
 import { createNativeAuth } from "@/lib/native-auth.server";
 import { handleNativeApi } from "@/lib/native-api.server";
+import { handleShoppingEngine } from "@/lib/shopping-engine.server";
 
 export default {
   async fetch(request, env, ctx) {
@@ -8,6 +9,10 @@ export default {
 
     if (url.pathname.startsWith("/api/auth/")) {
       return createNativeAuth(env).handler(request);
+    }
+
+    if (url.pathname === "/api/shopping" || url.pathname.startsWith("/api/shopping/")) {
+      return handleShoppingEngine(request, env);
     }
 
     if (

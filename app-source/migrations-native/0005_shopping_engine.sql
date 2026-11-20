@@ -7,7 +7,8 @@
 --   * Legacy shopping_records are mapped to open shopping_sessions and source-list
 --     metadata. Their items_json remains untouched; detailed line backfill is an
 --     application migration step so original JSON is never destructively rewritten.
---   * This file is prepared on the feature branch only. It has NOT been executed.
+--   * This migration was applied by the repository's deployment workflow; this
+--     header documents the migration's behavior, not its current execution state.
 --
 -- Money in the new engine is stored as integer paise to avoid floating-point drift.
 -- A bill's bill_total_paise is the accounting amount. Purchase lines explain that
