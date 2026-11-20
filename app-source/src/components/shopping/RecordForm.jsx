@@ -84,7 +84,7 @@ export function RecordForm({
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
   const addBulkItems = () => {
     const parsed = String(bulkText || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-      const cells = line.includes("\t") ? line.split("\\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
+      const cells = line.includes("\t") ? line.split("\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
       if (cells && cells.length > 1) {
         const [rawName, rawQty, rawUnit, rawPrice] = cells.map((cell) => String(cell || "").trim());
         const quantity = Number(rawQty);
