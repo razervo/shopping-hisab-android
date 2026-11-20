@@ -334,12 +334,14 @@ async function handleProfile(request, env, user) {
   const displayName = String(input.display_name ?? input.displayName ?? user.displayName ?? user.name ?? "").trim().slice(0, 80);
   const phone = String(input.phone ?? user.phone ?? "").trim().slice(0, 24);
   const preferredMarket = String(input.preferred_market ?? input.preferredMarket ?? user.preferredMarket ?? "").trim().slice(0, 80);
+  const postalCode = String(input.postal_code ?? input.postalCode ?? user.postalCode ?? "").trim();
+  if (postalCode && !/^\\d{6}$/.test(postalCode)) return error("Enter a valid 6-digit Indian PIN code.");
   const profilePictureId = parseFileId(input.profile_picture_uri ?? input.profilePictureId);
   await env.DB.prepare(
-    'UPDATE "user" SET name = ?, displayName = ?, phone = ?, preferredMarket = ?, profilePictureId = ?, updatedAt = ? WHERE id = ?',
-  ).bind(displayName || user.name || user.email, displayName, phone, preferredMarket, profilePictureId, new Date().toISOString(), user.id).run();
+    'UPDATE "user" SET name = ?, displayName = ?, phone = ?, preferredMarket = ?, postalCode = ?, profilePictureId = ?, updatedAt = ? WHERE id = ?',
+  ).bind(displayName || user.name || user.email, displayName, phone, preferredMarket, postalCode || null, profilePictureId, new Date().toISOString(), user.id).run();
   const updated = await env.DB.prepare(
-    'SELECT id, name, email, image, displayName, phone, preferredMarket, profilePictureId FROM "user" WHERE id = ?',
+    'SELECT id, name, email, image, displayName, phone, preferredMarket, postalCode, profilePictureId FROM "user" WHERE id = ?',
   ).bind(user.id).first();
   return json(updated);
 }
