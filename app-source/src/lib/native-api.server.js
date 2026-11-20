@@ -668,6 +668,9 @@ async function handleAI(request, env, user) {
   if (action === "suggestMarketRate") {
     const name = String(data.name || "").trim().slice(0, 100);
     const unit = String(data.unit || "pcs").trim().slice(0, 20);
+    const productType = String(data.productType || "unsure").slice(0, 20);
+    const brand = String(data.brand || "").slice(0, 60);
+    const packSize = String(data.packSize || "").slice(0, 40);
     if (!name) return error("Enter an item name.");
     const parsed = await callTextModel(env,
       "Estimate a plausible Indian local-retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre values for g or ml. If the item or pack size is ambiguous, state that in note and use a conservative generic loose/unbranded assumption. This is an AI estimate, not a live store quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
@@ -694,9 +697,9 @@ async function handleAI(request, env, user) {
       const aliases = { gm: "g", gms: "g", gram: "g", grams: "g", kilo: "kg", kgs: "kg", kilogram: "kg", kilograms: "kg", litre: "L", liter: "L", litres: "L", liters: "L", ltr: "L", packet: "pkt", packets: "pkt", pack: "pkt", packs: "pkt", piece: "pcs", pieces: "pcs", pc: "pcs" };
       return aliases[key] || (key === "l" ? "L" : key);
     };
-    const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: normalizeRateUnit(item.unit) }));
+    const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: normalizeRateUnit(item.unit), productType: String(item.productType || "unsure").slice(0, 20), brand: String(item.brand || "").slice(0, 60), packSize: String(item.packSize || "").slice(0, 40) }));
     const parsed = await callTextModel(env,
-      "Estimate plausible Indian local-retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep original indexes. Assume ordinary quality and loose/unbranded goods unless the item name specifies a brand/grade. Do not invent a live shop quote. Return no rate for ambiguous/non-grocery items you cannot price responsibly. Return JSON only: {rates:[{index:number,rate:number}]}.",
+      "Estimate plausible Indian local-retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep original indexes. Respect each supplied productType, brand and packSize. For loose items use local loose retail assumptions; for branded/local products use the supplied brand and pack size. Do not silently assume all items are loose. Do not invent a live shop quote. Return no rate for ambiguous/non-grocery items you cannot price responsibly. Return JSON only: {rates:[{index:number,rate:number}]}.",
       `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}; PIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}. Prefer local Assam/nearby market context when location details support it, but do not fabricate a shop quotation.\nEach rate must be INR per ONE exact unit shown. Include loose/unbranded and local/regional brand assumptions where appropriate. Items: ${JSON.stringify(promptItems)}`,
       1600,
     );
