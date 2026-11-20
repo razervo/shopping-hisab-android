@@ -5,7 +5,7 @@ import { ConsoleLog, TwaGenerator, TwaManifest } from "@bubblewrap/core";
 
 const manifestUrl =
   process.env.WEB_MANIFEST_URL ??
-  "https://shopping-hisab-71a084c3.base44.app/manifest.json";
+  "https://shopping-hisab-native.hasimabd13.workers.dev/manifest.json";
 
 const appVersionCode = Number(process.env.APP_VERSION_CODE ?? "1");
 if (!Number.isInteger(appVersionCode) || appVersionCode < 1) {
