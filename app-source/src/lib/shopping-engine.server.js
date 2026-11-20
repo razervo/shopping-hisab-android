@@ -221,6 +221,28 @@ export async function handleShoppingEngine(request, env) {
     return json({id:itemId,session_id:sessionId,product_name:name,normalized_name:normalized,planned_quantity:quantity,unit:text(body.unit||"pcs",24),item_status:"planned",created_at:timestamp,updated_at:timestamp},201);
   }
 
+  const mergeItemMatch=/^items\/([a-f0-9-]{36})\/merge$/i.exec(subpath);
+  if (mergeItemMatch && method === "POST") {
+    const sourceId=mergeItemMatch[1],targetId=text(body.target_item_id,80);
+    if(!targetId||targetId===sourceId)return fail("Choose a different planned item to merge into.");
+    const source=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(sourceId,userId,sessionId).first();
+    const target=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(targetId,userId,sessionId).first();
+    if(!source||!target)return fail("One of the selected planned items was not found.",404);
+    if(source.item_status==="cancelled"||target.item_status==="cancelled")return fail("Cancelled items cannot be merged.");
+    if(String(source.unit||"pcs").trim().toLowerCase()!==String(target.unit||"pcs").trim().toLowerCase())return fail("These items use different units. Convert or correct the units before merging.");
+    const timestamp=now(),combinedQuantity=Number(target.planned_quantity||0)+Number(source.planned_quantity||0);
+    const mergedNote=text([target.notes,source.notes].filter(Boolean).join(" · "),1000);
+    await db.batch([
+      db.prepare("UPDATE shopping_items SET planned_quantity=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(combinedQuantity,mergedNote,timestamp,targetId,userId,sessionId),
+      db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,sourceId,userId,sessionId),
+      db.prepare("UPDATE shopping_purchase_lines SET shopping_item_id=?,is_extra=0,match_method='confirmed',updated_at=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,timestamp,sourceId,userId,sessionId),
+      db.prepare("UPDATE shopping_items SET item_status='cancelled',notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(text(`Merged into ${target.product_name} (${targetId})`,1000),timestamp,sourceId,userId,sessionId),
+    ]);
+    await audit(db,userId,sessionId,"shopping_item",targetId,"items_merged",{source_item_id:sourceId,added_quantity:Number(source.planned_quantity||0),combined_quantity:combinedQuantity});
+    await audit(db,userId,sessionId,"shopping_item",sourceId,"item_merged_into",{target_item_id:targetId});
+    return json(await sessionDetail(db,userId,sessionId));
+  }
+
   const itemMatch=/^items\/([a-f0-9-]{36})$/i.exec(subpath);
   if (itemMatch && method === "PATCH") {
     const itemId=itemMatch[1];
