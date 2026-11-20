@@ -63,6 +63,26 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
 
       <div className="mt-2 grid grid-cols-2 gap-2">
         <div>
+          <span className="micro mb-1 block text-muted-foreground">Product type</span>
+          <Select value={item.productType || "unsure"} onValueChange={(v) => onChange({ productType: v, brand: v === "loose" || v === "unsure" ? "" : item.brand || "" })}>
+            <SelectTrigger className="h-10 border-0 bg-white text-[13px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="branded">Branded</SelectItem>
+              <SelectItem value="local">Local / regional brand</SelectItem>
+              <SelectItem value="loose">Loose / unbranded</SelectItem>
+              <SelectItem value="unsure">Not sure</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {["branded", "local"].includes(item.productType || "unsure") ? (
+          <div>
+            <span className="micro mb-1 block text-muted-foreground">{item.productType === "local" ? "Local brand / shop" : "Brand name"}</span>
+            <Input value={item.brand || ""} onChange={(e) => onChange({ brand: e.target.value })} placeholder={item.productType === "local" ? "Optional" : "e.g. Amul"} className="h-10 border-0 bg-white text-[13px]" />
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div>
           <span className="micro mb-1 block text-muted-foreground">Qty</span>
           <Select
             value={customQty ? "custom" : qtyStr}
@@ -116,6 +136,12 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
         </div>
       </div>
 
+      {unit === "pkt" ? (
+        <div className="mt-2">
+          <span className="micro mb-1 block text-muted-foreground">Packet size (optional)</span>
+          <Input value={item.packSize || ""} onChange={(e) => onChange({ packSize: e.target.value })} placeholder="e.g. 500 g, 1 kg, 200 ml" className="h-10 border-0 bg-white text-[14px]" />
+        </div>
+      ) : null}
       <div className="mt-2">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="micro text-muted-foreground">
