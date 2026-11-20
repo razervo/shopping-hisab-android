@@ -430,6 +430,44 @@ async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400
   );
 }
 
+async function callGeminiVision(env, imageDataUrl, instructions, maxTokens = 2200) {
+  if (!env.GEMINI_API_KEY) throw new Error("Gemini API key is not configured.");
+  const comma = imageDataUrl.indexOf(",");
+  if (comma < 0) throw new Error("Invalid image data.");
+  const mime = imageDataUrl.slice(5, imageDataUrl.indexOf(";"));
+  const imageBase64 = imageDataUrl.slice(comma + 1);
+  const prompt = "Read this handwritten English shopping bill carefully. Return JSON only. Currency is INR. Never invent unreadable items, quantities or prices. Preserve quantities and units. A right-side price is the TOTAL for that row quantity; put it in amount and calculate price=amount/qty only when both are clear. If no price is visible, use price=0 and amount=0. Normalize kg/kilo to kg, gm/gram to g, litre/ltr to L, packet to pkt and piece to pcs. " + instructions + " Return exactly {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Use empty shopName and null date when absent.";
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: mime, data: imageBase64 } }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((payload?.error?.message || "Gemini OCR request failed.").slice(0, 400));
+  const output = payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim() || "";
+  const parsed = parseModelJson(output);
+  if (!parsed?.draft || !Array.isArray(parsed.draft.items)) throw new Error("Gemini returned an invalid shopping-list format.");
+  return parsed;
+}
+
+async function readBillWithFallback(env, imageDataUrl, instructions, maxTokens = 2200) {
+  if (env.GEMINI_API_KEY) {
+    try {
+      const parsed = await callGeminiVision(env, imageDataUrl, instructions, maxTokens);
+      if (parsed.draft.items.length) return { ...parsed, reader: "gemini" };
+      throw new Error("Gemini did not detect any shopping-list items.");
+    } catch (geminiError) {
+      console.warn("Gemini OCR failed; trying Moondream fallback:", geminiError?.message || geminiError);
+    }
+  }
+  if (!env.AI) throw new Error("Gemini OCR was unavailable and the Moondream fallback is not configured.");
+  const parsed = await callVisionModel(env, imageDataUrl, instructions, maxTokens);
+  return { ...parsed, reader: "moondream_fallback" };
+}
+
 async function handleGeminiOcrTest(request, env, user) {
   if (!env.GEMINI_API_KEY) return error("Gemini test is not configured. Add the GEMINI_API_KEY Worker secret.", 503);
   const form = await request.formData();
@@ -529,7 +567,7 @@ async function handleDirectBillRead(request, env, user) {
   if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) {
     return error("For the faster reader, please use a JPG, PNG or WEBP photo. PDFs can still use the standard reader.");
   }
-  if (!env.AI) return error("Bill reading is temporarily unavailable.", 503);
+  if (!env.GEMINI_API_KEY && !env.AI) return error("Bill reading is temporarily unavailable.", 503);
 
   const prompt = purpose === "shopping_list"
     ? "Read this handwritten Indian shopping list carefully. Extract every visible item, quantity, unit and any price written on the same row. Never invent missing prices. If a row has a visible right-side price, treat it as the TOTAL for that row quantity and return it as amount; calculate price=amount/qty. If no price is written, set price=0 and amount=0. Normalize units strictly: kg/kilo/kgs to kg; gm/gms/gram/grams to g; litre/liter/ltr to L; ml to ml; packet/pack to pkt; piece to pcs. Keep quantity in the normalized unit as written (e.g. 200 gm => qty 200, unit g; 5 kg => qty 5, unit kg; half kg => qty 0.5, unit kg). If unclear, do not guess. Return JSON only: {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Use today's date if no date is clearly written."
@@ -537,7 +575,7 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  const readPromise = callVisionModel(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 1400);
+  const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200);
   // Upload to Drive at the same time as AI reads the original image.
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
   const [modelResult, uploaded] = await Promise.all([readPromise, uploadPromise]);
