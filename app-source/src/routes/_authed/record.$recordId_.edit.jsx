@@ -34,6 +34,8 @@ function EditRecordPage() {
         ...values,
         source: record.source || "manual",
         billFileUri: record.bill_file_uri,
+        receipts: values.receipts,
+        reconciliationStatus: values.reconciliationStatus,
       });
       await base44.entities.ShoppingRecord.update(recordId, payload);
       toast.success("Shopping updated");
