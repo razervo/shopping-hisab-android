@@ -9,6 +9,15 @@ export const Route = createFileRoute("/_authed/ocr-test")({
 
 const MODEL_ID = "Xenova/trocr-small-handwritten";
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
+const MODEL_BASE_URL = "https://huggingface.co/Xenova/trocr-small-handwritten/resolve/main/";
+
+function explainFetchError(error) {
+  const message = error?.message || String(error || "Unknown error");
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return "Could not download the OCR engine or model. Check internet access, then reload this page. If the model host is blocked on your network, this browser-only model cannot load from this connection.";
+  }
+  return message;
+}
 
 function segmentHandwrittenLines(image, sourceWidth, sourceHeight) {
   const maxWidth = 1400;
@@ -117,8 +126,13 @@ function LocalOcrTestPage() {
         env.allowLocalModels = false;
         env.useBrowserCache = true;
         env.backends.onnx.wasm.numThreads = 1;
+        // Avoid the default Hugging Face Xet resolve path; use ordinary model file URLs.
+        env.remoteHost = "https://huggingface.co/";
+        env.remotePathTemplate = "{model}/resolve/{revision}/";
         setStatus("Downloading handwritten TrOCR model. First download is large; keep this page open…");
         pipelineRef.current = await pipeline("image-to-text", MODEL_ID, {
+          revision: "main",
+          quantized: true,
           progress_callback: (event) => {
             if (event.status === "progress") {
               setProgress(`${event.file || "Model"}: ${Math.round(event.progress || 0)}%`);
@@ -144,7 +158,7 @@ function LocalOcrTestPage() {
       setText(output);
       setStatus(output ? "Local OCR finished. Check the text carefully." : "No text was recognised.");
     } catch (cause) {
-      setError(cause?.message || "Local OCR failed. Try another photo.");
+      setError(explainFetchError(cause));
       setStatus("OCR did not finish.");
     } finally {
       setBusy(false);
@@ -156,7 +170,7 @@ function LocalOcrTestPage() {
       <div>
         <h1 className="text-2xl font-extrabold">Local handwriting OCR test</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Experimental TrOCR test only. Your photo is processed in this browser and is not sent to the Shopping Hisab server.
+          Experimental TrOCR test only. The photo is processed in this browser. The OCR engine and model are downloaded from public model-hosting servers; no image is uploaded to Shopping Hisab.
         </p>
       </div>
       <section className="space-y-3 rounded-2xl border bg-card p-4">
