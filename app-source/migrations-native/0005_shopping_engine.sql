@@ -303,16 +303,12 @@ CREATE INDEX IF NOT EXISTS idx_shopping_expense_confirmations_session
 
 -- Estimate versions and their lines are snapshots: create a new version rather
 -- than editing an earlier estimate. Application code should use INSERT only.
+-- UPDATE is blocked below; DELETE is left available for parent-session/user
+-- cascade cleanup, so normal application routes must never expose estimate deletion.
 CREATE TRIGGER IF NOT EXISTS trg_shopping_estimates_no_update
 BEFORE UPDATE ON shopping_estimates
 BEGIN
   SELECT RAISE(ABORT, 'Estimate versions are immutable; create a new version.');
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_shopping_estimates_no_delete
-BEFORE DELETE ON shopping_estimates
-BEGIN
-  SELECT RAISE(ABORT, 'Estimate versions are immutable.');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_shopping_estimate_lines_no_update
@@ -321,21 +317,10 @@ BEGIN
   SELECT RAISE(ABORT, 'Estimate lines are immutable; create a new estimate version.');
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_shopping_estimate_lines_no_delete
-BEFORE DELETE ON shopping_estimate_lines
-BEGIN
-  SELECT RAISE(ABORT, 'Estimate lines are immutable.');
-END;
-
 -- Append-only audit trail. Corrections are represented by new events.
+-- UPDATE is blocked; DELETE remains available only for parent-session/user cascade cleanup.
 CREATE TRIGGER IF NOT EXISTS trg_shopping_audit_events_no_update
 BEFORE UPDATE ON shopping_audit_events
-BEGIN
-  SELECT RAISE(ABORT, 'Audit events are append-only.');
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_shopping_audit_events_no_delete
-BEFORE DELETE ON shopping_audit_events
 BEGIN
   SELECT RAISE(ABORT, 'Audit events are append-only.');
 END;
