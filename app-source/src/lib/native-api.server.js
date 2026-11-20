@@ -372,17 +372,45 @@ function parseModelJson(value) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function callTextModel(env, system, userContent, maxTokens = 1800) {
-  if (!env.AI) throw new Error("Workers AI binding is not configured.");
-  const result = await env.AI.run(AI_MODEL, {
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: userContent },
-    ],
-    temperature: 0.1,
-    max_tokens: maxTokens,
+async function callGeminiTextModel(env, system, userContent, maxTokens = 1800) {
+  if (!env.GEMINI_API_KEY) throw new Error("Gemini API key is not configured.");
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: `SYSTEM INSTRUCTIONS:\n${system}\n\nUSER REQUEST:\n${userContent}` }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens, responseMimeType: "application/json" },
+    }),
   });
-  return parseModelJson(extractModelText(result));
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((payload?.error?.message || "Gemini text request failed.").slice(0, 400));
+  const output = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+  if (!output) throw new Error("Gemini returned an empty response.");
+  return parseModelJson(output);
+}
+
+async function callTextModel(env, system, userContent, maxTokens = 1800) {
+  // Gemini is the primary text model, matching the working production OCR path.
+  // Workers AI remains an optional fallback when an AI binding is configured.
+  if (env.GEMINI_API_KEY) {
+    try {
+      return await callGeminiTextModel(env, system, userContent, maxTokens);
+    } catch (geminiError) {
+      console.warn("Gemini text request failed; trying Workers AI fallback:", geminiError?.message || geminiError);
+    }
+  }
+  if (env.AI) {
+    const result = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.1,
+      max_tokens: maxTokens,
+    });
+    return parseModelJson(extractModelText(result));
+  }
+  throw new Error("AI text estimation is temporarily unavailable. Check the Gemini API key or configure a Workers AI binding.");
 }
 
 async function callVisionModel(env, imageDataUrl, instructions, maxTokens = 1400) {
@@ -642,8 +670,8 @@ async function handleAI(request, env, user) {
     const unit = String(data.unit || "pcs").trim().slice(0, 20);
     if (!name) return error("Enter an item name.");
     const parsed = await callTextModel(env,
-      "Estimate a normal Indian retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (so ₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (so ₹100/L = ₹0.10/ml); L means one litre. Never return a per-kg or per-litre price when the requested unit is g or ml. Use a conservative approximate range, not a live quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
-      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nThe rate must be INR per ONE ${unit}. For example, if this is g, divide the per-kg price by 1000.`,
+      "Estimate a plausible Indian local-retail grocery price in INR for exactly ONE requested unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre values for g or ml. If the item or pack size is ambiguous, state that in note and use a conservative generic loose/unbranded assumption. This is an AI estimate, not a live store quotation. Return JSON only: {suggestion:{rate:number,min:number,max:number,note:string}}.",
+      `Item: ${name}\nExact price unit: ${unit}\nMarket area: ${String(data.market || user.preferredMarket || "India").slice(0, 100)}\nPIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}\nUse everyday Indian retail prices, not wholesale rates. The rate must be INR per ONE ${unit}. For g or ml, convert from per-kg/per-litre prices to a single gram/millilitre.`,
       450,
     );
     const suggestion = parsed.suggestion;
@@ -668,7 +696,7 @@ async function handleAI(request, env, user) {
     };
     const promptItems = items.map((item, index) => ({ index, name: String(item.name || "").slice(0, 100), unit: normalizeRateUnit(item.unit) }));
     const parsed = await callTextModel(env,
-      "Estimate Indian retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep item order and indexes. Estimates are approximate, not live quotations. Return JSON only: {rates:[{index:number,rate:number}]} with one entry per item when plausible.",
+      "Estimate plausible Indian local-retail grocery prices in INR per EXACTLY ONE supplied unit. Unit discipline is critical: g means one gram (₹250/kg = ₹0.25/g); kg means one kilogram; ml means one millilitre (₹100/L = ₹0.10/ml); L means one litre. Never return per-kg or per-litre rates for g or ml. Keep original indexes. Assume ordinary quality and loose/unbranded goods unless the item name specifies a brand/grade. Do not invent a live shop quote. Return no rate for ambiguous/non-grocery items you cannot price responsibly. Return JSON only: {rates:[{index:number,rate:number}]}.",
       `Market area: ${String(user.preferredMarket || "India").slice(0, 100)}; PIN code: ${String(user.postalCode || "not supplied").slice(0, 6)}. Prefer local Assam/nearby market context when location details support it, but do not fabricate a shop quotation.\nEach rate must be INR per ONE exact unit shown. Include loose/unbranded and local/regional brand assumptions where appropriate. Items: ${JSON.stringify(promptItems)}`,
       1600,
     );
