@@ -335,7 +335,7 @@ async function handleProfile(request, env, user) {
   const phone = String(input.phone ?? user.phone ?? "").trim().slice(0, 24);
   const preferredMarket = String(input.preferred_market ?? input.preferredMarket ?? user.preferredMarket ?? "").trim().slice(0, 80);
   const postalCode = String(input.postal_code ?? input.postalCode ?? user.postalCode ?? "").trim();
-  if (postalCode && !/^\\d{6}$/.test(postalCode)) return error("Enter a valid 6-digit Indian PIN code.");
+  if (postalCode && !/^\d{6}$/.test(postalCode)) return error("Enter a valid 6-digit Indian PIN code.");
   const profilePictureId = parseFileId(input.profile_picture_uri ?? input.profilePictureId);
   await env.DB.prepare(
     'UPDATE "user" SET name = ?, displayName = ?, phone = ?, preferredMarket = ?, postalCode = ?, profilePictureId = ?, updatedAt = ? WHERE id = ?',
