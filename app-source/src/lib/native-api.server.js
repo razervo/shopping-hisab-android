@@ -37,6 +37,8 @@ function mapRecord(row) {
     shop_name: row.shop_name || "",
     date: row.date,
     items: parseItems(row.items_json),
+    receipts: parseItems(row.receipts_json),
+    reconciliation_status: row.reconciliation_status || "not_required",
     total: Number(row.total) || 0,
     item_count: Number(row.item_count) || 0,
     notes: row.notes || "",
@@ -74,6 +76,8 @@ function validateRecord(input) {
     notes: String(input?.notes || "").trim().slice(0, 2000),
     source: input?.source === "bill" ? "bill" : "manual",
     bill_file_id: parseFileId(input?.bill_file_uri),
+    receipts_json: JSON.stringify((Array.isArray(input?.receipts) ? input.receipts : []).slice(0, 30)),
+    reconciliation_status: String(input?.reconciliation_status || "not_required").slice(0, 30),
     legacy_bill_file_uri: parseFileId(input?.bill_file_uri) ? null : String(input?.bill_file_uri || "").slice(0, 1200) || null,
   };
 }
@@ -85,7 +89,7 @@ function parseFileId(uri) {
 
 async function fetchRecord(db, userId, recordId) {
   const row = await db.prepare(
-    "SELECT id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, created_at, updated_at FROM shopping_records WHERE user_id = ? AND id = ?",
+    "SELECT id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at FROM shopping_records WHERE user_id = ? AND id = ?",
   ).bind(userId, recordId).first();
   return mapRecord(row);
 }
@@ -110,7 +114,7 @@ async function handleRecords(request, env, user, url) {
     if (to) { where.push("date <= ?"); values.push(to); }
 
     const rows = await env.DB.prepare(
-      `SELECT id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, created_at, updated_at
+      `SELECT id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
        FROM shopping_records WHERE ${where.join(" AND ")}
        ORDER BY date DESC, created_at DESC, id DESC LIMIT ? OFFSET ?`,
     ).bind(...values, limit + 1, offset).all();
@@ -134,9 +138,9 @@ async function handleRecords(request, env, user, url) {
     const now = new Date().toISOString();
     await env.DB.prepare(
       `INSERT INTO shopping_records
-       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, created_at, updated_at)
+       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, now, now).run();
+    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now).run();
     return json(await fetchRecord(env.DB, user.id, id), 201);
   }
 
@@ -155,8 +159,8 @@ async function handleRecords(request, env, user, url) {
     const now = new Date().toISOString();
     const result = await env.DB.prepare(
       `UPDATE shopping_records SET shop_name = ?, date = ?, items_json = ?, total = ?, item_count = ?,
-       notes = ?, source = ?, bill_file_id = ?, legacy_bill_file_uri = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
-    ).bind(data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, now, recordId, user.id).run();
+       notes = ?, source = ?, bill_file_id = ?, legacy_bill_file_uri = ?, receipts_json = ?, reconciliation_status = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ).bind(data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, recordId, user.id).run();
     if (!result.meta?.changes) return error("Record not found.", 404);
     return json(await fetchRecord(env.DB, user.id, recordId));
   }
