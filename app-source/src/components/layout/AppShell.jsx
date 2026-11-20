@@ -51,6 +51,10 @@ export function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const profileComplete =
+    String(user?.display_name || user?.displayName || "").trim().length > 0 &&
+    /^\\d{6}$/.test(String(user?.postal_code || user?.postalCode || "").trim()) &&
+    String(user?.preferred_market || user?.preferredMarket || "").trim().length > 0;
   const firstName = (user?.display_name || user?.full_name || "").trim().split(" ")[0];
 
   const handleLogout = async () => {
@@ -60,7 +64,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-white">
-      <DrivePermissionCheck userId={user?.id} />
+      {profileComplete ? <DrivePermissionCheck userId={user?.id} /> : null}
       <header className="sticky top-0 z-30 border-b border-border/70 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
           <Link to="/" className="flex items-center gap-2.5">
@@ -104,7 +108,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <BottomNav />
+      {profileComplete ? <BottomNav /> : null}
     </div>
   );
 }
