@@ -19,7 +19,7 @@ export default {
       url.pathname === "/api/drive/status" ||
       url.pathname === "/api/drive/initialize" ||
       url.pathname === "/api/ai" ||
-      url.pathname === "/api/ai/read-bill" ||
+      url.pathname === "/api/ai/read-bill" ||\n      url.pathname === "/api/ai/gemini-test" ||
       url.pathname === "/api/migration/status" ||
       url.pathname === "/api/migration/import" ||
       url.pathname === "/api/migration/file"
