@@ -31,11 +31,6 @@ jobs:
       - name: Verify isolated deployment target
         run: |
           node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('wrangler.native.jsonc','utf8')); if(c.name!=='shopping-hisab-native') process.exit(1)"
-      - name: Rotate exposed pre-launch auth secret
-        run: openssl rand -hex 48 | npx wrangler secret put BETTER_AUTH_SECRET --config wrangler.native.jsonc
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
       - name: Verify Vite-generated isolated Worker bundle
         run: |
           node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; const p='.wrangler/deploy/config.json'; if(!fs.existsSync(p)) throw new Error('Vite-generated Wrangler redirect is missing'); const redirect=JSON.parse(fs.readFileSync(p,'utf8')); if(typeof redirect.configPath!=='string') throw new Error('Unexpected Wrangler redirect format'); const target=path.resolve('.wrangler/deploy',redirect.configPath); if(!fs.existsSync(target)) throw new Error('Generated Wrangler config not found: '+target); const c=JSON.parse(fs.readFileSync(target,'utf8')); if(c.name!=='shopping-hisab-native') throw new Error('Refusing deployment: generated Worker name is '+c.name); if(!c.main) throw new Error('Generated Worker entry point is missing'); console.log('Verified generated Worker:',c.name,'config:',target,'entry:',c.main)"
