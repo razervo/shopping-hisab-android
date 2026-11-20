@@ -36,12 +36,17 @@ async function sessionDetail(db, userId, sessionId) {
     db.prepare(`SELECT i.*,
       COALESCE(p.purchased_quantity,0) AS purchased_quantity,
       MAX(i.planned_quantity-COALESCE(p.purchased_quantity,0),0) AS remaining_quantity,
-      COALESCE(p.purchase_count,0) AS purchase_count
+      COALESCE(p.purchase_count,0) AS purchase_count,
+      COALESCE(p.unit_mismatch_count,0) AS unit_mismatch_count
       FROM shopping_items i
       LEFT JOIN (
-        SELECT pl.shopping_item_id,SUM(pl.quantity) AS purchased_quantity,COUNT(*) AS purchase_count
+        SELECT pl.shopping_item_id,
+          SUM(CASE WHEN LOWER(TRIM(pl.unit))=LOWER(TRIM(i2.unit)) THEN pl.quantity ELSE 0 END) AS purchased_quantity,
+          SUM(CASE WHEN LOWER(TRIM(pl.unit))<>LOWER(TRIM(i2.unit)) THEN 1 ELSE 0 END) AS unit_mismatch_count,
+          COUNT(CASE WHEN LOWER(TRIM(pl.unit))=LOWER(TRIM(i2.unit)) THEN 1 END) AS purchase_count
         FROM shopping_purchase_lines pl
         INNER JOIN shopping_actual_bills b ON b.id=pl.bill_id AND b.user_id=pl.user_id AND b.session_id=pl.session_id
+        INNER JOIN shopping_items i2 ON i2.id=pl.shopping_item_id AND i2.user_id=pl.user_id AND i2.session_id=pl.session_id
         WHERE pl.user_id=? AND pl.session_id=? AND pl.shopping_item_id IS NOT NULL
           AND b.included_in_actual=1 AND b.bill_status NOT IN ('duplicate','void')
         GROUP BY pl.shopping_item_id
@@ -55,7 +60,7 @@ async function sessionDetail(db, userId, sessionId) {
       .bind(userId, sessionId).all(),
   ]);
   const total = await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
-    SUM(CASE WHEN included_in_actual=1 AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS bills_amount_pending
+    SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS bills_amount_pending
     FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId, sessionId).first();
   return {
     ...session,
@@ -92,7 +97,7 @@ export async function handleShoppingEngine(request, env) {
     const rows = await db.prepare(`SELECT s.*,
       (SELECT COUNT(*) FROM shopping_source_lists l WHERE l.user_id=s.user_id AND l.session_id=s.id) AS list_count,
       (SELECT COUNT(*) FROM shopping_items i WHERE i.user_id=s.user_id AND i.session_id=s.id) AS item_count,
-      (SELECT COALESCE(SUM(b.bill_total_paise),0) FROM shopping_actual_bills b WHERE b.user_id=s.user_id AND b.session_id=s.id AND b.included_in_actual=1) AS actual_total_paise
+      (SELECT COALESCE(SUM(b.bill_total_paise),0) FROM shopping_actual_bills b WHERE b.user_id=s.user_id AND b.session_id=s.id AND b.included_in_actual=1 AND b.bill_status NOT IN ('duplicate','void')) AS actual_total_paise
       FROM shopping_sessions s WHERE ${where.join(" AND ")}
       ORDER BY s.updated_at DESC LIMIT 100`).bind(...values).all();
     return json({ sessions: rows.results || [] });
@@ -311,16 +316,18 @@ export async function handleShoppingEngine(request, env) {
     }
     const fingerprint=text(body.duplicate_fingerprint,200)||null;
     const possibleDuplicate=fingerprint?await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND duplicate_fingerprint=? LIMIT 1").bind(userId,sessionId,fingerprint).first():null;
-    const billId=id(),timestamp=now(),status=possibleDuplicate?"needs_review":(body.bill_status==="needs_review"?"needs_review":"uploaded");
+    const requestedStatus=["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status)?body.bill_status:"uploaded";
+    const billId=id(),timestamp=now(),status=possibleDuplicate?"needs_review":requestedStatus;
+    const includedInActual=["duplicate","void"].includes(status)?0:1;
     await db.prepare(`INSERT INTO shopping_actual_bills
       (id,user_id,session_id,shop_name,purchase_date,file_id,original_file_uri,receipt_number,subtotal_paise,tax_paise,discount_paise,other_charges_paise,bill_total_paise,line_total_paise,reconciliation_difference_paise,bill_status,included_in_actual,duplicate_fingerprint,original_ocr_json,uploaded_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)`)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(billId,userId,sessionId,shopName,purchaseDate,fileId,text(body.original_file_uri,1200)||null,text(body.receipt_number,100),
         money.subtotal_paise,money.tax_paise,money.discount_paise,money.other_charges_paise,money.bill_total_paise,money.line_total_paise,
-        money.bill_total_paise==null||money.line_total_paise==null?null:money.bill_total_paise-money.line_total_paise,status,fingerprint,
+        money.bill_total_paise==null||money.line_total_paise==null?null:money.bill_total_paise-money.line_total_paise,status,includedInActual,fingerprint,
         JSON.stringify(body.original_ocr&&typeof body.original_ocr==="object"?body.original_ocr:{}),timestamp,timestamp).run();
     await audit(db,userId,sessionId,"actual_bill",billId,"bill_uploaded",{shop_name:shopName,bill_total_paise:money.bill_total_paise,possible_duplicate_of:possibleDuplicate?.id||null});
-    return json({id:billId,shop_name:shopName,bill_total_paise:money.bill_total_paise,bill_status:status,included_in_actual:1,possible_duplicate:possibleDuplicate},201);
+    return json({id:billId,shop_name:shopName,bill_total_paise:money.bill_total_paise,bill_status:status,included_in_actual:includedInActual,possible_duplicate:possibleDuplicate},201);
   }
 
   const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
@@ -422,7 +429,7 @@ export async function handleShoppingEngine(request, env) {
     const confirmed=Number(body.confirmed_total_paise);
     if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
     const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
-      SUM(CASE WHEN included_in_actual=1 AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
+      SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
       FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
     const billRows=await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id FROM shopping_actual_bills WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id").bind(userId,sessionId).all();
     const pending=await db.prepare("SELECT id,product_name,planned_quantity,unit,item_status FROM shopping_items WHERE user_id=? AND session_id=? AND item_status IN ('planned','pending','partially_purchased') ORDER BY created_at,id").bind(userId,sessionId).all();
