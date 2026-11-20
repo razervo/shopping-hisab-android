@@ -57,6 +57,10 @@ export function cleanItems(items) {
         ? { estimated_price: round2(i.estimatedPrice ?? i.estimated_price) }
         : {}),
       amount: amountOf(i) || round2(i.amount),
+      ...(i.productType ? { product_type: i.productType } : {}),
+      ...(i.brand ? { brand: String(i.brand).trim() } : {}),
+      ...(i.packSize ? { pack_size: String(i.packSize).trim() } : {}),
+      ...(Array.isArray(i.receiptRefs) && i.receiptRefs.length ? { receipt_refs: i.receiptRefs } : {}),
     }));
 }
 
@@ -73,6 +77,10 @@ export function toFormItems(items) {
     price: i.price ?? "",
     estimatedPrice: i.estimated_price ?? i.estimatedPrice ?? "",
     amount: i.amount ?? "",
+    productType: i.product_type ?? i.productType ?? "unsure",
+    brand: i.brand ?? "",
+    packSize: i.pack_size ?? i.packSize ?? "",
+    receiptRefs: i.receipt_refs ?? i.receiptRefs ?? [],
   }));
 }
 
