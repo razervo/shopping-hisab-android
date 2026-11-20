@@ -83,8 +83,8 @@ export function RecordForm({
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
   const addBulkItems = () => {
-    const parsed = String(bulkText || "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-      const cells = line.includes("\\t") ? line.split("\\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
+    const parsed = String(bulkText || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const cells = line.includes("\t") ? line.split("\\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
       if (cells && cells.length > 1) {
         const [rawName, rawQty, rawUnit, rawPrice] = cells.map((cell) => String(cell || "").trim());
         const quantity = Number(rawQty);
@@ -96,7 +96,7 @@ export function RecordForm({
           price: rawPrice && Number(rawPrice) > 0 ? rawPrice : "",
         };
       }
-      const match = /^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*(kg|g|ml|l|litre|litres|ltr|pcs?|pieces?|pkt|packet|dozen|box)?$/i.exec(line);
+      const match = /^(.*?)\s+(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litre|litres|ltr|pcs?|pieces?|pkt|packet|dozen|box)?$/i.exec(line);
       if (match) {
         return {
           ...emptyItem(),
@@ -402,7 +402,7 @@ export function RecordForm({
               value={bulkText}
               onChange={(event) => { setBulkText(event.target.value); setBulkError(""); }}
               rows={5}
-              placeholder={"Rice 5 kg\\nSugar 2 kg\\nMilk, 2, L, 60\\nEggs, 12, pcs"}
+              placeholder={"Rice 5 kg\nSugar 2 kg\nMilk, 2, L, 60\nEggs, 12, pcs"}
               className="w-full rounded-xl border border-input bg-secondary/20 px-3 py-2.5 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             />
             {bulkError ? <p className="text-[11px] font-semibold text-destructive">{bulkError}</p> : null}
