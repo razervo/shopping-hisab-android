@@ -35,6 +35,8 @@ export function RecordForm({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
+  const [receiptCount, setReceiptCount] = useState(1);
+  const [receiptMessage, setReceiptMessage] = useState("");
   const estimateFn = estimateMarketRates;
 
   // A list built at home is kept on this phone, so the real shop prices can be
@@ -137,6 +139,63 @@ export function RecordForm({
       next.delete(id);
       return next;
     });
+  };
+
+  const appendReceipt = (extracted, fileUri) => {
+    const incoming = (extracted?.items || []).filter((entry) => String(entry.name || "").trim());
+    if (!incoming.length) {
+      setReceiptMessage("No readable items were found on this receipt.");
+      return;
+    }
+    setItems((current) => {
+      const next = current.filter((item) => String(item.name || "").trim()).map((item) => ({ ...item }));
+      incoming.forEach((entry) => {
+        const unit = normalizeShoppingUnit(entry.unit || "pcs");
+        const nameKey = String(entry.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const candidateIndex = next.findIndex((item) =>
+          String(item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "") === nameKey &&
+          normalizeShoppingUnit(item.unit || "pcs") === unit
+        );
+        const fresh = {
+          ...emptyItem(),
+          name: String(entry.name || "").trim(),
+          qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1,
+          unit,
+          price: Number(entry.price) > 0 ? String(entry.price) : "",
+          receiptRefs: [fileUri].filter(Boolean),
+        };
+        if (candidateIndex < 0) {
+          next.push(fresh);
+          return;
+        }
+        const existing = next[candidateIndex];
+        const merge = window.confirm(
+          `Possible duplicate: ${existing.name}\n\nExisting: ${existing.qty} ${existing.unit} @ ₹${existing.price || "not priced"}\nNew receipt: ${fresh.qty} ${fresh.unit} @ ₹${fresh.price || "not priced"}\n\nOK = merge quantities and totals. Cancel = keep as a separate item.`
+        );
+        if (!merge) {
+          next.push(fresh);
+          return;
+        }
+        const oldQty = Number(existing.qty) || 0;
+        const newQty = Number(fresh.qty) || 0;
+        const oldRate = Number(existing.price) || 0;
+        const newRate = Number(fresh.price) || 0;
+        const totalQty = oldQty + newQty;
+        const combinedRate = totalQty > 0 && (oldRate > 0 || newRate > 0)
+          ? ((oldQty * oldRate) + (newQty * newRate)) / totalQty
+          : 0;
+        next[candidateIndex] = {
+          ...existing,
+          qty: totalQty,
+          price: combinedRate > 0 ? String(Math.round(combinedRate * 10000) / 10000) : "",
+          receiptRefs: [...new Set([...(existing.receiptRefs || []), ...(fresh.receiptRefs || [])])],
+        };
+      });
+      return next;
+    });
+    setReceiptCount((count) => count + 1);
+    setReceiptMessage(`Receipt ${receiptCount + 1} added. Review new items and any duplicate decisions before saving.`);
+    if (fileUri) onActualListUploaded?.(fileUri);
   };
 
   const applyActualList = (pricedDraft, fileUri) => {
@@ -390,7 +449,7 @@ export function RecordForm({
         <div className="flex items-center justify-between gap-2 px-1">
           <div>
             <h2 className="text-[13px] font-bold tracking-wide">Items ({filled.length})</h2>
-            <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add one item or paste a whole list</p>
+            <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add items, paste a list, or scan another receipt</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -398,7 +457,7 @@ export function RecordForm({
               onClick={() => { setBulkOpen((open) => !open); setBulkError(""); }}
               className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground"
             >
-              <ListPlus className="h-3.5 w-3.5" /> {bulkOpen ? "Close" : "Add multiple"}
+              <ListPlus className="h-3.5 w-3.5" /> {bulkOpen ? "Close" : "Paste multiple"}
             </button>
             <button
               type="button"
@@ -450,6 +509,17 @@ export function RecordForm({
             <p className="mt-1 text-[12px] leading-relaxed text-amber-900/80">
               {estimatedCount} item(s) still use rough market estimates. Replace each rate with the shop price you paid, or tap Confirm rate when the suggested price is exact. Your total recalculates automatically.
             </p>
+          </div>
+        ) : null}
+
+        {allowEstimate ? (
+          <div className="space-y-2 rounded-2xl border border-dashed border-border bg-white p-3">
+            <div>
+              <p className="text-[12.5px] font-bold">Receipts added: {receiptCount}</p>
+              <p className="text-[11px] text-muted-foreground">Scan another receipt to add its items to this same shopping list.</p>
+            </div>
+            <BillUploader compact purpose="shopping_list" onExtracted={appendReceipt} />
+            {receiptMessage ? <p className="text-[11px] font-semibold text-primary">{receiptMessage}</p> : null}
           </div>
         ) : null}
 
