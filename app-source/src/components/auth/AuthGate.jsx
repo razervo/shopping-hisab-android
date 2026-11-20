@@ -22,7 +22,16 @@ export async function requireSignedIn({ context, location }) {
   // A /me outage (429, 503) is not a sign-out: it rejects here and reaches the error
   // boundary, whose "Try again" asks the server again (a failed query caches nothing).
   const { user, error } = await context.queryClient.ensureQueryData(authQuery);
-  if (user) return { user };
+  if (user) {
+    const profileComplete =
+      String(user.displayName || user.display_name || "").trim().length > 0 &&
+      /^\\d{6}$/.test(String(user.postalCode || user.postal_code || "").trim()) &&
+      String(user.preferredMarket || user.preferred_market || "").trim().length > 0;
+    if (!profileComplete && location.pathname !== "/profile") {
+      throw redirect({ to: "/profile", search: { setup: "1" } });
+    }
+    return { user };
+  }
   // Thrown rather than returned so the children's loaders never run without a user.
   if (error?.type === "user_not_registered") throw new NotRegisteredError(error.message);
   // A document navigation on purpose: an app served behind the platform login gets the
