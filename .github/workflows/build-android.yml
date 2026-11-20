@@ -9,8 +9,9 @@ on:
         default: "2"
         type: string
       web_manifest_url:
-        description: Public manifest URL of the independently hosted Shopping Hisab site, ending in /manifest.json
+        description: Public Cloudflare-hosted Shopping Hisab manifest URL (use the preview Worker URL unless deploying another host)
         required: true
+        default: "https://shopping-hisab-native.hasimabd13.workers.dev/manifest.json"
         type: string
 
 permissions:
