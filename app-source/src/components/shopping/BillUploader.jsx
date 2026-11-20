@@ -126,9 +126,9 @@ export function BillUploader({
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div>
-            <p className="text-[12.5px] font-extrabold">Upload the list with shop prices</p>
+            <p className="text-[12.5px] font-extrabold">{purpose === "priced_list" ? "Upload the list with shop prices" : "Add another receipt to this list"}</p>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-              Take a photo of the same list after writing the actual shop prices, or upload the final bill. We will match the item names and update the rates.
+              {purpose === "priced_list" ? "Take a photo of the same list after writing the actual shop prices, or upload the final bill. We will match the item names and update the rates." : "Scan another shop receipt. Its items will be added to your current shopping list; possible duplicates will be shown for confirmation."}
             </p>
           </div>
         </div>
