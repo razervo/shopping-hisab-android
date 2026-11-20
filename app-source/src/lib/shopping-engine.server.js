@@ -395,11 +395,11 @@ export async function handleShoppingEngine(request, env) {
     const before=Object.fromEntries(Object.keys(patch).filter(k=>k in line).map(k=>[k,line[k]]));
     await db.prepare(`UPDATE shopping_purchase_lines SET ${Object.keys(patch).map(k=>k+"=?").join(",")} WHERE id=? AND user_id=? AND session_id=?`).bind(...Object.values(patch),lineId,userId,sessionId).run();
     const sums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
-    if(Number(sums?.line_count||0)===Number(sums?.priced_count||0)){
-      const bill=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
-      await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
-        .bind(Number(sums.line_total||0),bill?.bill_total_paise==null?null:Number(bill.bill_total_paise)-Number(sums.line_total||0),now(),line.bill_id,userId,sessionId).run();
-    }
+    const bill=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
+    const allLinesPriced=Number(sums?.line_count||0)===Number(sums?.priced_count||0);
+    const correctedLineTotal=allLinesPriced?Number(sums.line_total||0):null;
+    await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
+      .bind(correctedLineTotal,bill?.bill_total_paise==null||correctedLineTotal==null?null:Number(bill.bill_total_paise)-correctedLineTotal,now(),line.bill_id,userId,sessionId).run();
     await audit(db,userId,sessionId,"purchase_line",lineId,"bill_line_corrected",patch,before);
     return json(await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first());
   }
