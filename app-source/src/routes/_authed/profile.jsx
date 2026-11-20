@@ -147,6 +147,10 @@ function ProfilePage() {
 
   const saveProfile = async (event) => {
     event.preventDefault();
+    if (!displayName.trim()) {
+      toast.error("Enter your full name.");
+      return;
+    }
     if (displayName.trim().length > 80) {
       toast.error("Display name must be 80 characters or fewer.");
       return;
@@ -155,8 +159,12 @@ function ProfilePage() {
       toast.error("Phone number must be 24 characters or fewer.");
       return;
     }
-    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) {
+    if (!/^\d{6}$/.test(postalCode.trim())) {
       toast.error("Enter a valid 6-digit Indian PIN code.");
+      return;
+    }
+    if (!preferredMarket.trim()) {
+      toast.error("Enter your locality or nearest market.");
       return;
     }
     if (preferredMarket.trim().length > 80) {
@@ -177,7 +185,7 @@ function ProfilePage() {
       const savedUser = updated?.user;
       const complete = !!savedUser &&
         String(savedUser.displayName || savedUser.display_name || "").trim().length > 0 &&
-        /^\\d{6}$/.test(String(savedUser.postalCode || savedUser.postal_code || "").trim()) &&
+        /^\d{6}$/.test(String(savedUser.postalCode || savedUser.postal_code || "").trim()) &&
         String(savedUser.preferredMarket || savedUser.preferred_market || "").trim().length > 0;
       toast.success("Profile saved");
       if (complete) navigate({ to: "/" });
@@ -190,7 +198,7 @@ function ProfilePage() {
 
   const profileComplete =
     displayName.trim().length > 0 &&
-    /^\\d{6}$/.test(postalCode.trim()) &&
+    /^\d{6}$/.test(postalCode.trim()) &&
     preferredMarket.trim().length > 0;
   const profileTitle = displayName.trim() || user?.full_name || "Your profile";
 
@@ -316,7 +324,7 @@ function ProfilePage() {
           <Input
             id="profile-postal-code"
             value={postalCode}
-            onChange={(event) => setPostalCode(event.target.value.replace(/\\D/g, "").slice(0, 6))}
+            onChange={(event) => setPostalCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
             inputMode="numeric"
             maxLength={6}
             placeholder="6-digit area PIN code"
