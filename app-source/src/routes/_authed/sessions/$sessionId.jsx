@@ -309,8 +309,14 @@ function SessionDetailPage() {
                 <div className="min-w-0">
                   <p className="truncate text-[13.5px] font-bold">{item.product_name}</p>
                   <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
+                    {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
+                  </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">{String(item.item_status || "planned").replaceAll("_", " ")}</span>
+                <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
+                  {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
+                </span>
               </div>
             ))}
           </div>
