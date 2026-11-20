@@ -228,6 +228,170 @@ export async function handleShoppingEngine(request, env) {
     return json(await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first());
   }
 
+
+  if (session.status === "completed" && method !== "GET") return fail("This shopping session is completed and read-only.",409);
+
+  if (subpath === "estimates" && method === "POST") {
+    const lines = Array.isArray(body.lines) ? body.lines : [];
+    if (!lines.length || lines.length > 500) return fail("Add between 1 and 500 estimate lines.");
+    const calculationSource = text(body.calculation_source || "mixed",30);
+    if (!["previous_purchase","market_data","manual","ai_estimate","mixed"].includes(calculationSource)) return fail("Invalid estimate calculation source.");
+    const prepared = [];
+    let totalPaise = 0;
+    for (let index=0; index<lines.length; index++) {
+      const line=lines[index] || {};
+      const itemId=text(line.shopping_item_id,80);
+      const item=await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first();
+      if (!item) return fail(`Estimate line ${index+1} references an item outside this session.`,404);
+      const quantity=Number(line.quantity);
+      const unitPrice=Number(line.estimated_unit_price_paise);
+      if (!Number.isFinite(quantity)||quantity<0||quantity>1000000) return fail(`Estimate line ${index+1} has invalid quantity.`);
+      if (!Number.isSafeInteger(unitPrice)||unitPrice<0) return fail(`Estimate line ${index+1} has invalid unit price in paise.`);
+      const lineTotal=line.estimated_line_total_paise==null?Math.round(quantity*unitPrice):Number(line.estimated_line_total_paise);
+      if (!Number.isSafeInteger(lineTotal)||lineTotal<0) return fail(`Estimate line ${index+1} has invalid line total.`);
+      const priceSource=text(line.price_source,30);
+      if (!["previous_purchase","market_data","manual","ai_estimate"].includes(priceSource)) return fail(`Estimate line ${index+1} has invalid price source.`);
+      const confidence=line.confidence==null?null:Number(line.confidence);
+      if (confidence!==null&&(!Number.isFinite(confidence)||confidence<0||confidence>1)) return fail(`Estimate line ${index+1} has invalid confidence.`);
+      totalPaise+=lineTotal;
+      if (!Number.isSafeInteger(totalPaise)) return fail("Estimate total is too large.");
+      prepared.push({id:id(),itemId,quantity,unit:text(line.unit||"pcs",24),unitPrice,lineTotal,priceSource,reference:text(line.source_reference,300),observed:text(line.source_observed_at,40)||null,confidence});
+    }
+    const versionRow=await db.prepare("SELECT COALESCE(MAX(version_number),0)+1 AS next_version FROM shopping_estimates WHERE user_id=? AND session_id=?").bind(userId,sessionId).first();
+    const version=Number(versionRow?.next_version||1), estimateId=id(), timestamp=now();
+    const statements=[db.prepare(`INSERT INTO shopping_estimates
+      (id,user_id,session_id,version_number,estimated_total_paise,calculation_source,market_area,notes,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(estimateId,userId,sessionId,version,totalPaise,calculationSource,text(body.market_area,120),text(body.notes,1000),timestamp)];
+    for (const line of prepared) statements.push(db.prepare(`INSERT INTO shopping_estimate_lines
+      (id,user_id,session_id,estimate_id,shopping_item_id,quantity,unit,estimated_unit_price_paise,estimated_line_total_paise,price_source,source_reference,source_observed_at,confidence,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,estimateId,line.itemId,line.quantity,line.unit,line.unitPrice,line.lineTotal,line.priceSource,line.reference,line.observed,line.confidence,timestamp));
+    statements.push(db.prepare("UPDATE shopping_sessions SET latest_estimate_id=?,updated_at=? WHERE id=? AND user_id=?").bind(estimateId,timestamp,sessionId,userId));
+    await db.batch(statements);
+    await audit(db,userId,sessionId,"estimate",estimateId,"estimate_version_created",{version_number:version,estimated_total_paise:totalPaise,line_count:prepared.length});
+    return json({id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared},201);
+  }
+
+  const estimateMatch=/^estimates\/([a-f0-9-]{36})$/.exec(subpath);
+  if (estimateMatch && method === "GET") {
+    const estimate=await db.prepare("SELECT * FROM shopping_estimates WHERE id=? AND user_id=? AND session_id=?").bind(estimateMatch[1],userId,sessionId).first();
+    if (!estimate) return fail("Estimate not found.",404);
+    const rows=await db.prepare("SELECT * FROM shopping_estimate_lines WHERE estimate_id=? AND user_id=? AND session_id=? ORDER BY created_at,id").bind(estimate.id,userId,sessionId).all();
+    return json({...estimate,lines:rows.results||[]});
+  }
+
+  if (subpath === "bills" && method === "POST") {
+    const shopName=text(body.shop_name,160);
+    const purchaseDate=body.purchase_date==null||body.purchase_date===""?null:text(body.purchase_date,10);
+    if (purchaseDate&&!validDate(purchaseDate)) return fail("Invalid bill purchase date.");
+    const moneyFields=["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise","line_total_paise"];
+    const money={};
+    for (const key of moneyFields) {
+      const value=body[key];
+      if (value==null||value==="") money[key]=null;
+      else { const n=Number(value); if(!Number.isSafeInteger(n)||n<0) return fail(`${key} must be a non-negative integer in paise.`); money[key]=n; }
+    }
+    const fileId=text(body.file_id,80)||null;
+    if(fileId){
+      const file=await db.prepare("SELECT id FROM uploaded_files WHERE id=? AND user_id=?").bind(fileId,userId).first();
+      if(!file) return fail("The selected bill file was not found in your account.",404);
+    }
+    const fingerprint=text(body.duplicate_fingerprint,200)||null;
+    const possibleDuplicate=fingerprint?await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND duplicate_fingerprint=? LIMIT 1").bind(userId,sessionId,fingerprint).first():null;
+    const billId=id(),timestamp=now(),status=possibleDuplicate?"needs_review":(body.bill_status==="needs_review"?"needs_review":"uploaded");
+    await db.prepare(`INSERT INTO shopping_actual_bills
+      (id,user_id,session_id,shop_name,purchase_date,file_id,original_file_uri,receipt_number,subtotal_paise,tax_paise,discount_paise,other_charges_paise,bill_total_paise,line_total_paise,reconciliation_difference_paise,bill_status,included_in_actual,duplicate_fingerprint,original_ocr_json,uploaded_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)`)
+      .bind(billId,userId,sessionId,shopName,purchaseDate,fileId,text(body.original_file_uri,1200)||null,text(body.receipt_number,100),
+        money.subtotal_paise,money.tax_paise,money.discount_paise,money.other_charges_paise,money.bill_total_paise,money.line_total_paise,
+        money.bill_total_paise==null||money.line_total_paise==null?null:money.bill_total_paise-money.line_total_paise,status,fingerprint,
+        JSON.stringify(body.original_ocr&&typeof body.original_ocr==="object"?body.original_ocr:{}),timestamp,timestamp).run();
+    await audit(db,userId,sessionId,"actual_bill",billId,"bill_uploaded",{shop_name:shopName,bill_total_paise:money.bill_total_paise,possible_duplicate_of:possibleDuplicate?.id||null});
+    return json({id:billId,shop_name:shopName,bill_total_paise:money.bill_total_paise,bill_status:status,included_in_actual:1,possible_duplicate:possibleDuplicate},201);
+  }
+
+  const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
+  if (billMatch && method === "PATCH") {
+    const billId=billMatch[1];
+    const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    if(!existing) return fail("Bill not found.",404);
+    const patch={};
+    for(const key of ["shop_name","receipt_number","original_file_uri"]) if(body[key]!==undefined) patch[key]=text(body[key],key==="original_file_uri"?1200:160);
+    if(body.purchase_date!==undefined){if(body.purchase_date&&!validDate(body.purchase_date))return fail("Invalid bill purchase date.");patch.purchase_date=body.purchase_date||null;}
+    for(const key of ["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise","line_total_paise"]){
+      if(body[key]!==undefined){const n=body[key]==null||body[key]===""?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`${key} must be a non-negative integer in paise.`);patch[key]=n;}
+    }
+    if(body.included_in_actual!==undefined){if(![0,1,false,true].includes(body.included_in_actual))return fail("included_in_actual must be true or false.");patch.included_in_actual=body.included_in_actual===true||body.included_in_actual===1?1:0;}
+    if(body.bill_status!==undefined){if(!["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status))return fail("Invalid bill status.");patch.bill_status=body.bill_status;}
+    if(body.duplicate_of_bill_id!==undefined){
+      if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);}
+      patch.duplicate_of_bill_id=body.duplicate_of_bill_id||null;
+    }
+    if(!Object.keys(patch).length)return fail("No supported bill changes were supplied.");
+    const effectiveTotal=patch.bill_total_paise===undefined?existing.bill_total_paise:patch.bill_total_paise;
+    const effectiveLines=patch.line_total_paise===undefined?existing.line_total_paise:patch.line_total_paise;
+    if(patch.bill_total_paise!==undefined||patch.line_total_paise!==undefined)patch.reconciliation_difference_paise=effectiveTotal==null||effectiveLines==null?null:effectiveTotal-effectiveLines;
+    patch.updated_at=now();
+    const before=Object.fromEntries(Object.keys(patch).filter(k=>k in existing).map(k=>[k,existing[k]]));
+    await db.prepare(`UPDATE shopping_actual_bills SET ${Object.keys(patch).map(k=>k+"=?").join(",")} WHERE id=? AND user_id=? AND session_id=?`).bind(...Object.values(patch),billId,userId,sessionId).run();
+    await audit(db,userId,sessionId,"actual_bill",billId,"bill_corrected",patch,before);
+    return json(await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first());
+  }
+
+  const purchaseLinesMatch=/^bills\/([a-f0-9-]{36})\/lines$/.exec(subpath);
+  if(purchaseLinesMatch && method==="POST"){
+    const billId=purchaseLinesMatch[1];
+    const bill=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    if(!bill)return fail("Bill not found.",404);
+    const lines=Array.isArray(body.lines)?body.lines:[body];
+    if(!lines.length||lines.length>300)return fail("Add between 1 and 300 bill lines.");
+    const prepared=[];
+    for(let index=0;index<lines.length;index++){
+      const line=lines[index]||{},name=text(line.product_name||line.name,160);
+      if(!name)return fail(`Bill line ${index+1} needs a product name.`);
+      const quantity=Number(line.quantity??0),unitPrice=line.unit_price_paise==null?null:Number(line.unit_price_paise),amount=line.line_amount_paise==null?null:Number(line.line_amount_paise);
+      if(!Number.isFinite(quantity)||quantity<0||quantity>1000000)return fail(`Bill line ${index+1} has invalid quantity.`);
+      if(unitPrice!==null&&(!Number.isSafeInteger(unitPrice)||unitPrice<0))return fail(`Bill line ${index+1} has invalid unit price.`);
+      if(amount!==null&&(!Number.isSafeInteger(amount)||amount<0))return fail(`Bill line ${index+1} has invalid amount.`);
+      const itemId=text(line.shopping_item_id,80)||null;
+      if(itemId&&!await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first())return fail(`Bill line ${index+1} references an item outside this session.`,404);
+      const extra=Boolean(line.is_extra)||!itemId;
+      prepared.push({id:id(),name,normalized:name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim(),brand:text(line.brand,100),pack:text(line.pack_size,60),quantity,unit:text(line.unit||"pcs",24),unitPrice,amount,itemId,extra,method:extra?"extra":(line.match_method==="confirmed"?"confirmed":"suggested"),ocr:line.original_ocr&&typeof line.original_ocr==="object"?line.original_ocr:line});
+    }
+    const timestamp=now(),statements=prepared.map(line=>db.prepare(`INSERT INTO shopping_purchase_lines
+      (id,user_id,session_id,bill_id,shopping_item_id,product_name,normalized_name,brand,pack_size,quantity,unit,unit_price_paise,line_amount_paise,is_extra,match_method,original_ocr_json,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,billId,line.itemId,line.name,line.normalized,line.brand,line.pack,line.quantity,line.unit,line.unitPrice,line.amount,line.extra?1:0,line.method,JSON.stringify(line.ocr),timestamp,timestamp));
+    await db.batch(statements);
+    const sum=prepared.every(line=>line.amount!==null)?prepared.reduce((a,line)=>a+line.amount,0):null;
+    if(sum!==null){
+      const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+      await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
+        .bind(sum,billRow?.bill_total_paise==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId).run();
+    }
+    await audit(db,userId,sessionId,"actual_bill",billId,"bill_lines_added",{line_count:prepared.length,line_total_paise:sum});
+    return json({bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length},201);
+  }
+
+  if(subpath==="confirm" && method==="POST"){
+    const confirmed=Number(body.confirmed_total_paise);
+    if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
+    const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
+      SUM(CASE WHEN included_in_actual=1 AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
+      FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
+    const billRows=await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id FROM shopping_actual_bills WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id").bind(userId,sessionId).all();
+    const pending=await db.prepare("SELECT id,product_name,planned_quantity,unit,item_status FROM shopping_items WHERE user_id=? AND session_id=? AND item_status IN ('planned','pending','partially_purchased') ORDER BY created_at,id").bind(userId,sessionId).all();
+    const estimate= session.latest_estimate_id ? await db.prepare("SELECT id,version_number,estimated_total_paise FROM shopping_estimates WHERE id=? AND user_id=? AND session_id=?").bind(session.latest_estimate_id,userId,sessionId).first() : null;
+    const calculated=Number(totals?.actual_total_paise||0),revisionRow=await db.prepare("SELECT COALESCE(MAX(revision_number),0)+1 AS next_revision FROM shopping_expense_confirmations WHERE user_id=? AND session_id=?").bind(userId,sessionId).first();
+    const revision=Number(revisionRow?.next_revision||1),confirmationId=id(),timestamp=now();
+    const snapshot={session_id:sessionId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),bills:billRows.results||[],pending_items:pending.results||[],estimate:estimate||null};
+    await db.batch([
+      db.prepare(`INSERT INTO shopping_expense_confirmations (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,estimate_id,calculation_snapshot_json,confirmed_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp),
+      db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=?").bind(confirmed,timestamp,sessionId,userId),
+    ]);
+    await audit(db,userId,sessionId,"session",sessionId,"expense_confirmed",{confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed});
+    return json({id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),pending_items:pending.results||[],confirmed_at:timestamp},201);
+  }
+
   if (subpath === "audit" && method === "GET") {
     const rows=await db.prepare("SELECT entity_type,entity_id,event_type,before_json,after_json,metadata_json,created_at FROM shopping_audit_events WHERE user_id=? AND session_id=? ORDER BY created_at DESC LIMIT 200")
       .bind(userId,sessionId).all();
