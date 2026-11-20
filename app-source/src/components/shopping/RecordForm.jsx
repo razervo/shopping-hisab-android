@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { ListPlus, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
@@ -32,6 +32,9 @@ export function RecordForm({
   const [estimatedIds, setEstimatedIds] = useState(() => new Set(initial?.estimatedIds || []));
   const [restored, setRestored] = useState(false);
   const [actualUploadMessage, setActualUploadMessage] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkError, setBulkError] = useState("");
   const estimateFn = estimateMarketRates;
 
   // A list built at home is kept on this phone, so the real shop prices can be
@@ -79,6 +82,41 @@ export function RecordForm({
     }
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
+  const addBulkItems = () => {
+    const parsed = String(bulkText || "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const cells = line.includes("\\t") ? line.split("\\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
+      if (cells && cells.length > 1) {
+        const [rawName, rawQty, rawUnit, rawPrice] = cells.map((cell) => String(cell || "").trim());
+        const quantity = Number(rawQty);
+        return {
+          ...emptyItem(),
+          name: rawName,
+          qty: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+          unit: normalizeShoppingUnit(rawUnit || "pcs") || "pcs",
+          price: rawPrice && Number(rawPrice) > 0 ? rawPrice : "",
+        };
+      }
+      const match = /^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*(kg|g|ml|l|litre|litres|ltr|pcs?|pieces?|pkt|packet|dozen|box)?$/i.exec(line);
+      if (match) {
+        return {
+          ...emptyItem(),
+          name: match[1].trim(),
+          qty: Number(match[2]) || 1,
+          unit: normalizeShoppingUnit(match[3] || "pcs") || "pcs",
+        };
+      }
+      return { ...emptyItem(), name: line };
+    }).filter((item) => item.name);
+    if (!parsed.length) {
+      setBulkError("Add at least one item, one per line.");
+      return;
+    }
+    setItems((prev) => [...prev.filter((item) => String(item.name || "").trim()), ...parsed]);
+    setBulkText("");
+    setBulkError("");
+    setBulkOpen(false);
+    setEstimateMsg(`${parsed.length} item(s) added. Add prices or get rough estimates.`);
+  };
   const removeItem = (id) => {
     setItems((prev) => (prev.length > 1 ? prev.filter((i) => i.id !== id) : prev));
     setEstimatedIds((prev) => {
@@ -331,16 +369,49 @@ export function RecordForm({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-[13px] font-bold tracking-wide">Items ({filled.length})</h2>
-          <button
-            type="button"
-            onClick={addItem}
-            className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[12px] font-bold text-accent-foreground transition-colors hover:bg-accent/70"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add item
-          </button>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div>
+            <h2 className="text-[13px] font-bold tracking-wide">Items ({filled.length})</h2>
+            <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add one item or paste a whole list</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setBulkOpen((open) => !open); setBulkError(""); }}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground"
+            >
+              <ListPlus className="h-3.5 w-3.5" /> {bulkOpen ? "Close" : "Add multiple"}
+            </button>
+            <button
+              type="button"
+              onClick={addItem}
+              className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-2 text-[11px] font-bold text-accent-foreground transition-colors hover:bg-accent/70"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add item
+            </button>
+          </div>
         </div>
+        {bulkOpen ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-white p-3">
+            <p className="text-[12px] font-bold">Paste multiple items</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              One item per line. Use <span className="font-semibold">Rice 5 kg</span> or columns:
+              <span className="font-semibold"> Milk, 2, L, 60</span> (name, quantity, unit, price per unit).
+            </p>
+            <textarea
+              value={bulkText}
+              onChange={(event) => { setBulkText(event.target.value); setBulkError(""); }}
+              rows={5}
+              placeholder={"Rice 5 kg\\nSugar 2 kg\\nMilk, 2, L, 60\\nEggs, 12, pcs"}
+              className="w-full rounded-xl border border-input bg-secondary/20 px-3 py-2.5 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {bulkError ? <p className="text-[11px] font-semibold text-destructive">{bulkError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkOpen(false)} className="rounded-full px-3 py-2 text-[11px] font-semibold text-muted-foreground">Cancel</button>
+              <button type="button" onClick={addBulkItems} className="rounded-full bg-primary px-4 py-2 text-[11px] font-bold text-primary-foreground">Add items to list</button>
+            </div>
+          </div>
+        ) : null}
 
         {!initial || allowEstimate ? (
           <EstimateBar
