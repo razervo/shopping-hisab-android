@@ -685,7 +685,7 @@ function SessionDetailPage() {
                       <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
                         aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
                         <option value="">Keep separate / choose merge target</option>
-                        {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled").map((candidate) => (
+                        {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()).map((candidate) => (
                           <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
                         ))}
                       </select>
