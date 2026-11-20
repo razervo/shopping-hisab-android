@@ -207,6 +207,7 @@ function SessionDetailPage() {
       return;
     }
     setUploadedBillDraft(draft);
+    setUploadedBillId("");
     setUploadedBillFileUri(fileUri || "");
     setUploadedBillShop(String(draft.shopName || ""));
     setUploadedBillDate(/^\d{4}-\d{2}-\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
@@ -262,6 +263,15 @@ function SessionDetailPage() {
         });
         billId = bill.id;
         setUploadedBillId(billId);
+      } else {
+        await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            shop_name: uploadedBillShop.trim(),
+            purchase_date: uploadedBillDate || null,
+            bill_total_paise: Math.round(totalRupees * 100),
+          }),
+        });
       }
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
