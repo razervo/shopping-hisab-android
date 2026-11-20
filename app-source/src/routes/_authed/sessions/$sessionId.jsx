@@ -61,6 +61,7 @@ function SessionDetailPage() {
   const [uploadedBillTotal, setUploadedBillTotal] = useState("");
   const [uploadedBillRows, setUploadedBillRows] = useState([]);
   const [uploadedBillSaving, setUploadedBillSaving] = useState(false);
+  const [uploadedBillId, setUploadedBillId] = useState("");
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -185,6 +186,7 @@ function SessionDetailPage() {
           purchase_date: billForm.purchase_date || null,
           receipt_number: billForm.receipt_number.trim(),
           bill_total_paise: Math.round(rupees * 100),
+          duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
           original_ocr: { entry_method: "manual" },
         }),
       });
@@ -240,20 +242,28 @@ function SessionDetailPage() {
     if (lines.some((line) => line.amountRupees !== null && (!Number.isFinite(line.amountRupees) || line.amountRupees < 0))) return toast.error("Check every extracted item amount.");
     setUploadedBillSaving(true);
     try {
-      const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri);
-      const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
-        method: "POST",
-        body: JSON.stringify({
-          shop_name: uploadedBillShop.trim(),
-          purchase_date: uploadedBillDate || null,
-          bill_total_paise: Math.round(totalRupees * 100),
-          file_id: fileMatch?.[1] || null,
-          original_file_uri: uploadedBillFileUri || null,
-          bill_status: "needs_review",
-          original_ocr: { entry_method: "existing_bill_uploader", draft: uploadedBillDraft },
-        }),
-      });
-      await api(`/api/shopping/sessions/${sessionId}/bills/${bill.id}/lines`, {
+      let billId = uploadedBillId;
+      if (!billId) {
+        const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri);
+        const shopKey = uploadedBillShop.trim().toLowerCase().replace(/\\s+/g, " ");
+        const duplicateFingerprint = [shopKey, uploadedBillDate, Math.round(totalRupees * 100)].join("|").slice(0, 200);
+        const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
+          method: "POST",
+          body: JSON.stringify({
+            shop_name: uploadedBillShop.trim(),
+            purchase_date: uploadedBillDate || null,
+            bill_total_paise: Math.round(totalRupees * 100),
+            file_id: fileMatch?.[1] || null,
+            original_file_uri: uploadedBillFileUri || null,
+            duplicate_fingerprint: duplicateFingerprint,
+            bill_status: "needs_review",
+            original_ocr: { entry_method: "existing_bill_uploader", draft: uploadedBillDraft },
+          }),
+        });
+        billId = bill.id;
+        setUploadedBillId(billId);
+      }
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
         body: JSON.stringify({ lines: lines.map((line) => ({
           product_name: line.product_name,
@@ -268,6 +278,7 @@ function SessionDetailPage() {
       });
       toast.success("Bill photo and reviewed item details saved. The bill total is counted once.");
       setUploadedBillDraft(null);
+      setUploadedBillId("");
       setUploadedBillFileUri("");
       setUploadedBillRows([]);
       setUploadedBillTotal("");
