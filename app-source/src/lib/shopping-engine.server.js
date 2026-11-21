@@ -409,12 +409,12 @@ export async function handleShoppingEngine(request, env) {
       (id,user_id,session_id,bill_id,shopping_item_id,product_name,normalized_name,brand,pack_size,quantity,unit,unit_price_paise,line_amount_paise,is_extra,match_method,original_ocr_json,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,billId,line.itemId,line.name,line.normalized,line.brand,line.pack,line.quantity,line.unit,line.unitPrice,line.amount,line.extra?1:0,line.method,JSON.stringify(line.ocr),timestamp,timestamp));
     await db.batch(statements);
-    const sum=prepared.every(line=>line.amount!==null)?prepared.reduce((a,line)=>a+line.amount,0):null;
-    if(sum!==null){
-      const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
-      await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
-        .bind(sum,billRow?.bill_total_paise==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId).run();
-    }
+    const sums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    const allLinesPriced=Number(sums?.line_count||0)===Number(sums?.priced_count||0);
+    const sum=allLinesPriced?Number(sums.line_total||0):null;
+    const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
+      .bind(sum,billRow?.bill_total_paise==null||sum==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId).run();
     await audit(db,userId,sessionId,"actual_bill",billId,"bill_lines_added",{line_count:prepared.length,line_total_paise:sum});
     return json({bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length},201);
   }
