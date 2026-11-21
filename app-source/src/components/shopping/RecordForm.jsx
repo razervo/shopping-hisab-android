@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ListPlus, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,12 +155,12 @@ export function RecordForm({
       const fresh = { ...emptyItem(), name: String(entry.name || "").trim(), qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1, unit, price: Number(entry.price) > 0 ? String(entry.price) : "", receiptRefs: [fileUri].filter(Boolean) };
       if (candidateIndex < 0) { next.push(fresh); return; }
       const existing = next[candidateIndex];
-      if (!window.confirm(`Possible duplicate: ${existing.name}\n\nExisting: ${existing.qty} ${existing.unit} @ ₹${existing.price || "not priced"}\nNew receipt: ${fresh.qty} ${fresh.unit} @ ₹${fresh.price || "not priced"}\n\nOK = merge quantities and totals. Cancel = keep separate.`)) { next.push(fresh); return; }
-      mergedNames.push(existing.name);
-      const oldQty = Number(existing.qty) || 0, newQty = Number(fresh.qty) || 0;
-      const totalQty = oldQty + newQty;
-      const oldAmount = oldQty * (Number(existing.price) || 0), newAmount = newQty * (Number(fresh.price) || 0);
-      next[candidateIndex] = { ...existing, qty: totalQty, price: totalQty && (oldAmount + newAmount) ? String(Math.round(((oldAmount + newAmount) / totalQty) * 10000) / 10000) : "", receiptRefs: [...new Set([...(existing.receiptRefs || []), ...(fresh.receiptRefs || [])])] };
+      // Avoid interrupting list entry with browser-native dialogs. Duplicate rows are
+      // preserved by default so quantities/prices are never merged without consent.
+      next.push(fresh);
+      toast.info(`Possible duplicate: ${existing.name}`, {
+        description: "Kept as a separate item. You can review and combine quantities later.",
+      });
     });
     setItems(next);
     const receipt = { id: `receipt-${Date.now()}`, file_uri: fileUri || "", kind: "shopping_list", status: "attached", amount: Math.round(incoming.reduce((sum, item) => sum + (Number(item.amount) || (Number(item.qty) || 1) * (Number(item.price) || 0)), 0) * 100) / 100, item_count: incoming.length, merged_items: mergedNames, created_at: new Date().toISOString() };
