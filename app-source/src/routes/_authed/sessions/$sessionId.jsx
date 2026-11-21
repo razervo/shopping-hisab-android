@@ -44,6 +44,8 @@ function SessionDetailPage() {
   const billLineRequestKeysRef = useRef({});
   const uploadedBillCreateKeyRef = useRef(null);
   const uploadedBillLinesKeyRef = useRef(null);
+  const scannedSourceLinesKeyRef = useRef(null);
+  const manualSourceLinesKeyRef = useRef(null);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -475,6 +477,7 @@ function SessionDetailPage() {
       });
       const lineResult = await api(`/api/shopping/sessions/${sessionId}/lists/${sourceList.id}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": scannedSourceLinesKeyRef.current || (scannedSourceLinesKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ lines: validRows.map((row, index) => ({
           line_number: index + 1,
           original_name: String(row.original?.name || row.name),
@@ -497,6 +500,7 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
+      scannedSourceLinesKeyRef.current = null;
       setScannedDraft(null);
       setScannedFileUri("");
       setScannedRows([]);
@@ -536,6 +540,7 @@ function SessionDetailPage() {
       });
       const lineResult = await api(`/api/shopping/sessions/${sessionId}/lists/${sourceList.id}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": manualSourceLinesKeyRef.current || (manualSourceLinesKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           lines: validRows.map((row, index) => ({
             line_number: index + 1,
@@ -564,6 +569,7 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} ${validRows.length === 1 ? "item" : "items"} added`);
+      manualSourceLinesKeyRef.current = null;
       setListName("My shopping list");
       setRows([blankRow()]);
       await loadSession();
