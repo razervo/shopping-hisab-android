@@ -271,10 +271,10 @@ async function sha256Hex(bytes) {
 }
 async function findDriveUploadByMarker(token, folderId, markerKey, contentHash) {
   const query = new URLSearchParams({
-    q: \`'\${folderId}' in parents and trashed = false and appProperties has { key='shoppingHisabUploadKey' and value='\${markerKey}' } and appProperties has { key='shoppingHisabContentHash' and value='\${contentHash}' }\`,
+    q: `'${folderId}' in parents and trashed = false and appProperties has { key='shoppingHisabUploadKey' and value='${markerKey}' } and appProperties has { key='shoppingHisabContentHash' and value='${contentHash}' }`,
     fields: "files(id,name,mimeType,size,appProperties)", pageSize: "10",
   });
-  const response = await driveRequest(token, \`https://www.googleapis.com/drive/v3/files?\${query}\`);
+  const response = await driveRequest(token, `https://www.googleapis.com/drive/v3/files?${query}`);
   const listing = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error("Could not check Google Drive for a previous upload. Please reconnect Drive and retry.");
   return listing.files?.find((item) => item.id) || null;
@@ -303,13 +303,13 @@ async function uploadGoogleDriveFile(db, userId, env, file, originalName, idempo
       if (!takeover?.meta?.changes) throw new Error("This upload is already being processed. Please wait a moment and retry.");
     }
     const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId], appProperties: { shoppingHisabUploadKey: markerKey, shoppingHisabContentHash: contentHash } };
-    const boundary = \`shoppinghisab_\${crypto.randomUUID().replace(/-/g, "")}\`;
+    const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
     const multipartBody = new Blob([
-      \`--\${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n\${JSON.stringify(metadata)}\\r\\n\`,
-      \`--\${boundary}\\r\\nContent-Type: \${file.type || "application/octet-stream"}\\r\\n\\r\\n\`, fileBytes, \`\\r\\n--\${boundary}--\`,
-    ], { type: \`multipart/related; boundary=\${boundary}\` });
+      `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n${JSON.stringify(metadata)}\\r\\n`,
+      `--${boundary}\\r\\nContent-Type: ${file.type || "application/octet-stream"}\\r\\n\\r\\n`, fileBytes, `\\r\\n--${boundary}--`,
+    ], { type: `multipart/related; boundary=${boundary}` });
     const response = await driveRequest(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,appProperties", {
-      method: "POST", headers: { "Content-Type": \`multipart/related; boundary=\${boundary}\` }, body: multipartBody,
+      method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody,
     });
     driveFile = await response.json().catch(() => ({}));
     if (!response.ok || !driveFile.id) throw new Error("Google Drive could not save this attachment. Check your Drive storage and reconnect if needed.");
@@ -327,8 +327,8 @@ async function ensureDriveUploadMetadata(db, userId, uploaded, contentType, lega
   }
   const id = crypto.randomUUID();
   const statement = legacyFileUri
-    ? db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)").bind(id, userId, \`drive:\${uploaded.driveFileId}\`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size, legacyFileUri)
-    : db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)").bind(id, userId, \`drive:\${uploaded.driveFileId}\`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size);
+    ? db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)").bind(id, userId, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size, legacyFileUri)
+    : db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)").bind(id, userId, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size);
   await statement.run();
   existing = await db.prepare("SELECT id FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?").bind(userId, uploaded.driveFileId).first();
   if (!existing) throw new Error("Drive saved the attachment, but its metadata could not be recovered. Retry safely.");
