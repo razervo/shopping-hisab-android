@@ -392,7 +392,7 @@ function extractModelText(result) {
 
 function parseModelJson(value) {
   if (value && typeof value === "object") return value;
-  const text = String(value || "").trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/, "").trim();
+  const text = String(value || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("AI did not return valid structured data.");
