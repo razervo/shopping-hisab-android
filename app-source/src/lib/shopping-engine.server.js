@@ -422,9 +422,9 @@ export async function handleShoppingEngine(request, env) {
 
   const purchaseLineMatch=/^bills\/[a-f0-9-]{36}\/lines\/([a-f0-9-]{36})$/.exec(subpath);
   if(purchaseLineMatch && method==="PATCH"){
-    const lineId=purchaseLineMatch[1];
+    const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
-    if(!line)return fail("Bill line not found.",404);
+    if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
     const patch={};
     if(body.product_name!==undefined){patch.product_name=text(body.product_name,160);if(!patch.product_name)return fail("Product name cannot be empty.");patch.normalized_name=patch.product_name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();}
     for(const key of ["brand","pack_size","unit"])if(body[key]!==undefined)patch[key]=text(body[key],100);
