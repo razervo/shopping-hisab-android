@@ -412,6 +412,18 @@ function SessionDetailPage() {
     }
   };
 
+  const deleteBillLine = async (billId, lineId) => {
+    if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE" });
+      setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
+      await loadSession();
+      toast.success("Bill item deleted and reconciliation updated.");
+    } catch (cause) {
+      toast.error(cause.message || "Could not delete this bill item.");
+    }
+  };
+
   const handleScannedList = (draft, fileUri) => {
     const draftItems = Array.isArray(draft?.items) ? draft.items : [];
     if (!draftItems.length) {
@@ -880,7 +892,10 @@ function SessionDetailPage() {
                   {billLineDetails[bill.id].length ? billLineDetails[bill.id].map((line) => (
                     <div key={line.id} className="flex justify-between gap-2 rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
                       <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
-                      <span className="shrink-0 font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
+                        {!completed ? <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button> : null}
+                      </div>
                     </div>
                   )) : <p className="text-[11px] text-muted-foreground">No item details recorded yet.</p>}
                 </div>

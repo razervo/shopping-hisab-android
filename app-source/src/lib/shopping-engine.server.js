@@ -448,6 +448,24 @@ export async function handleShoppingEngine(request, env) {
     return json(await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first());
   }
 
+  if(purchaseLineMatch && method==="DELETE"){
+    const lineId=purchaseLineMatch[1];
+    const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
+    if(!line)return fail("Bill line not found.",404);
+    const timestamp=now();
+    const sums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=? AND id<>?").bind(line.bill_id,userId,sessionId,lineId).first();
+    const allLinesPriced=Number(sums?.line_count||0)===Number(sums?.priced_count||0);
+    const correctedLineTotal=allLinesPriced?Number(sums.line_total||0):null;
+    const bill=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
+    const difference=bill?.bill_total_paise==null||correctedLineTotal==null?null:Number(bill.bill_total_paise)-correctedLineTotal;
+    await db.batch([
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
+      db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(correctedLineTotal,difference,timestamp,line.bill_id,userId,sessionId),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"purchase_line",lineId,"bill_line_deleted",JSON.stringify(line),JSON.stringify({bill_id:line.bill_id,line_total_paise:correctedLineTotal,reconciliation_difference_paise:difference}),timestamp),
+    ]);
+    return json({success:true,bill_id:line.bill_id,line_total_paise:correctedLineTotal,reconciliation_difference_paise:difference});
+  }
+
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
     if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
