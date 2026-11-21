@@ -36,7 +36,7 @@ export function RecordForm({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
-  const [receiptCount, setReceiptCount] = useState(1);
+  const [receiptCount, setReceiptCount] = useState(() => Math.max(1, Array.isArray(initial?.receipts) ? initial.receipts.length : 0));
   const [receiptMessage, setReceiptMessage] = useState("");
   const [receipts, setReceipts] = useState(() => Array.isArray(initial?.receipts) ? initial.receipts : (billFileUri ? [{ id: "receipt-1", file_uri: billFileUri, kind: "shopping_list", status: "attached", amount: 0 }] : []));
   const estimateFn = estimateMarketRates;
@@ -167,8 +167,8 @@ export function RecordForm({
     setReceipts((prev) => [...prev, receipt]);
     setReceiptCount((count) => count + 1);
     setReceiptMessage(mergedNames.length
-      ? `List ${receiptCount + 1} added. ${mergedNames.length} item(s) merged. Your estimate is updated; upload actual bills after shopping is complete.`
-      : `List ${receiptCount + 1} added. Review items and update your estimate whenever you are ready.`);
+      ? `List ${receiptCount + 1} added. ${incoming.length} item(s) captured. Review your list and add other shopping lists before entering final bills.`
+      : `List ${receiptCount + 1} added. Review items and add any other shopping lists before entering final bills.`);
     if (fileUri) onActualListUploaded?.(fileUri);
   };
   
@@ -518,19 +518,8 @@ export function RecordForm({
           </div>
         ) : null}
 
-        {allowEstimate && estimatedCount > 0 ? (
-          <div className="space-y-2">
-            <BillUploader
-              compact
-              purpose="priced_list"
-              onExtracted={applyActualList}
-            />
-            {actualUploadMessage ? (
-              <p className="rounded-xl bg-accent px-3 py-2.5 text-[11.5px] font-semibold leading-relaxed text-accent-foreground">
-                {actualUploadMessage}
-              </p>
-            ) : null}
-          </div>
+        {allowEstimate && actualUploadMessage ? (
+          <p className="rounded-xl bg-accent px-3 py-2.5 text-[11.5px] font-semibold leading-relaxed text-accent-foreground">{actualUploadMessage}</p>
         ) : null}
 
         {items.map((item) => (
