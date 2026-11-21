@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, Search, Sparkles, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -191,9 +191,21 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
             </button>
           </div>
         ) : (
-          <p className="mt-1 text-[10.5px] text-muted-foreground">
-            Enter the actual shop price here before saving.
-          </p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10.5px] text-muted-foreground">
+              {Number(item.price) > 0 ? "Actual shop price entered." : "Price not found? Search for this exact product online."}
+            </p>
+            {!(Number(item.price) > 0) && String(item.name || "").trim() ? (
+              <a
+                href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent([item.name, item.brand, item.packSize].filter(Boolean).join(" "))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-white px-3 py-1.5 text-[11px] font-bold text-primary"
+              >
+                <Search className="h-3 w-3" /> Find price online
+              </a>
+            ) : null}
+          </div>
         )}
         {market?.suggestion ? (
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-accent px-3 py-2">
