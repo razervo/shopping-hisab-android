@@ -120,7 +120,12 @@ export async function handleShoppingEngine(request, env) {
   const sessionId = sessionMatch[1], subpath = sessionMatch[2] || "";
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
-  if (session.status === "completed" && method !== "GET") return fail("This shopping session is completed and read-only.",409);
+  if (session.status === "completed" && method !== "GET" && subpath !== "confirm") return fail("This shopping session is completed and read-only.",409);
+  if (subpath === "confirm" && method === "POST" && session.status === "completed") {
+    const key=text(request.headers.get("Idempotency-Key"),160);
+    if(key){const replay=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,"session_confirm:"+sessionId,key).first();if(replay){const incoming=Number(body.confirmed_total_paise);const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:incoming}))))).map(b=>b.toString(16).padStart(2,"0")).join("");return replay.request_hash===hash?new Response(replay.response_json,{status:replay.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}}
+    return fail("This shopping session has already been completed. Refresh to view the saved confirmation.",409);
+  }
 
   if (!subpath && method === "GET") return json(await sessionDetail(db,userId,sessionId));
   if (!subpath && method === "PATCH") {
@@ -565,26 +570,30 @@ export async function handleShoppingEngine(request, env) {
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
     if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation="session_confirm:"+sessionId;
+    const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:confirmed}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
+    if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}
     const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
       SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
       FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
     if(Number(totals?.pending_bill_amounts||0)>0)return fail("Resolve every included bill amount before confirming this session.");
     const billRows=await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id FROM shopping_actual_bills WHERE user_id=? AND session_id=? ORDER BY uploaded_at,id").bind(userId,sessionId).all();
     const pending=await db.prepare("SELECT id,product_name,planned_quantity,unit,item_status FROM shopping_items WHERE user_id=? AND session_id=? AND item_status IN ('planned','pending','partially_purchased') ORDER BY created_at,id").bind(userId,sessionId).all();
-    const estimate= session.latest_estimate_id ? await db.prepare("SELECT id,version_number,estimated_total_paise FROM shopping_estimates WHERE id=? AND user_id=? AND session_id=?").bind(session.latest_estimate_id,userId,sessionId).first() : null;
+    const estimate=session.latest_estimate_id?await db.prepare("SELECT id,version_number,estimated_total_paise FROM shopping_estimates WHERE id=? AND user_id=? AND session_id=?").bind(session.latest_estimate_id,userId,sessionId).first():null;
     const calculated=Number(totals?.actual_total_paise||0),revisionRow=await db.prepare("SELECT COALESCE(MAX(revision_number),0)+1 AS next_revision FROM shopping_expense_confirmations WHERE user_id=? AND session_id=?").bind(userId,sessionId).first();
     const revision=Number(revisionRow?.next_revision||1),confirmationId=id(),timestamp=now();
     const snapshot={session_id:sessionId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),bills:billRows.results||[],pending_items:pending.results||[],estimate:estimate||null};
-    const confirmationResults=await db.batch([
+    const responseBody={id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),pending_items:pending.results||[],confirmed_at:timestamp};
+    const stmts=[
       db.prepare(`INSERT INTO shopping_expense_confirmations (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,estimate_id,calculation_snapshot_json,confirmed_at)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
-          SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
-        )`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp,sessionId,userId),
+        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm'))`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp,sessionId,userId),
       db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')").bind(confirmed,timestamp,sessionId,userId),
-    ]);
-    if(!confirmationResults?.[0]?.meta?.changes) return fail("This session has already been completed. Refresh to view the saved confirmation.",409);
-    await audit(db,userId,sessionId,"session",sessionId,"expense_confirmed",{confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed});
-    return json({id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),pending_items:pending.results||[],confirmed_at:timestamp},201);
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"session",sessionId,"expense_confirmed",null,JSON.stringify({confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed}),timestamp)
+    ];
+    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{const results=await db.batch(stmts);if(!results?.[0]?.meta?.changes)return fail("This session has already been completed. Refresh to view the saved confirmation.",409);}catch(error){if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}throw error;}
+    return json(responseBody,201);
   }
 
   if (subpath === "audit" && method === "GET") {
