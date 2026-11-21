@@ -12,10 +12,12 @@ export function BillUploader({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
+  const [recoveryFileUri, setRecoveryFileUri] = useState("");
 
   const handleFile = async (picked) => {
     if (!picked) return;
     setError("");
+    setRecoveryFileUri("");
     if (!isAcceptedBill(picked)) {
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
@@ -64,6 +66,11 @@ export function BillUploader({
         if (!response.ok) {
           throw new Error(result?.error || `Bill reading failed (${response.status}).`);
         }
+        if (result?.recoverable && result?.file_uri) {
+          setRecoveryFileUri(result.file_uri);
+          setError(result.error || "Receipt saved, but reading failed. You can retry.");
+          return;
+        }
         if (!result?.draft || !result?.file_uri) {
           throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
         }
@@ -81,6 +88,25 @@ export function BillUploader({
       }
     } catch (cause) {
       setError(cause?.message || "We could not read this bill. Please try again or enter the items manually.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retrySavedReceipt = async () => {
+    if (!recoveryFileUri || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await readShoppingBill({ data: { fileUri: recoveryFileUri, purpose } });
+      if (!result?.draft || !Array.isArray(result.draft.items) || !result.draft.items.length) {
+        throw new Error(result?.error || "AI still could not read this receipt. You can enter items manually.");
+      }
+      const savedUri = recoveryFileUri;
+      setRecoveryFileUri("");
+      onExtracted(result.draft, savedUri);
+    } catch (cause) {
+      setError(cause?.message || "Retry failed. Your receipt is still saved in Drive.");
     } finally {
       setBusy(false);
     }
@@ -199,6 +225,11 @@ export function BillUploader({
         <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[13px] font-semibold leading-relaxed text-destructive">
           {error}
         </p>
+      ) : null}
+      {recoveryFileUri ? (
+        <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground disabled:opacity-50">
+          {busy ? "Retrying saved receipt…" : "Retry reading saved receipt"}
+        </button>
       ) : null}
     </div>
   );
