@@ -243,20 +243,24 @@ export async function handleShoppingEngine(request, env) {
         .bind(sourceId,userId,sessionId).first();
       if (!source) return fail("Source line not found.",404);
     }
-    const normalized=text(body.normalized_name||name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," "),160).toLowerCase();
-    await db.prepare(`INSERT INTO shopping_items
+    const requestKey=text(request.headers.get("Idempotency-Key"),160)||(source?("source_line:"+source.id):null);
+    const operation="item_create:"+sessionId;
+    const payload={product_name:name,planned_quantity:quantity,unit:text(body.unit||"pcs",24),brand:text(body.brand,100),product_type:text(body.product_type||"unsure",40),pack_size:text(body.pack_size,60),notes:text(body.notes,1000),source_line_id:source?.id||null};
+    const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(payload))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
+    if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);}
+    const normalized=text(body.normalized_name||name.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu," "),160).toLowerCase();
+    const responseBody={id:itemId,session_id:sessionId,product_name:name,normalized_name:normalized,planned_quantity:quantity,unit:text(body.unit||"pcs",24),item_status:"planned",created_at:timestamp,updated_at:timestamp};
+    const stmts=[db.prepare(`INSERT INTO shopping_items
       (id,user_id,session_id,product_name,normalized_name,brand,product_type,pack_size,planned_quantity,unit,item_status,notes,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,'planned',?,?,?)`)
       .bind(itemId,userId,sessionId,name,normalized,text(body.brand,100),text(body.product_type||"unsure",40),
-        text(body.pack_size,60),quantity,text(body.unit||"pcs",24),text(body.notes,1000),timestamp,timestamp).run();
-    if (source) {
-      await db.prepare("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,merged_quantity,created_at) VALUES (?,?,?,?,?,?,?)")
-        .bind(id(),userId,sessionId,itemId,source.id,quantity,timestamp).run();
-    }
-    await audit(db,userId,sessionId,"shopping_item",itemId,"item_created",{product_name:name,planned_quantity:quantity,unit:text(body.unit||"pcs",24)});
-    return json({id:itemId,session_id:sessionId,product_name:name,normalized_name:normalized,planned_quantity:quantity,unit:text(body.unit||"pcs",24),item_status:"planned",created_at:timestamp,updated_at:timestamp},201);
+        text(body.pack_size,60),quantity,text(body.unit||"pcs",24),text(body.notes,1000),timestamp,timestamp)];
+    if(source)stmts.push(db.prepare("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,merged_quantity,created_at) VALUES (?,?,?,?,?,?,?)").bind(id(),userId,sessionId,itemId,source.id,quantity,timestamp));
+    stmts.push(db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"shopping_item",itemId,"item_created",null,JSON.stringify({product_name:name,planned_quantity:quantity,unit:text(body.unit||"pcs",24)}),timestamp));
+    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(stmts);}catch(error){if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different request data.",409);}throw error;}
+    return json(responseBody,201);
   }
-
   const mergeItemMatch=/^items\/([a-f0-9-]{36})\/merge$/i.exec(subpath);
   if (mergeItemMatch && method === "POST") {
     const sourceId=mergeItemMatch[1],targetId=text(body.target_item_id,80);
