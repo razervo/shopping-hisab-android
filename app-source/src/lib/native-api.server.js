@@ -305,8 +305,8 @@ async function uploadGoogleDriveFile(db, userId, env, file, originalName, idempo
     const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId], appProperties: { shoppingHisabUploadKey: markerKey, shoppingHisabContentHash: contentHash } };
     const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
     const multipartBody = new Blob([
-      `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n${JSON.stringify(metadata)}\\r\\n`,
-      `--${boundary}\\r\\nContent-Type: ${file.type || "application/octet-stream"}\\r\\n\\r\\n`, fileBytes, `\\r\\n--${boundary}--`,
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+      `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`, fileBytes, `\r\n--${boundary}--`,
     ], { type: `multipart/related; boundary=${boundary}` });
     const response = await driveRequest(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,appProperties", {
       method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody,
