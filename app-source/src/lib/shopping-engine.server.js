@@ -144,6 +144,14 @@ export async function handleShoppingEngine(request, env) {
   }
 
   if (subpath === "lists" && method === "POST") {
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation="source_list_create:"+sessionId;
+    const payload={source_type:body.source_type||"manual_entry",file_id:text(body.file_id,80)||null,original_file_uri:text(body.original_file_uri,1200)||null,source_metadata:body.source_metadata&&typeof body.source_metadata==="object"?body.source_metadata:{}};
+    const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(payload))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
+    if(requestKey){
+      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+      if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);
+    }
     const sourceType = body.source_type || "manual_entry";
     if (!["handwritten_scan","manual_entry","imported_list"].includes(sourceType)) return fail("Invalid source type.");
     const fileId = text(body.file_id,80) || null;
@@ -152,14 +160,21 @@ export async function handleShoppingEngine(request, env) {
       if (!file) return fail("The selected file was not found in your account.",404);
     }
     const listId=id(), timestamp=now();
-    await db.prepare(`INSERT INTO shopping_source_lists
+    const responseBody={id:listId,session_id:sessionId,source_type:sourceType,ocr_status:sourceType==="manual_entry"?"not_applicable":"not_started",created_at:timestamp};
+    const stmts=[db.prepare(`INSERT INTO shopping_source_lists
       (id,user_id,session_id,source_type,file_id,original_file_uri,ocr_status,source_metadata_json,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`)
       .bind(listId,userId,sessionId,sourceType,fileId,text(body.original_file_uri,1200)||null,
         sourceType==="manual_entry"?"not_applicable":"not_started",
-        JSON.stringify(body.source_metadata && typeof body.source_metadata==="object"?body.source_metadata:{}),timestamp).run();
-    await audit(db,userId,sessionId,"source_list",listId,"source_list_added",{source_type:sourceType,file_id:fileId});
-    return json({id:listId,session_id:sessionId,source_type:sourceType,ocr_status:sourceType==="manual_entry"?"not_applicable":"not_started",created_at:timestamp},201);
+        JSON.stringify(body.source_metadata && typeof body.source_metadata==="object"?body.source_metadata:{}),timestamp),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(id(),userId,sessionId,"source_list",listId,"source_list_added",null,JSON.stringify({source_type:sourceType,file_id:fileId}),timestamp)];
+    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(stmts);}catch(error){
+      if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different request data.",409);}
+      throw error;
+    }
+    return json(responseBody,201);
   }
 
   const linesMatch=/^lists\/([a-f0-9-]{36})\/lines$/i.exec(subpath);
