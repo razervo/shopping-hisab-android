@@ -938,7 +938,6 @@ async function handleMigrationFile(request, env, user) {
     return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
   }
 
-  const id = crypto.randomUUID();
   const originalName = String(file.name || "attachment").slice(0, 180);
   const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName, `legacy-file:${legacyUri}`);
   const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, type, legacyUri);
