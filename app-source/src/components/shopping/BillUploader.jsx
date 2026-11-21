@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Camera, FileText, ImageUp, Loader2, ShieldCheck } from "lucide-react";
 import { base44 } from "@/api/cloudflareClient";
 import { readShoppingBill } from "@/lib/server-fns";
@@ -13,9 +13,10 @@ export function BillUploader({
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
   const [recoveryFileUri, setRecoveryFileUri] = useState("");
+  const uploadLockRef = useRef(false);
 
   const handleFile = async (picked) => {
-    if (!picked) return;
+    if (!picked || uploadLockRef.current) return;
     setError("");
     setRecoveryFileUri("");
     if (!isAcceptedBill(picked)) {
@@ -28,6 +29,7 @@ export function BillUploader({
     }
 
     setFileName(picked.name);
+    uploadLockRef.current = true;
     setBusy(true);
 
     let file;
@@ -39,6 +41,7 @@ export function BillUploader({
 
     if (file.size > BILL_MAX_BYTES) {
       setError("That file is too large. Please use a photo or PDF under 10 MB.");
+      uploadLockRef.current = false;
       setBusy(false);
       return;
     }
@@ -89,6 +92,7 @@ export function BillUploader({
     } catch (cause) {
       setError(cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
+      uploadLockRef.current = false;
       setBusy(false);
     }
   };
