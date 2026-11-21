@@ -419,6 +419,13 @@ export async function handleShoppingEngine(request, env) {
   const purchaseLinesMatch=/^bills\/([a-f0-9-]{36})\/lines$/.exec(subpath);
   if(purchaseLinesMatch && method==="POST"){
     const billId=purchaseLinesMatch[1];
+    const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation=`bill_lines_create:${sessionId}:${billId}`;
+    const requestHash=idempotencyKey?await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")):null;
+    if(idempotencyKey){
+      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+      if(prior){if(prior.request_hash!==requestHash)return fail("This idempotency key was already used for a different bill-line request.",409);return json(safeJson(prior.response_json,{}),Number(prior.response_status)||200);}
+    }
     const bill=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
     if(!bill)return fail("Bill not found.",404);
     const lines=Array.isArray(body.lines)?body.lines:[body];
@@ -439,15 +446,21 @@ export async function handleShoppingEngine(request, env) {
     const timestamp=now(),statements=prepared.map(line=>db.prepare(`INSERT INTO shopping_purchase_lines
       (id,user_id,session_id,bill_id,shopping_item_id,product_name,normalized_name,brand,pack_size,quantity,unit,unit_price_paise,line_amount_paise,is_extra,match_method,original_ocr_json,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,billId,line.itemId,line.name,line.normalized,line.brand,line.pack,line.quantity,line.unit,line.unitPrice,line.amount,line.extra?1:0,line.method,JSON.stringify(line.ocr),timestamp,timestamp));
-    await db.batch(statements);
-    const sums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
-    const allLinesPriced=Number(sums?.line_count||0)===Number(sums?.priced_count||0);
-    const sum=allLinesPriced?Number(sums.line_total||0):null;
+    const priorSums=await db.prepare("SELECT COUNT(*) AS line_count,COUNT(line_amount_paise) AS priced_count,COALESCE(SUM(line_amount_paise),0) AS line_total FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    const priorCount=Number(priorSums?.line_count||0),priorPriced=Number(priorSums?.priced_count||0),priorTotal=Number(priorSums?.line_total||0);
+    const newCount=prepared.length,newPriced=prepared.filter(x=>x.amount!==null).length,newTotal=prepared.reduce((acc,x)=>acc+(x.amount||0),0);
+    const allLinesPriced=priorCount+newCount===priorPriced+newPriced;
+    const sum=allLinesPriced?priorTotal+newTotal:null;
     const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
-    await db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?")
-      .bind(sum,billRow?.bill_total_paise==null||sum==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId).run();
-    await audit(db,userId,sessionId,"actual_bill",billId,"bill_lines_added",{line_count:prepared.length,line_total_paise:sum});
-    return json({bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length},201);
+    const responseBody={bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length};
+    statements.push(db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(sum,billRow?.bill_total_paise==null||sum==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId));
+    statements.push(db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,after_json,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_lines_added",JSON.stringify({line_count:prepared.length,line_total_paise:sum}),"{}",timestamp));
+    if(idempotencyKey)statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(statements);}catch(cause){
+      if(idempotencyKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();if(winner){if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different bill-line request.",409);return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);}}
+      throw cause;
+    }
+    return json(responseBody,201);
   }
 
 
