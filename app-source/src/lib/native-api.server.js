@@ -220,18 +220,23 @@ async function getGoogleDriveToken(db, userId, env) {
 
 async function driveRequest(token, url, options = {}) {
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const method = String(options.method || "GET").toUpperCase();
+  // Retry only idempotent reads. Drive create/upload POSTs may succeed even when
+  // the client loses the response; automatic retries can create duplicate files.
+  const retryable = method === "GET" || method === "HEAD";
+  const maxAttempts = retryable ? 3 : 1;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const response = await fetch(url, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
-      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === 2) return response;
+      if (!retryable || response.ok || (response.status < 500 && response.status !== 429) || attempt === maxAttempts - 1) return response;
       lastError = new Error(`Google Drive temporary error (${response.status}).`);
     } catch (cause) {
       lastError = cause;
-      if (attempt === 2) throw new Error("Network connection to Google Drive failed. Please retry the receipt upload.");
+      if (!retryable || attempt === maxAttempts - 1) throw new Error("Network connection to Google Drive failed. Please retry the receipt upload.");
     }
     await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
-  throw lastError || new Error("Google Drive upload failed. Please retry.");
+  throw lastError || new Error("Google Drive request failed. Please retry.");
 }
 
 async function ensureGoogleDriveFolder(db, userId, token) {

@@ -180,7 +180,7 @@ function SessionDetailPage() {
     }
     setBillSaving(true);
     try {
-      await api(`/api/shopping/sessions/${sessionId}/bills`, {
+      const savedBill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
         method: "POST",
         body: JSON.stringify({
           shop_name: billForm.shop_name.trim(),
@@ -191,7 +191,8 @@ function SessionDetailPage() {
           original_ocr: { entry_method: "manual" },
         }),
       });
-      toast.success("Bill added to actual spending.");
+      if (savedBill.possible_duplicate) toast.warning("Possible duplicate bill detected. Review it before trusting the spending total.");
+      else toast.success("Bill added to actual spending.");
       setBillForm({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
       await loadSession();
     } catch (cause) {
@@ -380,6 +381,12 @@ function SessionDetailPage() {
     }
     if (Number(session?.bills_amount_pending || 0) > 0) {
       return toast.error("Resolve every bill with a pending amount before completing this session.");
+    }
+    const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
+    if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
+      const difference = rupees - calculatedRupees;
+      const direction = difference > 0 ? "higher" : "lower";
+      if (!window.confirm(`Your confirmed total is ₹${rupees.toFixed(2)}, but bills calculate to ₹${calculatedRupees.toFixed(2)} (₹${Math.abs(difference).toFixed(2)} ${direction}). Save this difference in the final confirmation?`)) return;
     }
     setConfirmationSaving(true);
     try {

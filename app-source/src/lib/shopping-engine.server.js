@@ -461,11 +461,14 @@ export async function handleShoppingEngine(request, env) {
     const calculated=Number(totals?.actual_total_paise||0),revisionRow=await db.prepare("SELECT COALESCE(MAX(revision_number),0)+1 AS next_revision FROM shopping_expense_confirmations WHERE user_id=? AND session_id=?").bind(userId,sessionId).first();
     const revision=Number(revisionRow?.next_revision||1),confirmationId=id(),timestamp=now();
     const snapshot={session_id:sessionId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),bills:billRows.results||[],pending_items:pending.results||[],estimate:estimate||null};
-    await db.batch([
+    const confirmationResults=await db.batch([
       db.prepare(`INSERT INTO shopping_expense_confirmations (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,estimate_id,calculation_snapshot_json,confirmed_at)
-        VALUES (?,?,?,?,?,?,?,?,?)`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp),
-      db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=?").bind(confirmed,timestamp,sessionId,userId),
+        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
+          SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
+        )`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp,sessionId,userId),
+      db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')").bind(confirmed,timestamp,sessionId,userId),
     ]);
+    if(!confirmationResults?.[0]?.meta?.changes) return fail("This session has already been completed. Refresh to view the saved confirmation.",409);
     await audit(db,userId,sessionId,"session",sessionId,"expense_confirmed",{confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed});
     return json({id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed,pending_bill_amounts:Number(totals?.pending_bill_amounts||0),pending_items:pending.results||[],confirmed_at:timestamp},201);
   }
