@@ -179,6 +179,11 @@ export function BillUploader({
             {error}
           </p>
         ) : null}
+        {recoveryFileUri ? (
+          <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-[12px] font-bold text-foreground disabled:opacity-50">
+            {busy ? "Retrying…" : "Retry reading saved receipt"}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -211,7 +216,7 @@ export function BillUploader({
         </div>
 
         <p className="mt-4 inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" /> Nothing is saved until you confirm the details
+          <ShieldCheck className="h-3.5 w-3.5" /> Receipt file is saved to Drive; nothing is added until you confirm
         </p>
       </div>
 
