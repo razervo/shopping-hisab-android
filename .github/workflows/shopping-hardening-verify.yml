@@ -1,0 +1,48 @@
+name: Shopping Hisab hardening verification
+
+on:
+  push:
+    branches: [shopping-hisab-idempotency-hardening]
+    paths:
+      - "app-source/**"
+      - ".github/workflows/shopping-hardening-verify.yml"
+  pull_request:
+    paths:
+      - "app-source/**"
+      - ".github/workflows/shopping-hardening-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Validate native SQL migrations against fresh SQLite
+        run: |
+          python3 - <<'PY'
+          import glob, sqlite3
+          db = sqlite3.connect(':memory:')
+          db.execute('PRAGMA foreign_keys=ON')
+          for path in sorted(glob.glob('migrations-native/*.sql')):
+              with open(path, encoding='utf-8') as f:
+                  db.executescript(f.read())
+              print('OK:', path)
+          violations = db.execute('PRAGMA foreign_key_check').fetchall()
+          if violations:
+              raise SystemExit(f'Foreign key violations: {violations}')
+          print('All native migrations applied to fresh SQLite and FK check passed.')
+          PY
