@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronRight, Keyboard, ScanLine } from "lucide-react";
+import { ChevronRight, Keyboard, ScanLine, ShoppingBasket } from "lucide-react";
 
 export const Route = createFileRoute("/_authed/add/")({
   head: () => ({ meta: [{ title: "Add Shopping · Shopping Hisab" }] }),
@@ -11,8 +11,24 @@ function AddChoice() {
     <div className="pb-2">
       <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Add shopping</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">
-        Upload your list before shopping, estimate the cost, then add the actual prices before saving.
+        Start a shopping session to add multiple lists, review your estimate, and upload final bills only after you finish shopping.
       </p>
+      <Link
+        to="/sessions"
+        className="mt-5 flex items-center gap-4 rounded-[26px] bg-primary p-5 text-primary-foreground shadow-[0_18px_36px_-24px_rgba(11,60,40,0.9)]"
+      >
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+          <ShoppingBasket className="h-7 w-7" strokeWidth={2.2} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[16.5px] font-extrabold">Start shopping session</span>
+          <span className="mt-0.5 block text-[12.5px] leading-snug text-white/75">
+            Add multiple lists → estimate → shop → upload final bills → confirm
+          </span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-white/60" />
+      </Link>
+      <p className="mt-5 text-[11.5px] font-bold text-muted-foreground">Legacy single-record options</p>
 
       <div className="mt-5 space-y-3.5">
         <Link
@@ -41,7 +57,7 @@ function AddChoice() {
           <span className="min-w-0 flex-1">
             <span className="block text-[16.5px] font-extrabold">Enter manually</span>
             <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
-              Add items, quantity and price one by one
+              Legacy record: enter items, quantity and price directly
             </span>
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
