@@ -139,7 +139,7 @@ async function handleRecords(request, env, user, url) {
     await env.DB.prepare(
       `INSERT INTO shopping_records
        (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now).run();
     return json(await fetchRecord(env.DB, user.id, id), 201);
   }
