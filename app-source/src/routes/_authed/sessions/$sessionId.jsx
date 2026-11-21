@@ -46,6 +46,8 @@ function SessionDetailPage() {
   const uploadedBillLinesKeyRef = useRef(null);
   const scannedSourceLinesKeyRef = useRef(null);
   const manualSourceLinesKeyRef = useRef(null);
+  const scannedSourceListKeyRef = useRef(null);
+  const manualSourceListKeyRef = useRef(null);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -468,6 +470,7 @@ function SessionDetailPage() {
       const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(scannedFileUri);
       const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
         method: "POST",
+        headers: { "Idempotency-Key": scannedSourceListKeyRef.current || (scannedSourceListKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           source_type: "handwritten_scan",
           file_id: fileMatch?.[1] || null,
@@ -500,6 +503,7 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
+      scannedSourceListKeyRef.current = null;
       scannedSourceLinesKeyRef.current = null;
       setScannedDraft(null);
       setScannedFileUri("");
@@ -533,6 +537,7 @@ function SessionDetailPage() {
     try {
       const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
         method: "POST",
+        headers: { "Idempotency-Key": manualSourceListKeyRef.current || (manualSourceListKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           source_type: "manual_entry",
           source_metadata: { title: listName.trim() || "Manual shopping list" },
@@ -569,6 +574,7 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} ${validRows.length === 1 ? "item" : "items"} added`);
+      manualSourceListKeyRef.current = null;
       manualSourceLinesKeyRef.current = null;
       setListName("My shopping list");
       setRows([blankRow()]);
