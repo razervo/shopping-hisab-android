@@ -39,8 +39,8 @@ export function BottomNav() {
 
         <div className="flex w-[74px] items-start justify-center">
           <Link
-            to="/add"
-            aria-label="Add shopping"
+            to="/sessions"
+            aria-label="Start shopping session"
             className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_10px_24px_-8px_rgba(16,88,58,0.65)] transition-transform duration-200 active:scale-95"
             activeProps={{ className: "ring-4 ring-accent" }}
           >
