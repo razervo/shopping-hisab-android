@@ -202,7 +202,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-white px-3 py-1.5 text-[11px] font-bold text-primary"
               >
-                <Search className="h-3 w-3" /> Find price online
+                <Search className="h-3 w-3" /> Search product online
               </a>
             ) : null}
           </div>
