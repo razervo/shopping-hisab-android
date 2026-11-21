@@ -158,17 +158,16 @@ export function RecordForm({
       // Avoid interrupting list entry with browser-native dialogs. Duplicate rows are
       // preserved by default so quantities/prices are never merged without consent.
       next.push(fresh);
-      toast.info(`Possible duplicate: ${existing.name}`, {
-        description: "Kept as a separate item. You can review and combine quantities later.",
+      toast.info("Similar item found", {
+        description: `${existing.name} was kept as a separate entry so no quantity or price is changed.`,
       });
     });
     setItems(next);
     const receipt = { id: `receipt-${Date.now()}`, file_uri: fileUri || "", kind: "shopping_list", status: "attached", amount: Math.round(incoming.reduce((sum, item) => sum + (Number(item.amount) || (Number(item.qty) || 1) * (Number(item.price) || 0)), 0) * 100) / 100, item_count: incoming.length, merged_items: mergedNames, created_at: new Date().toISOString() };
     setReceipts((prev) => [...prev, receipt]);
     setReceiptCount((count) => count + 1);
-    setReceiptMessage(mergedNames.length
-      ? `List ${receiptCount + 1} added. ${incoming.length} item(s) captured. Review your list and add other shopping lists before entering final bills.`
-      : `List ${receiptCount + 1} added. Review items and add any other shopping lists before entering final bills.`);
+    setReceiptMessage(`List ${receiptCount + 1} added successfully (${incoming.length} item(s)). Review it, add any other shopping lists, and upload your final bills only after shopping is complete.`);
+    toast.success("Shopping list added", { description: `${incoming.length} item(s) captured. You can continue adding lists.` });
     if (fileUri) onActualListUploaded?.(fileUri);
   };
   
