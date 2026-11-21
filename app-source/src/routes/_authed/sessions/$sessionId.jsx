@@ -978,7 +978,7 @@ function SessionDetailPage() {
           ) : null}
           <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final confirmed expense (₹)</label>
           <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
-            onChange={(event) => setConfirmationTotal(event.target.value)}
+            onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
           <button type="submit" disabled={confirmationSaving || Number(session.bills_amount_pending || 0) > 0}
