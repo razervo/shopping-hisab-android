@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { base44 } from "@/api/cloudflareClient";
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -162,10 +163,10 @@ export function RecordDetail({ record, onDeleted }) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Keep it</AlertDialogCancel>
-                <button type="button" onClick={remove} disabled={deleting} className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-60">
+                <AlertDialogCancel disabled={deleting}>Keep it</AlertDialogCancel>
+                <AlertDialogAction onClick={(event) => { event.preventDefault(); remove(); }} disabled={deleting} className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-60">
                   {deleting ? "Deleting…" : "Delete record"}
-                </button>
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
