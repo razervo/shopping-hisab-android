@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { base44 } from "@/api/cloudflareClient";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -17,7 +16,8 @@ import {
 import { ddmmyyyy, formatQty, inr } from "@/lib/format";
 
 export function RecordDetail({ record, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);\n  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const items = record.items || [];
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0;
 
@@ -37,7 +37,8 @@ export function RecordDetail({ record, onDeleted }) {
     setDeleting(true);
     try {
       await base44.entities.ShoppingRecord.delete(record.id);
-      toast.success("Shopping record deleted", { description: "It has been removed from your history and totals." });
+      toast.success("Shopping deleted", { description: "The record and its total have been removed from your history." });
+      setDeleteDialogOpen(false);
       onDeleted();
     } catch (error) {
       toast.error("Could not delete this shopping", { description: error?.message || "Please try again." });
@@ -143,7 +144,7 @@ export function RecordDetail({ record, onDeleted }) {
           >
             <Pencil className="h-4 w-4" /> Edit
           </Link>
-          <AlertDialog>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!deleting) setDeleteDialogOpen(open); }}>
             <AlertDialogTrigger asChild>
               <button
                 type="button"
@@ -162,9 +163,9 @@ export function RecordDetail({ record, onDeleted }) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep it</AlertDialogCancel>
-                <AlertDialogAction onClick={remove} disabled={deleting}>
-                  {deleting ? "Deleting…" : "Delete"}
-                </AlertDialogAction>
+                <button type="button" onClick={remove} disabled={deleting} className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-60">
+                  {deleting ? "Deleting…" : "Delete record"}
+                </button>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
