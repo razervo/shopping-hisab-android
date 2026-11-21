@@ -939,7 +939,8 @@ async function handleMigrationFile(request, env, user) {
   }
 
   const originalName = String(file.name || "attachment").slice(0, 180);
-  const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName, `legacy-file:${legacyUri}`);
+  const uploadKey = `legacy-file:${await sha256Hex(new TextEncoder().encode(legacyUri))}`;
+  const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName, uploadKey);
   const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, type, legacyUri);
   await env.DB.prepare(
     "UPDATE shopping_records SET bill_file_id = ?, legacy_bill_file_uri = NULL WHERE user_id = ? AND legacy_bill_file_uri = ?",
