@@ -169,6 +169,14 @@ export async function handleShoppingEngine(request, env) {
     if (!list) return fail("Source list not found.",404);
     const lines=Array.isArray(body.lines)?body.lines:[body];
     if (!lines.length || lines.length>200) return fail("Add between 1 and 200 source lines.");
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation="source_lines_create:"+sessionId+":"+listId;
+    const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
+    if (requestKey) {
+      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?")
+        .bind(userId,operation,requestKey).first();
+      if (prior) return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);
+    }
     const timestamp=now(), statements=[], createdLineIds=[];
     for (let index=0;index<lines.length;index++) {
       const line=lines[index]||{};
@@ -188,10 +196,23 @@ export async function handleShoppingEngine(request, env) {
           text(line.brand,100),text(line.product_type||"unsure",40),text(line.pack_size,60),quantity,
           text(line.unit,24),confidence,JSON.stringify(line.original_ocr && typeof line.original_ocr==="object"?line.original_ocr:line),timestamp,timestamp));
     }
-    await db.batch(statements);
-    await db.prepare("UPDATE shopping_source_lists SET ocr_status='completed' WHERE id=? AND user_id=?").bind(listId,userId).run();
-    await audit(db,userId,sessionId,"source_list",listId,"source_lines_added",{count:lines.length});
-    return json({source_list_id:listId,created_count:lines.length,line_ids:createdLineIds},201);
+    const responseBody={source_list_id:listId,created_count:lines.length,line_ids:createdLineIds};
+    statements.push(db.prepare("UPDATE shopping_source_lists SET ocr_status='completed' WHERE id=? AND user_id=?").bind(listId,userId));
+    statements.push(db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(id(),userId,sessionId,"source_list",listId,"source_lines_added",null,JSON.stringify({count:lines.length}),timestamp));
+    if (requestKey) statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try {
+      await db.batch(statements);
+    } catch (error) {
+      if (requestKey) {
+        const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?")
+          .bind(userId,operation,requestKey).first();
+        if (winner) return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different request data.",409);
+      }
+      throw error;
+    }
+    return json(responseBody,201);
   }
 
   if (subpath === "items" && method === "POST") {
