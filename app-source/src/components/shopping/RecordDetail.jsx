@@ -17,7 +17,7 @@ import {
 import { ddmmyyyy, formatQty, inr } from "@/lib/format";
 
 export function RecordDetail({ record, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] = useState(false);\n  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const items = record.items || [];
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0;
 
