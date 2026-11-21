@@ -98,7 +98,8 @@ export function BillUploader({
   };
 
   const retrySavedReceipt = async () => {
-    if (!recoveryFileUri || busy) return;
+    if (!recoveryFileUri || uploadLockRef.current) return;
+    uploadLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -112,6 +113,7 @@ export function BillUploader({
     } catch (cause) {
       setError(cause?.message || "Retry failed. Your receipt is still saved in Drive.");
     } finally {
+      uploadLockRef.current = false;
       setBusy(false);
     }
   };
