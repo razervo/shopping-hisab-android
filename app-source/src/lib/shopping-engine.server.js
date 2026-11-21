@@ -257,7 +257,7 @@ export async function handleShoppingEngine(request, env) {
     }
     const requestKey=text(request.headers.get("Idempotency-Key"),160)||(source?("source_line:"+source.id):null);
     const operation="item_create:"+sessionId;
-    const payload={product_name:name,planned_quantity:quantity,unit:text(body.unit||"pcs",24),brand:text(body.brand,100),product_type:text(body.product_type||"unsure",40),pack_size:text(body.pack_size,60),notes:text(body.notes,1000),source_line_id:source?.id||null};
+    const payload={product_name:name,normalized_name:text(body.normalized_name||name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," "),160).toLowerCase(),planned_quantity:quantity,unit:text(body.unit||"pcs",24),brand:text(body.brand,100),product_type:text(body.product_type||"unsure",40),pack_size:text(body.pack_size,60),notes:text(body.notes,1000),source_line_id:source?.id||null};
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(payload))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
     if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);}
     const normalized=text(body.normalized_name||name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," "),160).toLowerCase();
