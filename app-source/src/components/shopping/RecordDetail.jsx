@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { FileImage, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { base44 } from "@/api/cloudflareClient";
 import {
   AlertDialog,
@@ -36,7 +37,10 @@ export function RecordDetail({ record, onDeleted }) {
     setDeleting(true);
     try {
       await base44.entities.ShoppingRecord.delete(record.id);
+      toast.success("Shopping record deleted", { description: "It has been removed from your history and totals." });
       onDeleted();
+    } catch (error) {
+      toast.error("Could not delete this shopping", { description: error?.message || "Please try again." });
     } finally {
       setDeleting(false);
     }
