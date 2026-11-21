@@ -87,7 +87,7 @@ export function BillUploader({
         onExtracted(result.draft, result.file_uri);
       } else {
         // Keep the existing PDF/other supported-file route unchanged.
-        const uploaded = await base44.integrations.Core.UploadPrivateFile({ file });
+        const uploaded = await base44.integrations.Core.UploadPrivateFile({ file, idempotencyKey: uploadKey });
         const fileUri = uploaded?.file_uri || "";
         if (!fileUri) throw new Error("The bill could not be uploaded.");
         const result = await readShoppingBill({ data: { fileUri, purpose } });
