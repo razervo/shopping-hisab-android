@@ -14,6 +14,7 @@ export function BillUploader({
   const [fileName, setFileName] = useState("");
   const [recoveryFileUri, setRecoveryFileUri] = useState("");
   const uploadLockRef = useRef(false);
+  const uploadKeyRef = useRef({ fingerprint: "", key: "" });
 
   const handleFile = async (picked) => {
     if (!picked || uploadLockRef.current) return;
@@ -29,6 +30,11 @@ export function BillUploader({
     }
 
     setFileName(picked.name);
+    const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
+    if (uploadKeyRef.current.fingerprint !== fingerprint) {
+      uploadKeyRef.current = { fingerprint, key: crypto.randomUUID() };
+    }
+    const uploadKey = uploadKeyRef.current.key;
     uploadLockRef.current = true;
     setBusy(true);
 
@@ -63,7 +69,7 @@ export function BillUploader({
         let response;
         let result = {};
         try {
-          response = await fetch("/api/ai/read-bill", { method: "POST", body: form, credentials: "include", signal: controller.signal });
+          response = await fetch("/api/ai/read-bill", { method: "POST", body: form, credentials: "include", signal: controller.signal, headers: { "Idempotency-Key": uploadKey } });
         } finally { clearTimeout(timeout); }
         result = await response.json().catch(() => ({}));
         if (!response.ok) {
@@ -77,6 +83,7 @@ export function BillUploader({
         if (!result?.draft || !result?.file_uri) {
           throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
         }
+        uploadKeyRef.current = { fingerprint: "", key: "" };
         onExtracted(result.draft, result.file_uri);
       } else {
         // Keep the existing PDF/other supported-file route unchanged.
