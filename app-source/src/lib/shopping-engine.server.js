@@ -517,7 +517,25 @@ export async function handleShoppingEngine(request, env) {
     const sum=allLinesPriced?priorTotal+newTotal:null;
     const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
     const responseBody={bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length};
-    statements.push(db.prepare("UPDATE shopping_actual_bills SET line_total_paise=?,reconciliation_difference_paise=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(sum,billRow?.bill_total_paise==null||sum==null?null:billRow.bill_total_paise-sum,timestamp,billId,userId,sessionId));
+    // Recompute reconciliation inside the atomic batch after line inserts so concurrent
+    // submissions cannot persist a stale pre-insert sum.
+    statements.push(db.prepare(`UPDATE shopping_actual_bills SET
+      line_total_paise=CASE
+        WHEN (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+          = (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+        THEN COALESCE((SELECT SUM(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?),0)
+        ELSE NULL END,
+      reconciliation_difference_paise=CASE
+        WHEN bill_total_paise IS NULL OR
+          (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+          <> (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+        THEN NULL
+        ELSE bill_total_paise-(SELECT COALESCE(SUM(line_amount_paise),0) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+      END,
+      updated_at=? WHERE id=? AND user_id=? AND session_id=?`).bind(
+      billId,userId,sessionId,billId,userId,sessionId,billId,userId,sessionId,
+      billId,userId,sessionId,billId,userId,sessionId,billId,userId,sessionId,
+      timestamp,billId,userId,sessionId));
     statements.push(db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,after_json,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_lines_added",JSON.stringify({line_count:prepared.length,line_total_paise:sum}),"{}",timestamp));
     if(idempotencyKey)statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
     try{await db.batch(statements);}catch(cause){
