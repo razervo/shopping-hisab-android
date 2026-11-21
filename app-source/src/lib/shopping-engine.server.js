@@ -515,7 +515,7 @@ export async function handleShoppingEngine(request, env) {
     const newCount=prepared.length,newPriced=prepared.filter(x=>x.amount!==null).length,newTotal=prepared.reduce((acc,x)=>acc+(x.amount||0),0);
     const allLinesPriced=priorCount+newCount===priorPriced+newPriced;
     const sum=allLinesPriced?priorTotal+newTotal:null;
-    const billRow=await db.prepare("SELECT bill_total_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+
     const responseBody={bill_id:billId,created_count:prepared.length,line_total_paise:sum,extra_line_count:prepared.filter(x=>x.extra).length};
     // Recompute reconciliation inside the atomic batch after line inserts so concurrent
     // submissions cannot persist a stale pre-insert sum.
