@@ -1,12 +1,7 @@
 name: Build and deploy Shopping Hisab native Worker
-# Approved FK deletion fix deployment
 
 on:
   workflow_dispatch:
-  push:
-    branches: [cloudflare-native-migration]
-    paths:
-      - .github/workflows/deploy-native-preview.yml
 
 permissions:
   contents: read
@@ -17,7 +12,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'APPROVED DEPLOY SHOPPING HISAB FK FIX'
     runs-on: ubuntu-latest
     defaults:
       run:
