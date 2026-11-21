@@ -104,14 +104,21 @@ export async function handleShoppingEngine(request, env) {
   }
 
   if (path === "/sessions" && method === "POST") {
-    const shoppingDate = text(body.shopping_date, 10);
-    if (!validDate(shoppingDate)) return fail("A valid shopping_date (YYYY-MM-DD) is required.");
-    const sessionId = id(), timestamp = now();
-    const name = text(body.name, 120);
-    await db.prepare(`INSERT INTO shopping_sessions
-      (id,user_id,name,shopping_date,status,created_at,updated_at) VALUES (?,?,?,?,'open',?,?)`)
-      .bind(sessionId,userId,name,shoppingDate,timestamp,timestamp).run();
-    await audit(db,userId,sessionId,"session",sessionId,"session_created",{name,shopping_date:shoppingDate});
+    const shoppingDate=text(body.shopping_date,10);
+    if(!validDate(shoppingDate))return fail("A valid shopping_date (YYYY-MM-DD) is required.");
+    const name=text(body.name,120);
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation="session_create";
+    const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({name,shopping_date:shoppingDate}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
+    if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different session data.",409);}
+    const sessionId=id(),timestamp=now();
+    const responseBody={id:sessionId,session_id:sessionId,name,shopping_date:shoppingDate,status:"open",created_at:timestamp,updated_at:timestamp};
+    const stmts=[
+      db.prepare(`INSERT INTO shopping_sessions (id,user_id,name,shopping_date,status,created_at,updated_at) VALUES (?,?,?,?,'open',?,?)`).bind(sessionId,userId,name,shoppingDate,timestamp,timestamp),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"session",sessionId,"session_created",null,JSON.stringify({name,shopping_date:shoppingDate}),timestamp)
+    ];
+    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(stmts);}catch(error){if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different session data.",409);}throw error;}
     return json(await sessionDetail(db,userId,sessionId),201);
   }
 
