@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_authed/record/$recordId")({
 function RecordPage() {
   const { recordId } = Route.useParams();
   const navigate = useNavigate();
+  const returnToHistory = () => window.location.replace("/history");
   const [record, setRecord] = useState(null);
   const [error, setError] = useState(false);
 
@@ -58,7 +59,7 @@ function RecordPage() {
       >
         <ChevronLeft className="h-4 w-4" /> History
       </button>
-      <RecordDetail record={record} onDeleted={() => navigate({ to: "/history" })} />
+      <RecordDetail record={record} onDeleted={returnToHistory} />
     </div>
   );
 }
