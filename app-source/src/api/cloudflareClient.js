@@ -47,10 +47,11 @@ const records = {
 
 const integrations = {
   Core: {
-    UploadPrivateFile: async ({ file }) => {
+    UploadPrivateFile: async ({ file, idempotencyKey }) => {
       const form = new FormData();
       form.set("file", file, file.name || "upload");
-      return request("/api/files", { method: "POST", body: form });
+      const key = idempotencyKey || crypto.randomUUID();
+      return request("/api/files", { method: "POST", body: form, headers: { "Idempotency-Key": key } });
     },
     CreateFileSignedUrl: async ({ file_uri }) => {
       const match = /^cf-file:([a-f0-9-]{36})$/i.exec(String(file_uri || ""));
