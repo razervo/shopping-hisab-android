@@ -1,4 +1,5 @@
 name: Build and deploy Shopping Hisab native Worker
+# Approved FK deletion fix deployment
 
 on:
   workflow_dispatch:
