@@ -41,6 +41,9 @@ function SessionDetailPage() {
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
+  const billLineRequestKeysRef = useRef({});
+  const uploadedBillCreateKeyRef = useRef(null);
+  const uploadedBillLinesKeyRef = useRef(null);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -255,6 +258,7 @@ function SessionDetailPage() {
         const duplicateFingerprint = [shopKey, uploadedBillDate, Math.round(totalRupees * 100)].join("|").slice(0, 200);
         const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
           method: "POST",
+          headers: { "Idempotency-Key": uploadedBillCreateKeyRef.current || (uploadedBillCreateKeyRef.current = crypto.randomUUID()) },
           body: JSON.stringify({
             shop_name: uploadedBillShop.trim(),
             purchase_date: uploadedBillDate || null,
@@ -280,6 +284,7 @@ function SessionDetailPage() {
       }
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ lines: lines.map((line) => ({
           product_name: line.product_name,
           quantity: line.quantity,
@@ -292,6 +297,8 @@ function SessionDetailPage() {
         })) }),
       });
       toast.success("Bill photo and reviewed item details saved. The bill total is counted once.");
+      uploadedBillCreateKeyRef.current = null;
+      uploadedBillLinesKeyRef.current = null;
       setUploadedBillDraft(null);
       setUploadedBillId("");
       setUploadedBillFileUri("");
@@ -323,6 +330,7 @@ function SessionDetailPage() {
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": billLineRequestKeysRef.current[billId] || (billLineRequestKeysRef.current[billId] = crypto.randomUUID()) },
         body: JSON.stringify({ lines: [{
           product_name: line.product_name.trim(),
           quantity,
@@ -336,6 +344,7 @@ function SessionDetailPage() {
       });
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
       setBillLineDetails((current) => ({ ...current, [billId]: details.purchase_lines || [] }));
+      delete billLineRequestKeysRef.current[billId];
       setBillLineForms((current) => ({ ...current, [billId]: { product_name: "", quantity: "1", unit: "pcs", amount: "", shopping_item_id: "" } }));
       toast.success("Bill item added. Bill total remains the actual spending amount.");
     } catch (cause) {
