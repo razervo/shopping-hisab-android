@@ -193,7 +193,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
         ) : (
           <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[10.5px] text-muted-foreground">
-              {Number(item.price) > 0 ? "Actual shop price entered." : "Price not found? Search for this exact product online."}
+              {Number(item.price) > 0 ? "Actual shop price entered." : "Price not found? Search this item online."}
             </p>
             {!(Number(item.price) > 0) && String(item.name || "").trim() ? (
               <a
