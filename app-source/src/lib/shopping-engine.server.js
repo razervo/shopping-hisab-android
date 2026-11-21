@@ -322,6 +322,16 @@ export async function handleShoppingEngine(request, env) {
   }
 
   if (subpath === "bills" && method === "POST") {
+    const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    const operation=`bill_create:${sessionId}`;
+    const requestHash=idempotencyKey?await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")):null;
+    if(idempotencyKey){
+      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+      if(prior){
+        if(prior.request_hash!==requestHash)return fail("This idempotency key was already used for a different bill request.",409);
+        return json(safeJson(prior.response_json,{}),Number(prior.response_status)||200);
+      }
+    }
     const shopName=text(body.shop_name,160);
     const purchaseDate=body.purchase_date==null||body.purchase_date===""?null:text(body.purchase_date,10);
     if (purchaseDate&&!validDate(purchaseDate)) return fail("Invalid bill purchase date.");
@@ -342,15 +352,36 @@ export async function handleShoppingEngine(request, env) {
     const requestedStatus=["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status)?body.bill_status:"uploaded";
     const billId=id(),timestamp=now(),status=["duplicate","void"].includes(requestedStatus)?requestedStatus:(possibleDuplicate?"needs_review":requestedStatus);
     const includedInActual=["duplicate","void"].includes(status)?0:1;
-    await db.prepare(`INSERT INTO shopping_actual_bills
+    const responseBody={id:billId,shop_name:shopName,bill_total_paise:money.bill_total_paise,bill_status:status,included_in_actual:includedInActual,possible_duplicate:possibleDuplicate};
+    const billInsert=db.prepare(`INSERT INTO shopping_actual_bills
       (id,user_id,session_id,shop_name,purchase_date,file_id,original_file_uri,receipt_number,subtotal_paise,tax_paise,discount_paise,other_charges_paise,bill_total_paise,line_total_paise,reconciliation_difference_paise,bill_status,included_in_actual,duplicate_fingerprint,original_ocr_json,uploaded_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(billId,userId,sessionId,shopName,purchaseDate,fileId,text(body.original_file_uri,1200)||null,text(body.receipt_number,100),
         money.subtotal_paise,money.tax_paise,money.discount_paise,money.other_charges_paise,money.bill_total_paise,money.line_total_paise,
         money.bill_total_paise==null||money.line_total_paise==null?null:money.bill_total_paise-money.line_total_paise,status,includedInActual,fingerprint,
-        JSON.stringify(body.original_ocr&&typeof body.original_ocr==="object"?body.original_ocr:{}),timestamp,timestamp).run();
-    await audit(db,userId,sessionId,"actual_bill",billId,"bill_uploaded",{shop_name:shopName,bill_total_paise:money.bill_total_paise,possible_duplicate_of:possibleDuplicate?.id||null});
-    return json({id:billId,shop_name:shopName,bill_total_paise:money.bill_total_paise,bill_status:status,included_in_actual:includedInActual,possible_duplicate:possibleDuplicate},201);
+        JSON.stringify(body.original_ocr&&typeof body.original_ocr==="object"?body.original_ocr:{}),timestamp,timestamp);
+    const auditInsert=db.prepare(`INSERT INTO shopping_audit_events
+      (id,user_id,session_id,entity_type,entity_id,event_type,after_json,metadata_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(id(),userId,sessionId,"actual_bill",billId,"bill_uploaded",
+        JSON.stringify({shop_name:shopName,bill_total_paise:money.bill_total_paise}),
+        JSON.stringify({possible_duplicate_of:possibleDuplicate?.id||null}),timestamp);
+    const statements=[billInsert,auditInsert];
+    if(idempotencyKey)statements.push(db.prepare(`INSERT INTO shopping_idempotency_keys
+      (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{
+      await db.batch(statements);
+    }catch(cause){
+      if(idempotencyKey){
+        const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+        if(winner){
+          if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different bill request.",409);
+          return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);
+        }
+      }
+      throw cause;
+    }
+    return json(responseBody,201);
   }
 
   const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
