@@ -508,7 +508,7 @@ export function RecordForm({
         {allowEstimate ? (
           <div className="space-y-2 rounded-2xl border border-dashed border-border bg-white p-3">
             <div>
-              <p className="text-[12.5px] font-bold">Receipts added: {receiptCount}</p>
+              <p className="text-[12.5px] font-bold">Shopping lists added: {receiptCount}</p>
               <p className="text-[11px] text-muted-foreground">Scan another receipt to add its items to this same shopping list.</p>
             </div>
             <BillUploader compact purpose="shopping_list" onExtracted={appendReceipt} />
