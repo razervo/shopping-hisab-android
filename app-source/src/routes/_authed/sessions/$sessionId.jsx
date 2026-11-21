@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ function SessionDetailPage() {
   const [rows, setRows] = useState([blankRow()]);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
+  const billRequestKeyRef = useRef(null);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -182,6 +183,7 @@ function SessionDetailPage() {
     try {
       const savedBill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
         method: "POST",
+        headers: { "Idempotency-Key": billRequestKeyRef.current || (billRequestKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           shop_name: billForm.shop_name.trim(),
           purchase_date: billForm.purchase_date || null,
@@ -193,6 +195,7 @@ function SessionDetailPage() {
       });
       if (savedBill.possible_duplicate) toast.warning("Possible duplicate bill detected. Review it before trusting the spending total.");
       else toast.success("Bill added to actual spending.");
+      billRequestKeyRef.current = null;
       setBillForm({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
       await loadSession();
     } catch (cause) {
