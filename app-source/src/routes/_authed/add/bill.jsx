@@ -67,7 +67,7 @@ function AddBillPage() {
           <div className="mb-4 flex items-start gap-2.5 rounded-[20px] bg-accent px-4 py-3">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-foreground" />
             <p className="text-[12.5px] font-medium leading-relaxed text-accent-foreground">
-              Shopping list imported. First get a rough market estimate. When you reach the shop, upload the same list with the actual prices written beside the items, or enter those prices manually. Review everything before saving.
+              Imported into the legacy single-record form. For a full shopping trip with multiple lists and final bills, use Shopping Sessions from the + button. This form records one shopping entry.
             </p>
           </div>
           <RecordForm
@@ -85,7 +85,7 @@ function AddBillPage() {
         <>
           <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Upload shopping list</h1>
           <p className="mb-5 mt-1 text-[13.5px] text-muted-foreground">
-            Upload a photo of your list before shopping. Item names and quantities are read first; prices are not invented. We estimate them in the next step.
+            This legacy single-record form is for a completed shopping entry. To plan first, add multiple lists, estimate, then upload final bills after shopping, use Shopping Sessions.
           </p>
           <BillUploader purpose="shopping_list" onExtracted={handleExtracted} />
         </>
