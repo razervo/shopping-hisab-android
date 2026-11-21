@@ -48,6 +48,7 @@ function SessionDetailPage() {
   const manualSourceLinesKeyRef = useRef(null);
   const scannedSourceListKeyRef = useRef(null);
   const manualSourceListKeyRef = useRef(null);
+  const confirmationRequestKeyRef = useRef(null);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -408,8 +409,10 @@ function SessionDetailPage() {
     try {
       const result = await api(`/api/shopping/sessions/${sessionId}/confirm`, {
         method: "POST",
+        headers: { "Idempotency-Key": confirmationRequestKeyRef.current || (confirmationRequestKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ confirmed_total_paise: Math.round(rupees * 100) }),
       });
+      confirmationRequestKeyRef.current = null;
       toast.success(`Shopping session completed. Confirmation v${result.revision_number} saved.`);
       await loadSession();
     } catch (cause) {
