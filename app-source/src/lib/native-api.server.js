@@ -166,10 +166,18 @@ async function handleRecords(request, env, user, url) {
   }
 
   if (method === "DELETE") {
-    const result = await env.DB.prepare(
-      "DELETE FROM shopping_records WHERE id = ? AND user_id = ?",
-    ).bind(recordId, user.id).run();
-    return result.meta?.changes ? json({ success: true }) : error("Record not found.", 404);
+    // Remove the linked engine session first. Its child rows are configured to
+    // cascade, while shopping_sessions.legacy_record_id references this legacy
+    // record and otherwise prevents the parent delete. D1 batch is atomic.
+    const results = await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM shopping_sessions WHERE legacy_record_id = ? AND user_id = ?",
+      ).bind(recordId, user.id),
+      env.DB.prepare(
+        "DELETE FROM shopping_records WHERE id = ? AND user_id = ?",
+      ).bind(recordId, user.id),
+    ]);
+    return results?.[1]?.meta?.changes ? json({ success: true }) : error("Record not found.", 404);
   }
 
   return error("Method not allowed.", 405);
