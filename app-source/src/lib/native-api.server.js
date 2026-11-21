@@ -635,19 +635,22 @@ async function handleDirectBillRead(request, env, user) {
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
   const [readResult, uploadResult] = await Promise.allSettled([readPromise, uploadPromise]);
   if (uploadResult.status === "rejected") throw new Error(`Receipt could not be saved to Google Drive: ${uploadResult.reason?.message || "Please reconnect Drive and retry."}`);
-  if (readResult.status === "rejected") throw new Error(`Receipt was uploaded, but AI could not read it: ${readResult.reason?.message || "Try a clearer photo."}`);
-  const modelResult = readResult.value;
   const uploaded = uploadResult.value;
-  // callVisionModel already parses the model's answer into the draft object.
-  const parsed = modelResult;
-  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
-    throw new Error("The bill could not be interpreted. Try a clearer, straight photo.");
-  }
+  // Persist the Drive file before OCR finishes so a failed read remains recoverable.
   const id = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
   ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, mime, uploaded.size).run();
-  return json({ draft: parsed.draft, file_uri: `cf-file:${id}` });
+  const fileUri = `cf-file:${id}`;
+  if (readResult.status === "rejected") {
+    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${readResult.reason?.message || "Try again."}` });
+  }
+  // callVisionModel already parses the model's answer into the draft object.
+  const parsed = readResult.value;
+  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
+    return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
+  }
+  return json({ draft: parsed.draft, file_uri: fileUri });
 }
 
 async function handleAI(request, env, user) {
