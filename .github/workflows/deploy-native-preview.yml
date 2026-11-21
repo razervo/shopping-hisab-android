@@ -1,10 +1,7 @@
 name: Build and deploy Shopping Hisab native Worker
 
 on:
-  push:
-    branches: [cloudflare-native-migration]
-    paths:
-      - ".github/workflows/deploy-native-preview.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
