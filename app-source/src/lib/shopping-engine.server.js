@@ -475,8 +475,11 @@ export async function handleShoppingEngine(request, env) {
     if(patch.bill_total_paise!==undefined||patch.line_total_paise!==undefined)patch.reconciliation_difference_paise=effectiveTotal==null||effectiveLines==null?null:effectiveTotal-effectiveLines;
     patch.updated_at=now();
     const before=Object.fromEntries(Object.keys(patch).filter(k=>k in existing).map(k=>[k,existing[k]]));
-    await db.prepare(`UPDATE shopping_actual_bills SET ${Object.keys(patch).map(k=>k+"=?").join(",")} WHERE id=? AND user_id=? AND session_id=?`).bind(...Object.values(patch),billId,userId,sessionId).run();
-    await audit(db,userId,sessionId,"actual_bill",billId,"bill_corrected",patch,before);
+    const timestamp=now();
+    await db.batch([
+      db.prepare(`UPDATE shopping_actual_bills SET ${Object.keys(patch).map(k=>k+"=?").join(",")} WHERE id=? AND user_id=? AND session_id=?`).bind(...Object.values(patch),billId,userId,sessionId),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_corrected",JSON.stringify(before),JSON.stringify(patch),timestamp),
+    ]);
     return json(await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first());
   }
 
