@@ -265,6 +265,12 @@ export async function handleShoppingEngine(request, env) {
   if (mergeItemMatch && method === "POST") {
     const sourceId=mergeItemMatch[1],targetId=text(body.target_item_id,80);
     if(!targetId||targetId===sourceId)return fail("Choose a different planned item to merge into.");
+    const requestKey=text(request.headers.get("Idempotency-Key"),160)||("merge:"+sourceId+":"+targetId);
+    const operation="item_merge:"+sessionId;
+    const payload={source_item_id:sourceId,target_item_id:targetId};
+    const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(payload))))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    const prior=await db.prepare("SELECT request_hash FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+    if(prior){if(prior.request_hash!==requestHash)return fail("Idempotency key reused with different request data.",409);return json(await sessionDetail(db,userId,sessionId));}
     const source=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(sourceId,userId,sessionId).first();
     const target=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(targetId,userId,sessionId).first();
     if(!source||!target)return fail("One of the selected planned items was not found.",404);
@@ -272,14 +278,20 @@ export async function handleShoppingEngine(request, env) {
     if(String(source.unit||"pcs").trim().toLowerCase()!==String(target.unit||"pcs").trim().toLowerCase())return fail("These items use different units. Convert or correct the units before merging.");
     const timestamp=now(),combinedQuantity=Number(target.planned_quantity||0)+Number(source.planned_quantity||0);
     const mergedNote=text([target.notes,source.notes].filter(Boolean).join(" · "),1000);
-    await db.batch([
+    const statements=[
       db.prepare("UPDATE shopping_items SET planned_quantity=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(combinedQuantity,mergedNote,timestamp,targetId,userId,sessionId),
       db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND source_line_id NOT IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?) AND user_id=? AND session_id=?").bind(targetId,sourceId,targetId,userId,sessionId),
       db.prepare("UPDATE shopping_purchase_lines SET shopping_item_id=?,is_extra=0,match_method='confirmed',updated_at=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,timestamp,sourceId,userId,sessionId),
       db.prepare("UPDATE shopping_items SET item_status='cancelled',merged_into_item_id=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(targetId,text(`Merged into ${target.product_name} (${targetId})`,1000),timestamp,sourceId,userId,sessionId),
-    ]);
-    await audit(db,userId,sessionId,"shopping_item",targetId,"items_merged",{source_item_id:sourceId,added_quantity:Number(source.planned_quantity||0),combined_quantity:combinedQuantity});
-    await audit(db,userId,sessionId,"shopping_item",sourceId,"item_merged_into",{target_item_id:targetId});
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"shopping_item",targetId,"items_merged",JSON.stringify({target_quantity:Number(target.planned_quantity||0)}),JSON.stringify({source_item_id:sourceId,added_quantity:Number(source.planned_quantity||0),combined_quantity:combinedQuantity}),timestamp),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"shopping_item",sourceId,"item_merged_into",JSON.stringify({item_status:source.item_status}),JSON.stringify({target_item_id:targetId}),timestamp),
+      db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify({merged:true,source_item_id:sourceId,target_item_id:targetId}),200,timestamp)
+    ];
+    try{await db.batch(statements);}catch(error){
+      const winner=await db.prepare("SELECT request_hash FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+      if(winner){if(winner.request_hash!==requestHash)return fail("Idempotency key reused with different request data.",409);return json(await sessionDetail(db,userId,sessionId));}
+      throw error;
+    }
     return json(await sessionDetail(db,userId,sessionId));
   }
 
