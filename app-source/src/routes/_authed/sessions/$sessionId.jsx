@@ -813,27 +813,33 @@ function SessionDetailPage() {
       ) : null}
 
       <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[18px] border border-border bg-white p-2">
-        <a href="#trip-list" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${items.length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-1" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${items.length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">1</span>
           Your list
         </a>
-        <a href="#trip-estimate" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${latestEstimate ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-2" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${latestEstimate ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">2</span>
           Estimate
         </a>
-        <a href="#trip-bills" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${(session.bills || []).length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-3" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${(session.bills || []).length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">3</span>
           Shop & bills
         </a>
-        <a href="#trip-finish" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${completed ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-4" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${completed ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">4</span>
           Finish
         </a>
       </nav>
 
+      <details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+        <summary className="cursor-pointer px-4 py-4">
+          <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
+          <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <>
-        <section className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+        <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
           <div>
             <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
@@ -977,7 +983,15 @@ function SessionDetailPage() {
           </div>
         )}
       </section>
+        </div>
+      </details>
 
+      <details id="trip-step-2" open={!completed && items.length > 0 && !latestEstimate} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+        <summary className="cursor-pointer px-4 py-4">
+          <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
+          <span className="mt-1 block text-[11.5px] text-muted-foreground">Get an idea of the total before you shop{latestEstimate ? " · Estimate saved" : ""}</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form onSubmit={saveEstimate} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
@@ -1046,7 +1060,7 @@ function SessionDetailPage() {
         <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
       </section>
 
-      <section className="mt-6">
+      <section className="mt-4">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>
         {lists.length ? <div className="space-y-2">
           {lists.map((list) => (
@@ -1057,7 +1071,15 @@ function SessionDetailPage() {
           ))}
         </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your saved lists will appear here.</p>}
       </section>
+        </div>
+      </details>
 
+      <details id="trip-step-3" open={!completed && (Boolean(latestEstimate) || (session.bills || []).length > 0)} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+        <summary className="cursor-pointer px-4 py-4">
+          <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
+          <span className="mt-1 block text-[11.5px] text-muted-foreground">Tick off purchases and add bills from each shop · {(session.bills || []).length} bills</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
@@ -1249,7 +1271,15 @@ function SessionDetailPage() {
           ))}</div>
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No bills added yet. Add a shop purchase or scan a receipt to record what you paid.</p>}
       </section>
+        </div>
+      </details>
 
+      <details id="trip-step-4" open={completed} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+        <summary className="cursor-pointer px-4 py-4">
+          <span className="block text-[14px] font-extrabold">4. Finish your trip</span>
+          <span className="mt-1 block text-[11.5px] text-muted-foreground">Review your totals and save the final shopping summary</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form id="trip-finish" onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
           <div>
@@ -1306,6 +1336,8 @@ function SessionDetailPage() {
           ))}</div>
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Create an estimate above. Each saved version is retained; newer estimates do not overwrite older ones.</p>}
       </section>
+        </div>
+      </details>
     </div>
   );
 }
