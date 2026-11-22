@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
@@ -32,8 +32,13 @@ async function api(path, options = {}) {
 
 function SessionDetailPage() {
   const { sessionId } = Route.useParams();
+  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingTrip, setEditingTrip] = useState(false);
+  const [tripName, setTripName] = useState("");
+  const [tripDate, setTripDate] = useState("");
+  const [tripSaving, setTripSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [listName, setListName] = useState("My shopping list");
@@ -97,6 +102,47 @@ function SessionDetailPage() {
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
+
+  useEffect(() => {
+    if (!session) return;
+    setTripName(session.name || "");
+    setTripDate(session.shopping_date || "");
+  }, [session?.id, session?.name, session?.shopping_date]);
+
+  const saveTripDetails = async (event) => {
+    event.preventDefault();
+    if (!tripDate) return toast.error("Choose the shopping date.");
+    setTripSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: tripName.trim(), shopping_date: tripDate }),
+      });
+      toast.success("Trip details updated.");
+      setEditingTrip(false);
+      await loadSession();
+    } catch (cause) {
+      toast.error(cause.message || "Could not update this trip.");
+    } finally {
+      setTripSaving(false);
+    }
+  };
+
+  const deleteEmptyTrip = async () => {
+    const confirmed = window.confirm("Delete this empty shopping trip? This cannot be undone. Trips with shopping lists, items, estimates or bills are protected.");
+    if (!confirmed) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      });
+      toast.success("Empty trip deleted.");
+      navigate({ to: "/sessions" });
+    } catch (cause) {
+      toast.error(cause.message || "Could not delete this trip.");
+      await loadSession();
+    }
+  };
 
   const updateRow = (index, key, value) => {
     setRows((current) => current.map((row, i) => i === index ? { ...row, [key]: value } : row));
@@ -689,6 +735,8 @@ function SessionDetailPage() {
     (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
   );
   const latestEstimate = (session.estimates || [])[0] || null;
+  const canDeleteEmptyTrip = !completed && !items.length && !lists.length &&
+    !(session.bills || []).length && !(session.estimates || []).length;
   const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
   const pricedEstimateItems = items.filter((item) => {
     const value = estimatePrices[item.id];
@@ -719,6 +767,40 @@ function SessionDetailPage() {
           <div><p className="text-[11px] text-white/65">Bills to check</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{Number(session.bills_amount_pending || 0)}</p></div>
         </div>
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setEditingTrip((value) => !value)}
+          className="rounded-full border border-border bg-white px-3.5 py-2 text-[11.5px] font-bold text-primary">
+          {editingTrip ? "Close trip editor" : "Edit trip details"}
+        </button>
+        {canDeleteEmptyTrip ? (
+          <button type="button" onClick={deleteEmptyTrip}
+            className="rounded-full border border-destructive/30 bg-white px-3.5 py-2 text-[11.5px] font-bold text-destructive">
+            Delete empty trip
+          </button>
+        ) : !completed ? (
+          <span className="text-[10.5px] text-muted-foreground">Trips with shopping data are protected from deletion.</span>
+        ) : null}
+      </div>
+      {editingTrip && !completed ? (
+        <form onSubmit={saveTripDetails} className="mt-3 space-y-3 rounded-[22px] border border-border bg-white p-4">
+          <div>
+            <label htmlFor="edit-trip-name" className="mb-1.5 block text-[11.5px] font-bold text-muted-foreground">Trip name</label>
+            <input id="edit-trip-name" value={tripName} onChange={(event) => setTripName(event.target.value)}
+              maxLength={120} placeholder="e.g. Monthly groceries"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+          </div>
+          <div>
+            <label htmlFor="edit-trip-date" className="mb-1.5 block text-[11.5px] font-bold text-muted-foreground">Shopping date</label>
+            <input id="edit-trip-date" type="date" required value={tripDate} onChange={(event) => setTripDate(event.target.value)}
+              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+          </div>
+          <button type="submit" disabled={tripSaving}
+            className="w-full rounded-full bg-primary py-3 text-[12.5px] font-bold text-primary-foreground disabled:opacity-60">
+            {tripSaving ? "Saving changes…" : "Save trip details"}
+          </button>
+        </form>
+      ) : null}
 
       <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[18px] border border-border bg-white p-2">
         <a href="#trip-list" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${items.length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
