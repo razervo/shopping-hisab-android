@@ -19,6 +19,20 @@ const dateLabel = (value) => value
 
 const blankRow = () => ({ name: "", quantity: "1", unit: "pcs", brand: "", pack_size: "" });
 
+const parseReceiptMoney = (value) => {
+  if (value == null || String(value).trim() === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
+  const normalized = String(value)
+    .trim()
+    .replace(/\\/-$/, "")
+    .replace(/(?:INR|Rs\\.?)/gi, "")
+    .replace(/[₹,\\s]/g, "")
+    .replace(/[^\\d.]/g, "");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "include",
@@ -280,16 +294,14 @@ function SessionDetailPage() {
       product_name: String(item?.name || ""),
       quantity: String(item?.qty ?? 1),
       unit: String(item?.unit || "pcs"),
-      amount: Number(item?.amount) > 0 ? String(item.amount) : "",
+      amount: (() => { const parsed = parseReceiptMoney(item?.amount); return parsed !== null && parsed > 0 ? parsed.toFixed(2) : ""; })(),
       shopping_item_id: "",
       original: item,
     }));
     const totals = draft?.totals && typeof draft.totals === "object" ? draft.totals : {};
     const rawGrandTotal = totals.grandTotal ?? draft?.grandTotal ?? draft?.grand_total ?? null;
-    const parsedGrandTotal = rawGrandTotal == null || String(rawGrandTotal).trim() === ""
-      ? null
-      : Number(rawGrandTotal);
-    const hasPrintedTotal = parsedGrandTotal !== null && Number.isFinite(parsedGrandTotal) && parsedGrandTotal >= 0;
+    const parsedGrandTotal = parseReceiptMoney(rawGrandTotal);
+    const hasPrintedTotal = parsedGrandTotal !== null;
     const everyRowHasAmount = rows.length > 0 && rows.every((row) =>
       row.amount.trim() !== "" && Number.isFinite(Number(row.amount)) && Number(row.amount) > 0
     );
