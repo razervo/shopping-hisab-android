@@ -485,6 +485,8 @@ export async function handleShoppingEngine(request, env) {
     }
     if(body.included_in_actual!==undefined){if(![0,1,false,true].includes(body.included_in_actual))return fail("included_in_actual must be true or false.");patch.included_in_actual=body.included_in_actual===true||body.included_in_actual===1?1:0;}
     if(body.bill_status!==undefined){if(!["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status))return fail("Invalid bill status.");patch.bill_status=body.bill_status;if(["duplicate","void"].includes(body.bill_status)&&body.included_in_actual===undefined)patch.included_in_actual=0;else if(["duplicate","void"].includes(existing.bill_status)&&!["duplicate","void"].includes(body.bill_status)&&body.included_in_actual===undefined)patch.included_in_actual=1;}
+    // Duplicate and void bills must never be counted, even if a client explicitly requests inclusion.
+    if(["duplicate","void"].includes(patch.bill_status??existing.bill_status))patch.included_in_actual=0;
     if(body.duplicate_of_bill_id!==undefined){
       if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);}
       patch.duplicate_of_bill_id=body.duplicate_of_bill_id||null;
