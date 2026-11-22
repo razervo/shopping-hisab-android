@@ -79,7 +79,7 @@ function HistoryPage() {
         <h2 className="text-[13px] font-bold tracking-wide">
           {records.length > 0
             ? `${records.length}${hasMore ? "+" : ""} ${records.length === 1 && !hasMore ? "purchase" : "purchases"}`
-            : "Records"}
+            : "Your purchases"}
         </h2>
         {count !== null ? (
           <span className="text-[11.5px] text-muted-foreground">Total spent {inr(count)}</span>
