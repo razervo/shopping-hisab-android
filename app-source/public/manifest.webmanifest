@@ -1,7 +1,7 @@
 {
-  "name": "Shopping Hisab — Your Daily Shopping Account",
+  "name": "Shopping Hisab — Your Shopping Companion",
   "short_name": "Shopping Hisab",
-  "description": "Record every shopping expense by photo or by hand and keep an accurate daily hisab.",
+  "description": "Plan shopping lists, estimate costs, capture receipts and keep your shopping trips organised.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
