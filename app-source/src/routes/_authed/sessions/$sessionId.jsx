@@ -300,7 +300,7 @@ function SessionDetailPage() {
     setUploadedBillId("");
     setUploadedBillFileUri(fileUri || "");
     setUploadedBillShop(String(draft.shopName || ""));
-    setUploadedBillDate(/^\\d{4}-\\d{2}-\\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
+    setUploadedBillDate(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
     setUploadedBillTotal(hasPrintedTotal
       ? parsedGrandTotal.toFixed(2)
       : itemLinesTotal !== null ? itemLinesTotal.toFixed(2) : "");
