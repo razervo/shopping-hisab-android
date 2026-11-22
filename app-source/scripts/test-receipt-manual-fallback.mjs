@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { URL } from "node:url";
+import { console } from "node:console";
 
 const nativeApi = await readFile(new URL("../src/lib/native-api.server.js", import.meta.url), "utf8");
 const uploader = await readFile(new URL("../src/components/shopping/BillUploader.jsx", import.meta.url), "utf8");
