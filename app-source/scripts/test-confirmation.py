@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression test for idempotent final expense confirmation under retries/races."""
+"""Regression test for final expense review, duplicate exclusion and retry safety."""
 
 from pathlib import Path
 import json
@@ -22,11 +22,22 @@ db.execute(
     ("session-confirm", "u1", "Confirmation QA", "2026-11-22", "open",
      "2026-11-22T14:00:00Z", "2026-11-22T14:00:00Z"),
 )
+db.execute(
+    """INSERT INTO shopping_actual_bills
+       (id,user_id,session_id,shop_name,purchase_date,receipt_number,
+        bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+    ("bill-needs-review", "u1", "session-confirm", "QA Store", "2026-11-22",
+     "QA-1", 1000, "needs_review", 1,
+     "2026-11-22T14:00:30Z", "2026-11-22T14:00:30Z"),
+)
 
 source = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
 start = source.index('if(subpath==="confirm" && method==="POST"){')
 end = source.index('if (subpath === "audit" && method === "GET")', start)
 handler = source[start:end]
+assert "bill_status NOT IN ('verified','duplicate','void')" in handler
+assert "Review every bill and mark it Verified, Duplicate or Void" in handler
 assert "INSERT INTO shopping_expense_confirmations" in handler
 assert "AND EXISTS (SELECT 1 FROM shopping_expense_confirmations WHERE id=?" in handler
 assert "INSERT INTO shopping_audit_events" in handler
@@ -40,11 +51,30 @@ def confirm_attempt(confirmation_id, idem_key):
     operation = "session_confirm:" + session_id
     request_hash = "qa-hash-" + idem_key
     timestamp = "2026-11-22T14:01:00Z"
+
+    unresolved = db.execute(
+        """SELECT COUNT(*) FROM shopping_actual_bills
+           WHERE user_id=? AND session_id=?
+             AND bill_status NOT IN ('verified','duplicate','void')""",
+        (user_id, session_id),
+    ).fetchone()[0]
+    if unresolved:
+        return None
+
+    totals = db.execute(
+        """SELECT COALESCE(SUM(
+             CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void')
+                  THEN bill_total_paise ELSE 0 END
+           ),0)
+           FROM shopping_actual_bills WHERE user_id=? AND session_id=?""",
+        (user_id, session_id),
+    ).fetchone()[0]
+
     response_json = json.dumps({
         "id": confirmation_id,
         "revision_number": 1,
-        "calculated_total_paise": 0,
-        "confirmed_total_paise": 0,
+        "calculated_total_paise": totals,
+        "confirmed_total_paise": totals,
         "pending_bill_amounts": 0,
         "pending_items": [],
         "confirmed_at": timestamp,
@@ -59,7 +89,8 @@ def confirm_attempt(confirmation_id, idem_key):
              SELECT 1 FROM shopping_sessions
              WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
            )""",
-        (confirmation_id,user_id,session_id,1,0,0,None,"{}",timestamp,
+        (confirmation_id,user_id,session_id,1,totals,totals,None,
+         json.dumps({"calculated_total_paise": totals}),timestamp,
          session_id,user_id),
     )
     inserted = insert.rowcount
@@ -72,7 +103,7 @@ def confirm_attempt(confirmation_id, idem_key):
                SELECT 1 FROM shopping_expense_confirmations
                WHERE id=? AND user_id=? AND session_id=?
              )""",
-        (0,timestamp,session_id,user_id,confirmation_id,user_id,session_id),
+        (totals,timestamp,session_id,user_id,confirmation_id,user_id,session_id),
     )
 
     db.execute(
@@ -103,12 +134,46 @@ def confirm_attempt(confirmation_id, idem_key):
     )
     return inserted
 
-# The first request confirms the session and writes exactly one confirmation,
-# audit event and idempotency response.
-assert confirm_attempt("confirmation-1", "qa-key-1") == 1
+# An unresolved bill must block confirmation before any state/audit/idempotency
+# writes happen.
+assert confirm_attempt("confirmation-blocked", "qa-key-blocked") is None
 assert db.execute(
     "SELECT status FROM shopping_sessions WHERE id='session-confirm'"
-).fetchone()[0] == "completed"
+).fetchone()[0] == "open"
+assert db.execute(
+    "SELECT COUNT(*) FROM shopping_expense_confirmations WHERE session_id='session-confirm'"
+).fetchone()[0] == 0
+assert db.execute(
+    "SELECT COUNT(*) FROM shopping_audit_events WHERE session_id='session-confirm' AND event_type='expense_confirmed'"
+).fetchone()[0] == 0
+assert db.execute(
+    "SELECT COUNT(*) FROM shopping_idempotency_keys WHERE session_id='session-confirm'"
+).fetchone()[0] == 0
+
+# Verify one bill and add one explicitly excluded duplicate.
+db.execute(
+    "UPDATE shopping_actual_bills SET bill_status='verified' WHERE id='bill-needs-review'"
+)
+db.execute(
+    """INSERT INTO shopping_actual_bills
+       (id,user_id,session_id,shop_name,purchase_date,receipt_number,
+        bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id,
+        uploaded_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+    ("bill-duplicate", "u1", "session-confirm", "QA Store", "2026-11-22",
+     "QA-1", 2500, "duplicate", 0, "bill-needs-review",
+     "2026-11-22T14:00:40Z", "2026-11-22T14:00:40Z"),
+)
+
+# The first request confirms only the verified bill amount (₹10), excluding
+# the duplicate bill (₹25), and writes one confirmation/audit/idempotency record.
+assert confirm_attempt("confirmation-1", "qa-key-1") == 1
+assert db.execute(
+    "SELECT status,confirmed_actual_total_paise FROM shopping_sessions WHERE id='session-confirm'"
+).fetchone() == ("completed", 1000)
+assert db.execute(
+    "SELECT calculated_total_paise,confirmed_total_paise FROM shopping_expense_confirmations WHERE session_id='session-confirm'"
+).fetchone() == (1000, 1000)
 assert db.execute(
     "SELECT COUNT(*) FROM shopping_expense_confirmations WHERE session_id='session-confirm'"
 ).fetchone()[0] == 1
@@ -137,4 +202,4 @@ assert db.execute(
 
 violations = db.execute("PRAGMA foreign_key_check").fetchall()
 assert not violations, f"Foreign key violations: {violations}"
-print("Confirmation regression checks passed: one finalization, no duplicate snapshot/audit event, no poisoned idempotency key on retry.")
+print("Confirmation checks passed: unresolved bills block finalization, duplicate bills are excluded, and retries cannot duplicate snapshots/audit/idempotency rows.")
