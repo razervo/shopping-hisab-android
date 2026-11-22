@@ -33,6 +33,10 @@ db.execute(
 )
 
 detail_source = (ROOT / "src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
+manual_bill_start = detail_source.index("const saveBill = async")
+manual_bill_end = detail_source.index("const ", manual_bill_start + 10)
+manual_bill_handler = detail_source[manual_bill_start:manual_bill_end]
+assert 'bill_status: "verified"' in manual_bill_handler
 assert "const unresolvedBills" in detail_source
 assert "Mark each one Verified, Duplicate or Void" in detail_source
 assert "disabled={confirmationSaving || unresolvedBills.length > 0" in detail_source
