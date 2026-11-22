@@ -30,6 +30,23 @@ assert "updated_at < datetime('now', '-30 minutes')" in drive_code
 assert "UPDATE drive_upload_idempotency SET uploaded_file_id = ?" in drive_code
 assert "SELECT original_name, size_bytes FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?" in drive_code
 
+# Verify the app's orchestration keeps a saved receipt recoverable if OCR fails,
+# and that retry reads the saved Drive file rather than uploading another copy.
+direct_start = source.index("async function handleDirectBillRead(")
+direct_end = source.index("async function queryCombinedReportRecords(", direct_start)
+direct_read = source[direct_start:direct_end]
+assert "Promise.allSettled([readPromise, uploadPromise])" in direct_read
+assert "ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime)" in direct_read
+assert "recoverable: true" in direct_read
+assert "file_uri: fileUri" in direct_read
+ai_handler = source[source.index("async function handleAI("):source.index("function safeImportedTimestamp(")]
+assert "downloadGoogleDriveFile(env.DB, user.id, env, file.drive_file_id)" in ai_handler
+
+uploader = (ROOT / "src/components/shopping/BillUploader.jsx").read_text(encoding="utf-8")
+assert "const retrySavedReceipt = async ()" in uploader
+assert "readShoppingBill({ data: { fileUri: recoveryFileUri, purpose } })" in uploader
+assert "setRecoveryFileUri(result.file_uri)" in uploader
+
 # Model the difficult failure: Google Drive has created the file, but the app
 # still has a pending D1 marker and no saved Drive file ID / uploaded_files row.
 db.execute(
