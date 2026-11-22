@@ -562,11 +562,11 @@ async function callGeminiVision(env, imageDataUrl, instructions, maxTokens = 220
   return parsed;
 }
 
-async function readBillWithFallback(env, imageDataUrl, instructions, maxTokens = 2200) {
+async function readBillWithFallback(env, imageDataUrl, instructions, maxTokens = 2200, allowEmptyItems = false) {
   if (env.GEMINI_API_KEY) {
     try {
       const parsed = await callGeminiVision(env, imageDataUrl, instructions, maxTokens);
-      if (parsed.draft.items.length) return { ...parsed, reader: "gemini" };
+      if (parsed.draft.items.length || allowEmptyItems) return { ...parsed, reader: "gemini" };
       throw new Error("Gemini did not detect any shopping-list items.");
     } catch (geminiError) {
       console.warn("Gemini OCR failed; trying Moondream fallback:", geminiError?.message || geminiError);
@@ -682,7 +682,7 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200);
+  const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
   // Upload to Drive at the same time as AI reads the original image.
   const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
   const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
@@ -697,7 +697,7 @@ async function handleDirectBillRead(request, env, user) {
   }
   // callVisionModel already parses the model's answer into the draft object.
   const parsed = readResult.value;
-  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
+  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || (!parsed.draft.items.length && purpose !== "priced_list")) {
     return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
   }
   return json({ draft: parsed.draft, file_uri: fileUri });
