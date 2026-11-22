@@ -49,6 +49,7 @@ function SessionDetailPage() {
   const scannedSourceListKeyRef = useRef(null);
   const manualSourceListKeyRef = useRef(null);
   const confirmationRequestKeyRef = useRef(null);
+  const confirmationLockRef = useRef(false);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -405,6 +406,8 @@ function SessionDetailPage() {
       const direction = difference > 0 ? "higher" : "lower";
       if (!window.confirm(`Your confirmed total is ₹${rupees.toFixed(2)}, but bills calculate to ₹${calculatedRupees.toFixed(2)} (₹${Math.abs(difference).toFixed(2)} ${direction}). Save this difference in the final confirmation?`)) return;
     }
+    if (confirmationLockRef.current) return;
+    confirmationLockRef.current = true;
     setConfirmationSaving(true);
     try {
       const result = await api(`/api/shopping/sessions/${sessionId}/confirm`, {
@@ -418,6 +421,7 @@ function SessionDetailPage() {
     } catch (cause) {
       toast.error(cause.message || "Could not complete this session.");
     } finally {
+      confirmationLockRef.current = false;
       setConfirmationSaving(false);
     }
   };
