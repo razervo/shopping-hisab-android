@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
+import { parseReceiptMoney } from "@/lib/receipt-money";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -18,20 +19,6 @@ const dateLabel = (value) => value
   : "Date not set";
 
 const blankRow = () => ({ name: "", quantity: "1", unit: "pcs", brand: "", pack_size: "" });
-
-const parseReceiptMoney = (value) => {
-  if (value == null || String(value).trim() === "") return null;
-  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
-  const normalized = String(value)
-    .trim()
-    .replace(/\\/-$/, "")
-    .replace(/(?:INR|Rs\\.?)/gi, "")
-    .replace(/[₹,\\s]/g, "")
-    .replace(/[^\\d.]/g, "");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-};
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
