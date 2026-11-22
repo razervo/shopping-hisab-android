@@ -50,6 +50,7 @@ function SessionDetailPage() {
   const manualSourceListKeyRef = useRef(null);
   const confirmationRequestKeyRef = useRef(null);
   const confirmationLockRef = useRef(false);
+  const scannedListSaveLockRef = useRef(false);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -472,6 +473,8 @@ function SessionDetailPage() {
     const validRows = scannedRows.map((row) => ({ ...row, name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit.trim() || "pcs" }));
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
+    if (scannedListSaveLockRef.current) return;
+    scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
     try {
       const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(scannedFileUri);
@@ -520,6 +523,7 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not save the scanned list.");
       await loadSession();
     } finally {
+      scannedListSaveLockRef.current = false;
       setScannedListSaving(false);
     }
   };
