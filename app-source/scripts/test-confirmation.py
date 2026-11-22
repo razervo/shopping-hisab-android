@@ -40,6 +40,7 @@ assert 'bill_status: "verified"' in manual_bill_handler
 assert "const unresolvedBills" in detail_source
 assert "Mark each one Verified, Duplicate or Void" in detail_source
 assert "disabled={confirmationSaving || unresolvedBills.length > 0" in detail_source
+assert "[item.brand, item.pack_size].filter(Boolean).join(\" · \")" in detail_source
 
 source = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
 start = source.index('if(subpath==="confirm" && method==="POST"){')
