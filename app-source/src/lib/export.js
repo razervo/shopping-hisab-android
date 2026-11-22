@@ -74,7 +74,62 @@ export async function exportRecordsPDF(records, label = "shopping-hisab") {
     doc.text(shop, left + 80, y);
     doc.text(String(r.item_count ?? r.items?.length ?? 0), w - left - 110, y, { align: "right" });
     doc.text(`Rs. ${Number(r.total || 0).toFixed(2)}`, w - left, y, { align: "right" });
-    y += 9;
+    y += 12;
+
+    const detailWidth = w - left * 2 - 96;
+    const itemRows = Array.isArray(r.items) ? r.items : [];
+    if (itemRows.length) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("ITEM DETAILS", left + 80, y);
+      y += 11;
+      doc.setFont("helvetica", "normal");
+      for (const item of itemRows) {
+        const name = String(item.name || item.product_name || item.item || "Item");
+        const quantity = item.qty ?? item.quantity;
+        const unit = String(item.unit || "");
+        const quantityText = quantity == null ? "" : `${quantity} ${unit}`.trim();
+        const amount = Number(item.amount ?? item.line_total ?? item.line_amount ?? item.total);
+        const amountText = Number.isFinite(amount) ? ` · Rs. ${amount.toFixed(2)}` : "";
+        const label = `• ${name}${quantityText ? ` — ${quantityText}` : ""}${amountText}`;
+        const wrapped = doc.splitTextToSize(label, detailWidth);
+        const blockHeight = wrapped.length * 10;
+        if (y + blockHeight > 760) {
+          doc.addPage();
+          y = 64;
+        }
+        doc.text(wrapped, left + 84, y);
+        y += blockHeight;
+      }
+    }
+
+    const receipts = Array.isArray(r.receipts) ? r.receipts : [];
+    if (receipts.length) {
+      if (y > 748) {
+        doc.addPage();
+        y = 64;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("RECEIPTS", left + 80, y);
+      y += 11;
+      doc.setFont("helvetica", "normal");
+      for (const receipt of receipts) {
+        const amount = Number(receipt.amount ?? receipt.total);
+        const amountText = Number.isFinite(amount) ? ` · Rs. ${amount.toFixed(2)}` : " · amount pending";
+        const reference = receipt.receipt_number ? ` · #${receipt.receipt_number}` : "";
+        const label = `• ${receipt.shop_name || "Shop"}${reference}${amountText} · ${String(receipt.status || "recorded")}`;
+        const wrapped = doc.splitTextToSize(label, detailWidth);
+        const blockHeight = wrapped.length * 10;
+        if (y + blockHeight > 760) {
+          doc.addPage();
+          y = 64;
+        }
+        doc.text(wrapped, left + 84, y);
+        y += blockHeight;
+      }
+    }
+
     doc.setDrawColor(238);
     doc.line(left, y, w - left, y);
     y += 12;
