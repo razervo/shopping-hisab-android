@@ -1077,7 +1077,9 @@ function SessionDetailPage() {
       <details id="trip-step-3" open={!completed && (Boolean(latestEstimate) || (session.bills || []).length > 0)} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
-          <span className="mt-1 block text-[11.5px] text-muted-foreground">Tick off purchases and add bills from each shop · {(session.bills || []).length} bills</span>
+          <span className="mt-1 block text-[11.5px] text-muted-foreground">
+            {fullyPurchasedItemCount} of {items.length} items bought · {(session.bills || []).length} shop bills
+          </span>
         </summary>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
@@ -1146,15 +1148,27 @@ function SessionDetailPage() {
                     <span className="font-semibold tabular-nums">{inr(Math.round(uploadedBillLinesTotal * 100))}</span>
                   </div>
                   <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px]">
-                    <span className="text-muted-foreground">Total paid you entered</span>
+                    <span className="text-muted-foreground">
+                      {uploadedBillTotalSource === "receipt"
+                        ? "AI-read printed total"
+                        : uploadedBillTotalSource === "items"
+                          ? "Provisional line total"
+                          : "Total paid you entered"}
+                    </span>
                     <span className="font-semibold tabular-nums">{inr(Math.round(Number(uploadedBillTotal || 0) * 100))}</span>
                   </div>
-                  {Math.abs(uploadedBillLinesTotal - Number(uploadedBillTotal || 0)) >= 0.01 ? (
+                  {uploadedBillTotalSource === "items" ? (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[10.5px] leading-relaxed text-amber-900">
+                      This amount is only the sum of detected item lines. It may not include GST, discounts, fees or rounding. Check the printed amount payable before saving.
+                    </p>
+                  ) : Math.abs(uploadedBillLinesTotal - Number(uploadedBillTotal || 0)) >= 0.01 ? (
                     <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[10.5px] leading-relaxed text-amber-900">
                       Difference: {inr(Math.round(Math.abs(uploadedBillLinesTotal - Number(uploadedBillTotal || 0)) * 100))}. Check the receipt for GST, discounts, fees or rounding. Keep the printed final total as the amount paid.
                     </p>
+                  ) : uploadedBillTotalSource === "receipt" ? (
+                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">The item-line sum matches the AI-read total. Still verify both against the receipt.</p>
                   ) : (
-                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">The item amounts match the total entered.</p>
+                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">The item amounts match the total you entered.</p>
                   )}
                 </div>
               ) : null}
