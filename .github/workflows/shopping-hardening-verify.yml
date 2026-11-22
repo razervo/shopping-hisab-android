@@ -45,6 +45,6 @@ jobs:
           if violations:
               raise SystemExit(f'Foreign key violations: {violations}')
           print('All native migrations applied to fresh SQLite and FK check passed.')
+          PY
       - name: Test combined legacy and session reporting
         run: python3 scripts/test-reporting.py
-          PY
