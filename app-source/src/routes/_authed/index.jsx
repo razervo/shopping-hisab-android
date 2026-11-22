@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, ClipboardList, History, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
+import { ArrowRight, CalendarDays, ClipboardList, History, PlayCircle, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { useOverview } from "@/components/dashboard/useOverview";
 import { inr } from "@/lib/format";
@@ -9,8 +10,38 @@ export const Route = createFileRoute("/_authed/")({
   component: HomePage,
 });
 
+const formatTripDate = (value) => value
+  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+  : "Date not set";
+
+const formatPaise = (value) => new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 2,
+}).format(Number(value || 0) / 100);
+
 function HomePage() {
   const { loading, overview } = useOverview();
+  const [activeTrips, setActiveTrips] = useState([]);
+
+  useEffect(() => {
+    let current = true;
+    fetch("/api/shopping/sessions?status=open", {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) return { sessions: [] };
+        return response.json().catch(() => ({ sessions: [] }));
+      })
+      .then((result) => {
+        if (current) setActiveTrips(Array.isArray(result.sessions) ? result.sessions.slice(0, 2) : []);
+      })
+      .catch(() => {
+        if (current) setActiveTrips([]);
+      });
+    return () => { current = false; };
+  }, []);
 
   return (
     <div className="pb-4">
@@ -24,13 +55,48 @@ function HomePage() {
         </p>
       </section>
 
+      {activeTrips.length > 0 ? (
+        <section className="mb-5">
+          <div className="mb-2 px-1">
+            <h2 className="text-[14px] font-extrabold">Pick up where you left off</h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished shopping trips are ready.</p>
+          </div>
+          <div className="space-y-2">
+            {activeTrips.map((trip) => (
+              <Link
+                key={trip.id}
+                to="/sessions/$sessionId"
+                params={{ sessionId: trip.id }}
+                className="flex items-center gap-3 rounded-[22px] border border-primary/20 bg-accent/40 p-4 transition-colors hover:bg-accent/70"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+                  <PlayCircle className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-extrabold">{trip.name || "Shopping trip"}</span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatTripDate(trip.shopping_date)}</span>
+                    <span>·</span>
+                    <span>{Number(trip.item_count || 0)} items</span>
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[12px] font-extrabold tabular-nums">{formatPaise(trip.actual_total_paise)}</span>
+                  <span className="mt-1 block text-[10px] font-bold text-primary">Continue →</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="animate-fade-up overflow-hidden rounded-[30px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
           <Sparkles className="h-5 w-5" />
         </div>
         <p className="micro mt-5 text-white/65">LET'S GET READY</p>
         <h2 className="mt-2 text-[21px] font-extrabold leading-tight">
-          Your next shopping trip starts here
+          Plan your next shopping trip
         </h2>
         <p className="mt-2 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
           Add everything you need. Your assistant will help organise the list and estimate the cost before you go.
