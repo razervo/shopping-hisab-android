@@ -52,3 +52,5 @@ jobs:
         run: python3 scripts/test-confirmation.py
       - name: Test receipt file validation and preparation
         run: node scripts/test-bill-file.mjs
+      - name: Test Google Drive upload and metadata recovery ledger
+        run: python3 scripts/test-drive-recovery.py
