@@ -1,3 +1,4 @@
+/* global File, console */
 import assert from "node:assert/strict";
 import { BILL_MAX_BYTES, isAcceptedBill, prepareBillFile } from "../src/lib/billFile.js";
 
