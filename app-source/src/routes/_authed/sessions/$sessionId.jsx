@@ -824,6 +824,11 @@ function SessionDetailPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
                 <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · price per {item.unit}</p>
+                {item.brand || item.pack_size ? (
+                  <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
+                    {[item.brand, item.pack_size].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
               </div>
               <div className="w-28 shrink-0">
                 <input type="number" inputMode="decimal" min="0" step="0.01"
