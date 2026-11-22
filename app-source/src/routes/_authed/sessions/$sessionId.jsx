@@ -52,6 +52,9 @@ function SessionDetailPage() {
   const confirmationLockRef = useRef(false);
   const scannedListSaveLockRef = useRef(false);
   const manualListSaveLockRef = useRef(false);
+  const manualBillSaveLockRef = useRef(false);
+  const uploadedBillSaveLockRef = useRef(false);
+  const billLineSaveLockRefs = useRef({});
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -190,6 +193,8 @@ function SessionDetailPage() {
       toast.error("Enter a valid bill total.");
       return;
     }
+    if (manualBillSaveLockRef.current) return;
+    manualBillSaveLockRef.current = true;
     setBillSaving(true);
     try {
       const savedBill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
@@ -212,9 +217,11 @@ function SessionDetailPage() {
     } catch (cause) {
       toast.error(cause.message || "Could not add this bill.");
     } finally {
+      manualBillSaveLockRef.current = false;
       setBillSaving(false);
     }
   };
+
 
   const handleUploadedBill = (draft, fileUri) => {
     const extracted = Array.isArray(draft?.items) ? draft.items : [];
@@ -257,6 +264,8 @@ function SessionDetailPage() {
     if (!lines.length || lines.some((line) => !line.product_name)) return toast.error("Check every extracted bill item name.");
     if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity < 0)) return toast.error("Check every extracted quantity.");
     if (lines.some((line) => line.amountRupees !== null && (!Number.isFinite(line.amountRupees) || line.amountRupees < 0))) return toast.error("Check every extracted item amount.");
+    if (uploadedBillSaveLockRef.current) return;
+    uploadedBillSaveLockRef.current = true;
     setUploadedBillSaving(true);
     try {
       let billId = uploadedBillId;
@@ -317,6 +326,7 @@ function SessionDetailPage() {
     } catch (cause) {
       toast.error(cause.message || "Could not save the uploaded bill.");
     } finally {
+      uploadedBillSaveLockRef.current = false;
       setUploadedBillSaving(false);
     }
   };
@@ -334,6 +344,8 @@ function SessionDetailPage() {
     if (!line.product_name.trim()) return toast.error("Enter the bill item name.");
     if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid item quantity.");
     if (amountRupees !== null && (!Number.isFinite(amountRupees) || amountRupees < 0 || !Number.isSafeInteger(Math.round(amountRupees * 100)))) return toast.error("Enter a valid item amount.");
+    if (billLineSaveLockRefs.current[billId]) return;
+    billLineSaveLockRefs.current[billId] = true;
     setBillLineSaving(billId);
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
@@ -358,6 +370,7 @@ function SessionDetailPage() {
     } catch (cause) {
       toast.error(cause.message || "Could not add this bill item.");
     } finally {
+      delete billLineSaveLockRefs.current[billId];
       setBillLineSaving("");
     }
   };
