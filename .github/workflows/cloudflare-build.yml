@@ -31,7 +31,7 @@ jobs:
         run: npm install
       - name: Build for Cloudflare Workers
         run: |
-          if [ "$GITHUB_REF_NAME" = "cloudflare-native-migration" ]; then
+          if [ "$GITHUB_REF_NAME" = "cloudflare-native-migration" ] || [ "$GITHUB_BASE_REF" = "cloudflare-native-migration" ]; then
             npm run build:native
           else
             npm run build
@@ -42,7 +42,7 @@ jobs:
           test -s dist/client/manifest.json
           test -s dist/client/manifest.webmanifest
       - name: Bundle and validate isolated native Worker (no deployment)
-        if: github.ref_name == 'cloudflare-native-migration'
+        if: github.ref_name == 'cloudflare-native-migration' || github.base_ref == 'cloudflare-native-migration'
         run: |
           echo "Inspecting complete Cloudflare build output:"
           find dist .wrangler -maxdepth 6 -type f -size +0c -printf '%p (%s bytes)\n' 2>/dev/null | sort

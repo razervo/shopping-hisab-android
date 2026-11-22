@@ -1,18 +1,19 @@
-import { base44 } from "@/api/cloudflareClient";
+import { cloudflareRequest } from "@/api/cloudflareClient";
 
 // Every shopping record for this user, newest first (used for the full backup export).
 export async function fetchAllRecords() {
   const out = [];
-  let cursor = null;
-  for (let i = 0; i < 10; i += 1) {
-    const page = await base44.entities.ShoppingRecord.list({
-      sort: "-date",
-      limit: 200,
-      ...(cursor ? { cursor } : {}),
-    });
+  let cursor = 0;
+  const pageSize = 200;
+  for (let pageNumber = 0; pageNumber < 1000; pageNumber += 1) {
+    const page = await cloudflareRequest(`/api/reports/export?limit=${pageSize}&cursor=${cursor}`);
     out.push(...(page.items || []));
-    if (!page.has_more || !page.next_cursor) break;
-    cursor = page.next_cursor;
+    if (!page.has_more || !page.next_cursor) return out;
+    const nextCursor = Number(page.next_cursor);
+    if (!Number.isSafeInteger(nextCursor) || nextCursor <= cursor) {
+      throw new Error("The export returned an invalid pagination cursor.");
+    }
+    cursor = nextCursor;
   }
-  return out;
+  throw new Error("The export contains more than 200,000 records. Please export a smaller date range.");
 }

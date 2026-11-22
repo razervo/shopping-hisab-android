@@ -41,8 +41,11 @@ export function BillUploader({
     let file;
     try {
       file = await prepareBillFile(picked);
-    } catch {
-      file = picked;
+    } catch (cause) {
+      setError(cause?.message || "This image could not be prepared. Please choose a JPG, PNG or WEBP photo.");
+      uploadLockRef.current = false;
+      setBusy(false);
+      return;
     }
 
     if (file.size > BILL_MAX_BYTES) {

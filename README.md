@@ -1,46 +1,49 @@
-# Shopping Hisab Android
+# Shopping Hisab
 
-Cloud build for a signed Android Trusted Web Activity (TWA) APK using Google Chrome Labs Bubblewrap.
+Shopping Hisab is a mobile-first shopping expense app. The current native Cloudflare version is hosted at:
 
-## Website
+- **App:** https://shopping-hisab-native.hasimabd13.workers.dev
+- **Web manifest:** https://shopping-hisab-native.hasimabd13.workers.dev/manifest.json
+- **Android package:** `com.shoppinghisab.app`
 
-The Android app opens the existing Base44-hosted website. The Base44 app, database, login and AI functions remain hosted there.
+The Android APK is a signed Android Trusted Web Activity (TWA) generated from the Cloudflare-hosted app. The application UI and backend run on the Worker; the APK is the Android installation entry point, not a separate offline-native rewrite.
 
-- Website: https://shopping-hisab-71a084c3.base44.app
-- Web manifest: https://shopping-hisab-71a084c3.base44.app/manifest.json
-- Android package: `com.shoppinghisab.app`
+## Build an Android APK
 
-## Build an APK
-
-1. Open the **Actions** tab in this repository.
+1. Open the repository's **Actions** tab.
 2. Select **Build Shopping Hisab Android APK**.
-3. Tap **Run workflow** and use the next version code (start with `1`).
-4. When the run finishes, download the `shopping-hisab-apk` artifact and extract `Shopping-Hisab.apk`.
-5. Install it on an Android phone and test sign-in, shopping list extraction, estimates, actual-price updates, image uploads and saving records.
+3. Run the workflow with a version code greater than the last released version.
+4. Keep the manifest URL set to the Cloudflare app manifest unless intentionally testing another host.
+5. Download the `shopping-hisab-apk` artifact and install `Shopping-Hisab.apk`.
 
-The workflow uses GitHub-hosted Ubuntu, Java 17, Android SDK 36, Gradle and Bubblewrap Core. It does not require Netlify or a local Android Studio installation.
-
-## Signing key and future updates
-
-The first workflow run generates a private signing key. The `shopping-hisab-signing-backup` artifact contains the keystore and `signing-info.txt` with its password and SHA-256 certificate fingerprint. Download it and keep a private offline backup. Do not share it.
-
-The workflow reuses the newest unexpired signing-backup artifact on subsequent builds. GitHub Actions artifacts expire after 90 days. For durable signing, store the keystore as repository Actions secrets:
-- `ANDROID_KEYSTORE_BASE64` — Base64 content of `android-keystore.jks`
-- `ANDROID_KEYSTORE_PASSWORD` — `store_password` from `signing-info.txt`
-- `ANDROID_KEY_ALIAS` — `key_alias` from `signing-info.txt`
-
-Keep the JKS safe. If it is lost, a later APK signed with a different key cannot update the existing installation; users would need to uninstall first.
+The workflow uses GitHub-hosted Ubuntu, Java 17, Android SDK 36, Gradle and Bubblewrap. No local Android Studio installation is required.
 
 ## Trusted Web Activity verification
 
-A full-screen TWA requires Digital Asset Links at:
+The app's Digital Asset Links file is maintained at:
 
-`https://shopping-hisab-71a084c3.base44.app/.well-known/assetlinks.json`
+`app-source/public/.well-known/assetlinks.json`
 
-After the first build, copy the SHA-256 fingerprint from the workflow run summary into that file. The entry must use package name `com.shoppinghisab.app` and relation `delegate_permission/common.handle_all_urls`. Until this is published, Chrome may show the website in a Custom Tab instead of verified full-screen mode.
+It must be published at:
 
-## Notes
+`https://shopping-hisab-native.hasimabd13.workers.dev/.well-known/assetlinks.json`
 
-- This is a website wrapper, not an offline-native rewrite. Base44 login, records, uploads and AI require an internet connection.
-- Build version codes must increase for each new release.
-- Do not commit signing material into this repository.
+The entry must use package name `com.shoppinghisab.app`, relation `delegate_permission/common.handle_all_urls`, and the SHA-256 fingerprint of the exact APK signing certificate. Verify the fingerprint after any signing-key change. Until the association matches, Chrome can open the site in a Custom Tab instead of verified full-screen mode.
+
+## Signing key and future updates
+
+The workflow restores the signing key from repository Actions secrets when configured, otherwise from the latest unexpired private signing-backup artifact, and generates a key only for the first build.
+
+For durable releases, store the keystore as repository Actions secrets:
+
+- `ANDROID_KEYSTORE_BASE64` — Base64 content of `android-keystore.jks`
+- `ANDROID_KEYSTORE_PASSWORD` — keystore password
+- `ANDROID_KEY_ALIAS` — key alias
+
+Keep an offline backup of the keystore. Never commit or share signing material. Losing the key prevents a later APK from updating the existing installation.
+
+## Cloudflare application source
+
+The independent Cloudflare implementation is in [`app-source/`](app-source/README.md). It uses Workers, D1, Better Auth and user-owned Google Drive storage. Its migration branch and deployment workflow are separate from Android APK generation.
+
+The older Base44 application and its data remain a separate legacy source until full export/import and financial/attachment reconciliation are completed. Do not treat an APK build as a production data migration or cutover.

@@ -205,6 +205,7 @@ function SessionDetailPage() {
           purchase_date: billForm.purchase_date || null,
           receipt_number: billForm.receipt_number.trim(),
           bill_total_paise: Math.round(rupees * 100),
+          bill_status: "verified",
           duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
           original_ocr: { entry_method: "manual" },
         }),
@@ -441,6 +442,27 @@ function SessionDetailPage() {
     }
   };
 
+  const deletePlannedItem = async (item) => {
+    if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items/${item.id}`, { method: "DELETE" });
+      setEstimatePrices((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      setEstimateSources((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      await loadSession();
+      toast.success("Planned item removed.");
+    } catch (cause) {
+      toast.error(cause.message || "Could not remove this planned item.");
+    }
+  };
+
   const loadBillLines = async (billId) => {
     try {
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
@@ -630,6 +652,9 @@ function SessionDetailPage() {
   const items = session.items || [];
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
+  const unresolvedBills = (session.bills || []).filter(
+    (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
+  );
   const latestEstimate = (session.estimates || [])[0] || null;
   const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
 
@@ -765,9 +790,17 @@ function SessionDetailPage() {
                     </div>
                   ) : null}
                 </div>
-                <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
-                  {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
+                    {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
+                  </span>
+                  {!completed ? (
+                    <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
+                      className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -791,6 +824,11 @@ function SessionDetailPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
                 <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · price per {item.unit}</p>
+                {item.brand || item.pack_size ? (
+                  <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
+                    {[item.brand, item.pack_size].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
               </div>
               <div className="w-28 shrink-0">
                 <input type="number" inputMode="decimal" min="0" step="0.01"
@@ -977,7 +1015,7 @@ function SessionDetailPage() {
               ) : null}
             </div>
           ))}</div>
-        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Bill capture will be connected next.</p>}
+        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Add a bill or enter the purchase details above to record real spending.</p>}
       </section>
 
       {!completed ? (
@@ -996,6 +1034,11 @@ function SessionDetailPage() {
               <p className="mt-1 text-[15px] font-extrabold">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length}</p>
             </div>
           </div>
+          {unresolvedBills.length > 0 ? (
+            <p className="rounded-xl bg-secondary/60 px-3 py-2.5 text-[11.5px] font-semibold text-foreground">
+              Review {unresolvedBills.length} bill(s) above. Mark each one Verified, Duplicate or Void before confirming the final expense.
+            </p>
+          ) : null}
           {Number(session.bills_amount_pending || 0) > 0 ? (
             <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-[11.5px] font-semibold text-destructive">
               {session.bills_amount_pending} bill amount(s) are unreadable or missing. Enter or correct those amounts before completing the session.
@@ -1006,7 +1049,7 @@ function SessionDetailPage() {
             onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
-          <button type="submit" disabled={confirmationSaving || Number(session.bills_amount_pending || 0) > 0}
+          <button type="submit" disabled={confirmationSaving || unresolvedBills.length > 0 || Number(session.bills_amount_pending || 0) > 0}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
             {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
             {confirmationSaving ? "Completing session…" : "Confirm expense and finish"}

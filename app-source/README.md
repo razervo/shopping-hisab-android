@@ -1,38 +1,70 @@
-# Shopping Hisab — native Cloudflare migration
+# Shopping Hisab — Cloudflare application
 
-This branch prepares Shopping Hisab to run independently of Base44.
+This directory contains the independent Cloudflare implementation of Shopping Hisab.
 
-## Architecture
+## Runtime architecture
 
-- **Cloudflare Workers:** website and backend API.
-- **Cloudflare D1:** users, sessions, shopping records and file metadata.
-- **Google Drive:** each user stores their own bills and profile photos in a private `Shopping Hisab` folder.
-- **Workers AI:** receipt text extraction and market-rate estimates.
-- **Better Auth:** email/password sign-in and Google sign-in.
+- **Cloudflare Workers:** website and same-origin application API.
+- **Cloudflare D1:** Better Auth accounts/sessions, legacy-compatible shopping records, shopping sessions, lists, estimates, actual bills, purchase lines, confirmations, idempotency keys and audit events.
+- **Google Drive:** each user stores receipt files and profile images in their own private `Shopping Hisab` folder. The app requests the narrow `drive.file` scope; it does not request access to the user's entire Drive.
+- **Better Auth:** email/password authentication and Google sign-in/Drive connection.
+- **AI:** Gemini is the preferred OCR and text-estimation provider when `GEMINI_API_KEY` is configured. Workers AI provides the Moondream image-reading fallback and text-model fallback; PDF text conversion uses the Workers AI `toMarkdown` capability.
 
-The app requests Google's narrow `drive.file` scope. It does not request access to the user's entire Drive. The folder is created automatically when the user connects Drive from their profile. Actual uploads use the user's own Google account and storage quota.
+The app stores private file metadata in D1 and the file bytes in the user's Google Drive. A Cloudflare R2 bucket is not required for this storage path. Users consume their own Google Drive storage quota.
 
-## Native branch build
+## Build and deployment
 
-From `app-source`:
+From this directory:
 
 ```sh
 npm install
+npm run lint
 npm run build:native
 ```
 
-The native build uses `wrangler.native.jsonc` and the isolated `shopping-hisab-native` Worker/D1 resources. It does not deploy over the existing `shopping-hisab-android` Worker.
+The native build uses `wrangler.native.jsonc` and the isolated `shopping-hisab-native` Worker/D1 resources. It does not deploy over the older `shopping-hisab-android` Worker.
 
-## Before deployment
+The GitHub workflow `.github/workflows/cloudflare-build.yml` validates pull requests without deploying. The deployment workflow runs only when the designated `cloudflare-native-migration` branch is updated or when manually dispatched. Do not use the production deployment workflow as a substitute for PR validation.
 
-1. Create a Google Cloud project and enable the Google Drive API.
-2. Configure the OAuth consent screen. During testing, add your Google account as a test user if the app is in Testing mode.
-3. Create a **Web application** OAuth client.
-4. Add this authorized JavaScript origin: `https://shopping-hisab-native.hasimabd13.workers.dev`.
-5. Add this authorized redirect URI: `https://shopping-hisab-native.hasimabd13.workers.dev/api/auth/callback/google`.
-6. Configure Worker secrets `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`. Configure `RESEND_API_KEY` and `MAIL_FROM` if password-reset email is required.
-7. Test sign-up, sign-in, Drive connection, folder creation, upload, download, receipt parsing and per-user isolation before any production cutover.
+## Worker configuration
 
-## Data safety
+The native Worker uses the following configuration:
 
-The existing Base44 app, its users, records and uploads remain unchanged. The native D1 database is a separate database and currently contains schema only. Do not switch the production app until a full Base44 export/import has been reconciled by record counts, totals and attachments.
+- `APP_BASE_URL` and `GOOGLE_CLIENT_ID` are non-secret Worker variables.
+- `BETTER_AUTH_SECRET` is required and must be at least 32 characters.
+- `GOOGLE_CLIENT_SECRET` is required for Google sign-in and Drive authorization.
+- `GEMINI_API_KEY` enables the preferred Gemini OCR/text path.
+- `RESEND_API_KEY` and `MAIL_FROM` are required for password-reset email.
+- The Workers AI binding is declared in `wrangler.native.jsonc` and provides the configured fallback/model capabilities.
+
+Google OAuth setup:
+1. Enable the Google Drive API in the Google Cloud project.
+2. Configure the OAuth consent screen and add test users while the project is in Testing mode.
+3. Use a Web application OAuth client.
+4. Add the Worker origin `https://shopping-hisab-native.hasimabd13.workers.dev`.
+5. Add the callback `https://shopping-hisab-native.hasimabd13.workers.dev/api/auth/callback/google`.
+6. Store OAuth client secrets only as Worker secrets. Never commit credentials.
+
+## Data safety and migration
+
+The native Worker and D1 database are separate from the older Base44 application. Do not delete or overwrite the old app, its users, records or private uploads during testing.
+
+Base44 migration must preserve record IDs, item JSON, ownership, dates, totals, notes and attachment references. Import is idempotent by legacy record ID. Before any cutover, reconcile record counts, item details, financial totals and attachment counts, and verify that users can access their own Drive files.
+
+## Verification
+
+The hardening CI workflow runs:
+- ESLint and the native application build;
+- all native D1 migrations against a fresh SQLite database, including foreign-key checks;
+- combined legacy/session History and monthly-report calculations, cross-account scoping, duplicate-bill exclusion and report/export pagination;
+- final expense confirmation review guards, duplicate/void exclusion, idempotency retries and confirmation race protection;
+- receipt MIME/extension validation, PDF passthrough and safe HEIC conversion failure handling;
+- D1-side Google Drive upload-marker and metadata-recovery scenarios, including same-key retry de-duplication and per-user isolation;
+- Base44 import re-run idempotency, stable legacy record IDs and per-user attachment mapping;
+- detailed CSV/PDF export and completed-session receipt-link assertions.
+
+The Cloudflare build workflow verifies the PWA/TWA assets and bundles the native Worker with Wrangler dry-run validation. These checks do not deploy the Worker.
+
+CI coverage for Drive recovery exercises the D1 idempotency and metadata state machine; it does not perform a live Google Drive upload. Browser QA confirmed the account's Drive connection status and completed a six-item AI price-estimate test without saving an estimate version. The temporary QA items were subsequently removed.
+
+Before public launch, still perform end-to-end checks with actual handwritten and printed receipt photos, a real Google Drive upload/download and interrupted-upload retry, two independent signed-in accounts, a complete bill-review/final-confirmation cycle, and Base44 import plus restore/reconciliation. Do not treat local SQL regression tests or browser screen inspection as substitutes for those live integration checks.

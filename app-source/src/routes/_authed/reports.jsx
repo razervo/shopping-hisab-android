@@ -31,8 +31,8 @@ function ReportsPage() {
       if (!records.length) {
         toast.error("There is nothing to back up yet.");
       } else {
-        exportRecordsCSV(records, "shopping-hisab-backup");
-        toast.success("Backup downloaded");
+        exportRecordsCSV(records, "shopping-hisab-export");
+        toast.success("Export downloaded");
       }
     } catch {
       toast.error("Could not create the backup. Please try again.");
@@ -172,10 +172,10 @@ function ReportsPage() {
               className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-[13px] font-bold text-secondary-foreground disabled:opacity-60"
             >
               {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {backingUp ? "Preparing backup…" : "Backup all records (CSV)"}
+              {backingUp ? "Preparing backup…" : "Export all records (CSV)"}
             </button>
             <p className="px-2 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-              Your records stay in your account and survive refreshes. The backup file is your own copy.
+              CSV includes record totals, item details and receipt metadata. Receipt files remain in your private Google Drive.
             </p>
           </section>
         </>

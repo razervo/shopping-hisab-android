@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  "previews": {},
   "observability": { "enabled": true },
   "vars": {
     "APP_BASE_URL": "https://shopping-hisab-native.hasimabd13.workers.dev",

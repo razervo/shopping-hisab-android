@@ -308,6 +308,29 @@ export async function handleShoppingEngine(request, env) {
   }
 
   const itemMatch=/^items\/([a-f0-9-]{36})$/i.exec(subpath);
+  if (itemMatch && method === "DELETE") {
+    const itemId=itemMatch[1];
+    const existing=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?")
+      .bind(itemId,userId,sessionId).first();
+    if (!existing) return fail("Shopping item not found.",404);
+    const [purchases,estimates]=await Promise.all([
+      db.prepare("SELECT COUNT(*) AS count FROM shopping_purchase_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId).first(),
+      db.prepare("SELECT COUNT(*) AS count FROM shopping_estimate_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId).first(),
+    ]);
+    if (Number(purchases?.count||0)>0) return fail("This item is linked to a bill. Remove or correct its bill lines before deleting the planned item.",409);
+    if (Number(estimates?.count||0)>0) return fail("This item is part of a saved estimate. Keep it in the session or create a new session.",409);
+    const timestamp=now();
+    await db.batch([
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+        .bind(id(),userId,sessionId,"shopping_item",itemId,"item_deleted",JSON.stringify(existing),null,timestamp),
+      db.prepare("DELETE FROM shopping_items WHERE id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId),
+    ]);
+    return json({success:true,id:itemId});
+  }
+
   if (itemMatch && method === "PATCH") {
     const itemId=itemMatch[1];
     const existing=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first();
@@ -650,6 +673,9 @@ export async function handleShoppingEngine(request, env) {
     const operation="session_confirm:"+sessionId;
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:confirmed}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
     if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}
+    const unresolvedBills=await db.prepare(`SELECT COUNT(*) AS count FROM shopping_actual_bills
+      WHERE user_id=? AND session_id=? AND bill_status NOT IN ('verified','duplicate','void')`).bind(userId,sessionId).first();
+    if(Number(unresolvedBills?.count||0)>0)return fail("Review every bill and mark it Verified, Duplicate or Void before confirming the expense.");
     const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
       SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
       FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
@@ -664,10 +690,21 @@ export async function handleShoppingEngine(request, env) {
     const stmts=[
       db.prepare(`INSERT INTO shopping_expense_confirmations (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,estimate_id,calculation_snapshot_json,confirmed_at)
         SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm'))`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp,sessionId,userId),
-      db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')").bind(confirmed,timestamp,sessionId,userId),
-      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"session",sessionId,"expense_confirmed",null,JSON.stringify({confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed}),timestamp)
+      db.prepare(`UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=?
+        WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
+          AND EXISTS (SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?)`)
+        .bind(confirmed,timestamp,sessionId,userId,confirmationId,userId,sessionId),
+      db.prepare(`INSERT INTO shopping_audit_events
+        (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
+          SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?
+        )`).bind(id(),userId,sessionId,"session",sessionId,"expense_confirmed",null,JSON.stringify({confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed}),timestamp,confirmationId,userId,sessionId)
     ];
-    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    if(requestKey)stmts.push(db.prepare(`INSERT INTO shopping_idempotency_keys
+      (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at)
+      SELECT ?,?,?,?,?,?,?,201,? WHERE EXISTS (
+        SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?
+      )`).bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),timestamp,confirmationId,userId,sessionId));
     try{const results=await db.batch(stmts);if(!results?.[0]?.meta?.changes)return fail("This session has already been completed. Refresh to view the saved confirmation.",409);}catch(error){if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}throw error;}
     return json(responseBody,201);
   }

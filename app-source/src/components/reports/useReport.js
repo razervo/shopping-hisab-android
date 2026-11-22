@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { base44 } from "@/api/cloudflareClient";
+import { cloudflareRequest } from "@/api/cloudflareClient";
 import { monthStartISO, toISO } from "@/lib/format";
 
 export function useReport(monthKey) {
@@ -16,13 +16,32 @@ export function useReport(monthKey) {
     setState((prev) => ({ ...prev, loading: true }));
     (async () => {
       try {
-        const [monthPage, lifetime] = await Promise.all([
-          base44.entities.ShoppingRecord.filter({ date: { $gte: start, $lte: end } }, { sort: "-date", limit: 500 }),
-          base44.entities.ShoppingRecord.aggregate({ query: {}, sum: ["total"], max: ["total"] }),
-        ]);
+        const allRecords = [];
+        let cursor = 0;
+        let lifetime = null;
+        for (let pageNumber = 0; pageNumber < 1000; pageNumber += 1) {
+          const params = new URLSearchParams({
+            month: monthKey,
+            limit: "500",
+            cursor: String(cursor),
+          });
+          const report = await cloudflareRequest(`/api/reports?${params.toString()}`);
+          if (cancelled) return;
+          allRecords.push(...(report.records || []));
+          lifetime = report.lifetime || lifetime;
+          if (!report.records_truncated || !report.next_cursor) break;
+          const nextCursor = Number(report.next_cursor);
+          if (!Number.isSafeInteger(nextCursor) || nextCursor <= cursor) {
+            throw new Error("The monthly report returned an invalid pagination cursor.");
+          }
+          cursor = nextCursor;
+          if (pageNumber === 999) {
+            throw new Error("This month contains more than 500,000 records. Export a smaller date range.");
+          }
+        }
         if (cancelled) return;
+        const records = allRecords;
 
-        const records = monthPage.items || [];
         const monthTotal = records.reduce((s, r) => s + (Number(r.total) || 0), 0);
         const daily = Array.from({ length: days }, (_, i) => {
           const iso = toISO(new Date(base.getFullYear(), base.getMonth(), i + 1));
@@ -34,7 +53,6 @@ export function useReport(monthKey) {
             count: dayRecords.length,
           };
         });
-        const row = lifetime?.rows?.[0] || {};
         const isCurrentMonth = start.slice(0, 7) === toISO(new Date()).slice(0, 7);
         const divisor = isCurrentMonth ? Math.max(new Date().getDate(), 1) : days;
 
@@ -51,9 +69,9 @@ export function useReport(monthKey) {
             highestDay: daily.reduce((best, d) => (d.total > (best?.total || 0) ? d : best), null),
           },
           lifetime: {
-            total: row.sum_total ?? 0,
-            highest: row.max_total ?? 0,
-            entries: row.count ?? 0,
+            total: Number(lifetime.total) || 0,
+            highest: Number(lifetime.highest) || 0,
+            entries: Number(lifetime.entries) || 0,
           },
         });
       } catch {
