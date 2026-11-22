@@ -134,14 +134,25 @@ async function handleRecords(request, env, user, url) {
   if (path === "/" && method === "POST") {
     let data;
     try { data = validateRecord(await request.json()); } catch (e) { return error(e.message); }
+    const idempotencyKey = String(request.headers.get("Idempotency-Key") || "").trim().slice(0, 180);
+    if (!idempotencyKey) return error("Missing Idempotency-Key. Please retry saving.", 400);
+    const requestHash = await sha256Hex(new TextEncoder().encode(JSON.stringify(data)));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await env.DB.prepare(
-      `INSERT INTO shopping_records
-       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now).run();
-    return json(await fetchRecord(env.DB, user.id, id), 201);
+    const responseJson = JSON.stringify({ id });
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO record_create_idempotency (user_id, idempotency_key, request_hash, record_id, response_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(user.id, idempotencyKey, requestHash, id, responseJson, now),
+      env.DB.prepare(`INSERT INTO shopping_records
+        (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM record_create_idempotency WHERE user_id = ? AND idempotency_key = ? AND record_id = ? AND request_hash = ?)
+        AND NOT EXISTS (SELECT 1 FROM shopping_records WHERE id = ? AND user_id = ?)`).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now, user.id, idempotencyKey, id, requestHash, id, user.id),
+    ]);
+    const stored = await env.DB.prepare("SELECT request_hash, record_id FROM record_create_idempotency WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idempotencyKey).first();
+    if (!stored) return error("Save could not be confirmed. Please retry.", 503);
+    if (stored.request_hash !== requestHash) return error("This save key was already used for different shopping data. Please start a new save.", 409);
+    const record = await fetchRecord(env.DB, user.id, stored.record_id);
+    return record ? json(record, 200) : error("Save could not be confirmed. Please retry.", 503);
   }
 
   const match = /^\/([a-f0-9-]{36})$/i.exec(path);
