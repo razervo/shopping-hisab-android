@@ -77,6 +77,17 @@ db.executemany(
     ],
 )
 
+export_source = (ROOT / "src/lib/export.js").read_text(encoding="utf-8")
+assert "Item details (JSON)" in export_source
+assert "Receipt details (JSON)" in export_source
+assert "const itemRows = Array.isArray(r.items) ? r.items : []" in export_source
+assert "const receipts = Array.isArray(r.receipts) ? r.receipts : []" in export_source
+assert 'doc.text(wrapped, left + 84, y)' in export_source
+
+record_detail = (ROOT / "src/components/shopping/RecordDetail.jsx").read_text(encoding="utf-8")
+assert "Open receipt" in record_detail
+assert 'record.source === "session"' in record_detail
+
 server_source = (ROOT / "src/server.js").read_text(encoding="utf-8")
 assert 'url.pathname === "/api/reports"' in server_source
 assert 'url.pathname === "/api/reports/export"' in server_source
