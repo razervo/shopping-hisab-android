@@ -746,6 +746,12 @@ function SessionDetailPage() {
     (total, item) => total + Number(item.planned_quantity || 0) * Number(estimatePrices[item.id]),
     0,
   );
+  const uploadedBillRowsHaveAmounts = uploadedBillRows.length > 0 && uploadedBillRows.every((row) =>
+    row.amount.trim() !== "" && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0
+  );
+  const uploadedBillLinesTotal = uploadedBillRowsHaveAmounts
+    ? uploadedBillRows.reduce((total, row) => total + Number(row.amount), 0)
+    : null;
 
   return (
     <div className="pb-5">
@@ -1094,6 +1100,25 @@ function SessionDetailPage() {
                   </div>
                 ))}
               </div>
+              {uploadedBillLinesTotal !== null && uploadedBillTotal.trim() !== "" ? (
+                <div className="rounded-xl border border-border bg-white p-3">
+                  <div className="flex items-center justify-between gap-3 text-[11.5px]">
+                    <span className="text-muted-foreground">Sum of item lines</span>
+                    <span className="font-semibold tabular-nums">{inr(Math.round(uploadedBillLinesTotal * 100))}</span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px]">
+                    <span className="text-muted-foreground">Total paid you entered</span>
+                    <span className="font-semibold tabular-nums">{inr(Math.round(Number(uploadedBillTotal || 0) * 100))}</span>
+                  </div>
+                  {Math.abs(uploadedBillLinesTotal - Number(uploadedBillTotal || 0)) >= 0.01 ? (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[10.5px] leading-relaxed text-amber-900">
+                      Difference: {inr(Math.round(Math.abs(uploadedBillLinesTotal - Number(uploadedBillTotal || 0)) * 100))}. Check the receipt for GST, discounts, fees or rounding. Keep the printed final total as the amount paid.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">The item amounts match the total entered.</p>
+                  )}
+                </div>
+              ) : null}
               {uploadedBillDraft?.totals && Object.entries({
                 "Items subtotal": uploadedBillDraft.totals.subtotal,
                 "Discount": uploadedBillDraft.totals.discount,
