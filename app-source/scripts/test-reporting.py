@@ -77,25 +77,39 @@ start_marker = "const sql = `"
 start = source.index(start_marker) + len("const sql = `")
 end = source.index("`;", start)
 query = source[start:end]
-assert "${legacyDateFilter}" in query
-assert "${sessionDateFilter}" in query
+assert "${legacyWhere}" in query
+assert "${sessionWhere}" in query
 
 
-def run_report(from_date=None, to_date=None, limit=200, offset=0):
+def run_report(from_date=None, to_date=None, limit=200, offset=0, shop=None, record_id=None):
     sql = query
-    values = ["u1"]
-    if from_date and to_date:
-        sql = sql.replace("${legacyDateFilter}", " AND date >= ? AND date <= ?")
-        values.extend([from_date, to_date])
-    else:
-        sql = sql.replace("${legacyDateFilter}", "")
-    values.append("u1")
-    if from_date and to_date:
-        sql = sql.replace("${sessionDateFilter}", " AND s.shopping_date >= ? AND s.shopping_date <= ?")
-        values.extend([from_date, to_date])
-    else:
-        sql = sql.replace("${sessionDateFilter}", "")
-    values.extend([limit + 1, offset])
+    legacy_filters = []
+    legacy_values = []
+    session_filters = []
+    session_values = []
+    if shop:
+        legacy_filters.append("instr(lower(shop_name), lower(?)) > 0")
+        legacy_values.append(shop)
+        session_filters.append("instr(lower(COALESCE(NULLIF(s.name, ''), 'Shopping session')), lower(?)) > 0")
+        session_values.append(shop)
+    if from_date:
+        legacy_filters.append("date >= ?")
+        legacy_values.append(from_date)
+        session_filters.append("s.shopping_date >= ?")
+        session_values.append(from_date)
+    if to_date:
+        legacy_filters.append("date <= ?")
+        legacy_values.append(to_date)
+        session_filters.append("s.shopping_date <= ?")
+        session_values.append(to_date)
+    if record_id:
+        legacy_filters.append("id = ?")
+        legacy_values.append(record_id)
+        session_filters.append("s.id = ?")
+        session_values.append(record_id)
+    sql = sql.replace("${legacyWhere}", "".join(f" AND {item}" for item in legacy_filters))
+    sql = sql.replace("${sessionWhere}", "".join(f" AND {item}" for item in session_filters))
+    values = ["u1", *legacy_values, "u1", *session_values, limit + 1, offset]
     rows = db.execute(sql, values).fetchall()
     columns = [column[0] for column in db.execute(sql, values).description]
     records = [dict(zip(columns, row)) for row in rows[:limit]]
@@ -120,6 +134,15 @@ second, more2, cursor2 = run_report(limit=1, offset=int(cursor or 0))
 assert more and cursor == "1"
 assert not more2 and cursor2 is None
 assert {first[0]["id"], second[0]["id"]} == {"legacy-1", "session-1"}
+
+# The same completed sessions must appear in the main History list, shop search and detail lookup.
+history, _, _ = run_report(limit=30, offset=0)
+assert {row["id"] for row in history} == {"legacy-1", "session-1"}
+by_shop, _, _ = run_report(shop="Market")
+assert len(by_shop) == 1 and by_shop[0]["id"] == "session-1"
+detail, detail_more, _ = run_report(record_id="session-1", limit=1)
+assert not detail_more and len(detail) == 1 and detail[0]["source"] == "session"
+
 
 legacy = db.execute(
     "SELECT COALESCE(SUM(total),0),COALESCE(MAX(total),0),COUNT(*) FROM shopping_records WHERE user_id=?",
