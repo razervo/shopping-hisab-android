@@ -54,3 +54,5 @@ jobs:
         run: node scripts/test-bill-file.mjs
       - name: Test Google Drive upload and metadata recovery ledger
         run: python3 scripts/test-drive-recovery.py
+      - name: Test Base44 migration idempotency and attachment mapping
+        run: python3 scripts/test-migration.py
