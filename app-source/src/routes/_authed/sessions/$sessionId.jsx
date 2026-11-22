@@ -651,6 +651,9 @@ function SessionDetailPage() {
   const items = session.items || [];
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
+  const unresolvedBills = (session.bills || []).filter(
+    (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
+  );
   const latestEstimate = (session.estimates || [])[0] || null;
   const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
 
@@ -1006,7 +1009,7 @@ function SessionDetailPage() {
               ) : null}
             </div>
           ))}</div>
-        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Bill capture will be connected next.</p>}
+        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Add a bill or enter the purchase details above to record real spending.</p>}
       </section>
 
       {!completed ? (
@@ -1025,6 +1028,11 @@ function SessionDetailPage() {
               <p className="mt-1 text-[15px] font-extrabold">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length}</p>
             </div>
           </div>
+          {unresolvedBills.length > 0 ? (
+            <p className="rounded-xl bg-secondary/60 px-3 py-2.5 text-[11.5px] font-semibold text-foreground">
+              Review {unresolvedBills.length} bill(s) above. Mark each one Verified, Duplicate or Void before confirming the final expense.
+            </p>
+          ) : null}
           {Number(session.bills_amount_pending || 0) > 0 ? (
             <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-[11.5px] font-semibold text-destructive">
               {session.bills_amount_pending} bill amount(s) are unreadable or missing. Enter or correct those amounts before completing the session.
@@ -1035,7 +1043,7 @@ function SessionDetailPage() {
             onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
-          <button type="submit" disabled={confirmationSaving || Number(session.bills_amount_pending || 0) > 0}
+          <button type="submit" disabled={confirmationSaving || unresolvedBills.length > 0 || Number(session.bills_amount_pending || 0) > 0}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
             {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
             {confirmationSaving ? "Completing session…" : "Confirm expense and finish"}
