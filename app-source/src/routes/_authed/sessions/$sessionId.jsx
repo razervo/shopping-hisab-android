@@ -301,7 +301,7 @@ function SessionDetailPage() {
       }
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
-        headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = crypto.randomUUID()) },
+        headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = (() => { const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri); return fileMatch ? `uploaded-file-lines:${fileMatch[1]}` : crypto.randomUUID(); })()) },
         body: JSON.stringify({ lines: lines.map((line) => ({
           product_name: line.product_name,
           quantity: line.quantity,
