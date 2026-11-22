@@ -737,6 +737,10 @@ function SessionDetailPage() {
   const latestEstimate = (session.estimates || [])[0] || null;
   const canDeleteEmptyTrip = !completed && !items.length && !lists.length &&
     !(session.bills || []).length && !(session.estimates || []).length;
+  const fullyPurchasedItemCount = items.filter((item) =>
+    Number(item.remaining_quantity ?? item.planned_quantity) <= 0
+  ).length;
+  const shoppingProgress = items.length ? Math.round((fullyPurchasedItemCount / items.length) * 100) : 0;
   const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
   const pricedEstimateItems = items.filter((item) => {
     const value = estimatePrices[item.id];
@@ -913,6 +917,19 @@ function SessionDetailPage() {
           <button type="button" onClick={loadSession} aria-label="Refresh session" className="rounded-full border border-border p-2"><RefreshCw className="h-4 w-4" /></button>
         </div>
         {items.length ? (
+          <div className="mb-3 rounded-[20px] border border-border bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[12.5px] font-extrabold">Shopping progress</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{fullyPurchasedItemCount} of {items.length} items bought · {items.length - fullyPurchasedItemCount} still to buy</p>
+              </div>
+              <span className="text-[16px] font-extrabold tabular-nums text-primary">{shoppingProgress}%</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary" role="progressbar"
+              aria-label="Shopping progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={shoppingProgress}>
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${shoppingProgress}%` }} />
+            </div>
+          </div>
           <div className="overflow-hidden rounded-[22px] border border-border bg-white">
             {items.map((item, index) => (
               <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
