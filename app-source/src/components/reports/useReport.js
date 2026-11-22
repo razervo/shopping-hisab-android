@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { base44 } from "@/api/cloudflareClient";
+import { cloudflareRequest } from "@/api/cloudflareClient";
 import { monthStartISO, toISO } from "@/lib/format";
 
 export function useReport(monthKey) {
@@ -16,13 +16,12 @@ export function useReport(monthKey) {
     setState((prev) => ({ ...prev, loading: true }));
     (async () => {
       try {
-        const [monthPage, lifetime] = await Promise.all([
-          base44.entities.ShoppingRecord.filter({ date: { $gte: start, $lte: end } }, { sort: "-date", limit: 500 }),
-          base44.entities.ShoppingRecord.aggregate({ query: {}, sum: ["total"], max: ["total"] }),
-        ]);
+        const report = await cloudflareRequest(`/api/reports?month=${encodeURIComponent(monthKey)}`);
+        if (cancelled) return;
+        const records = report.records || [];
+        const lifetime = report.lifetime || {};
         if (cancelled) return;
 
-        const records = monthPage.items || [];
         const monthTotal = records.reduce((s, r) => s + (Number(r.total) || 0), 0);
         const daily = Array.from({ length: days }, (_, i) => {
           const iso = toISO(new Date(base.getFullYear(), base.getMonth(), i + 1));
@@ -34,7 +33,6 @@ export function useReport(monthKey) {
             count: dayRecords.length,
           };
         });
-        const row = lifetime?.rows?.[0] || {};
         const isCurrentMonth = start.slice(0, 7) === toISO(new Date()).slice(0, 7);
         const divisor = isCurrentMonth ? Math.max(new Date().getDate(), 1) : days;
 
@@ -51,9 +49,9 @@ export function useReport(monthKey) {
             highestDay: daily.reduce((best, d) => (d.total > (best?.total || 0) ? d : best), null),
           },
           lifetime: {
-            total: row.sum_total ?? 0,
-            highest: row.max_total ?? 0,
-            entries: row.count ?? 0,
+            total: Number(lifetime.total) || 0,
+            highest: Number(lifetime.highest) || 0,
+            entries: Number(lifetime.entries) || 0,
           },
         });
       } catch {
