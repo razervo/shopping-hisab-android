@@ -708,6 +708,122 @@ async function handleDirectBillRead(request, env, user) {
   return json({ draft: parsed.draft, file_uri: fileUri });
 }
 
+
+async function queryCombinedReportRecords(db, userId, { from = "", to = "", limit = 200, offset = 0 } = {}) {
+  const legacyDateFilter = from && to ? " AND date >= ? AND date <= ?" : "";
+  const sessionDateFilter = from && to ? " AND s.shopping_date >= ? AND s.shopping_date <= ?" : "";
+  const dateValues = from && to ? [from, to] : [];
+  const sql = \`
+    SELECT id, shop_name, date, items_json, total, item_count, notes, source,
+      bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
+    FROM (
+      SELECT id, shop_name, date, items_json, total, item_count, notes, source,
+        bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
+      FROM shopping_records
+      WHERE user_id = ?\${legacyDateFilter}
+      UNION ALL
+      SELECT
+        s.id AS id,
+        COALESCE(NULLIF(s.name, ''), 'Shopping session') AS shop_name,
+        s.shopping_date AS date,
+        COALESCE((
+          SELECT json_group_array(json_object(
+            'name', pl.product_name,
+            'qty', pl.quantity,
+            'unit', pl.unit,
+            'price', COALESCE(pl.unit_price_paise, 0) / 100.0,
+            'amount', COALESCE(pl.line_amount_paise, 0) / 100.0,
+            'is_extra', pl.is_extra
+          ))
+          FROM shopping_purchase_lines pl
+          INNER JOIN shopping_actual_bills b
+            ON b.id = pl.bill_id AND b.user_id = pl.user_id AND b.session_id = pl.session_id
+          WHERE pl.user_id = s.user_id AND pl.session_id = s.id
+            AND b.included_in_actual = 1 AND b.bill_status NOT IN ('duplicate', 'void')
+        ), '[]') AS items_json,
+        COALESCE(s.confirmed_actual_total_paise, 0) / 100.0 AS total,
+        (
+          SELECT COUNT(*)
+          FROM shopping_purchase_lines pl
+          INNER JOIN shopping_actual_bills b
+            ON b.id = pl.bill_id AND b.user_id = pl.user_id AND b.session_id = pl.session_id
+          WHERE pl.user_id = s.user_id AND pl.session_id = s.id
+            AND b.included_in_actual = 1 AND b.bill_status NOT IN ('duplicate', 'void')
+        ) AS item_count,
+        'Completed shopping session' AS notes,
+        'session' AS source,
+        NULL AS bill_file_id,
+        NULL AS legacy_bill_file_uri,
+        COALESCE((
+          SELECT json_group_array(json_object(
+            'shop_name', b.shop_name,
+            'date', b.purchase_date,
+            'receipt_number', b.receipt_number,
+            'total', CASE WHEN b.bill_total_paise IS NULL THEN NULL ELSE b.bill_total_paise / 100.0 END,
+            'file_uri', CASE WHEN b.file_id IS NULL THEN NULL ELSE 'cf-file:' || b.file_id END,
+            'status', b.bill_status,
+            'included_in_actual', b.included_in_actual
+          ))
+          FROM shopping_actual_bills b
+          WHERE b.user_id = s.user_id AND b.session_id = s.id
+        ), '[]') AS receipts_json,
+        'confirmed' AS reconciliation_status,
+        s.created_at AS created_at,
+        s.updated_at AS updated_at
+      FROM shopping_sessions s
+      WHERE s.user_id = ? AND s.status = 'completed' AND s.legacy_record_id IS NULL\${sessionDateFilter}
+    )
+    ORDER BY date DESC, created_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  \`;
+  const rows = await db.prepare(sql).bind(userId, ...dateValues, userId, ...dateValues, limit + 1, offset).all();
+  const raw = rows.results || [];
+  const hasMore = raw.length > limit;
+  return {
+    items: raw.slice(0, limit).map(mapRecord),
+    has_more: hasMore,
+    next_cursor: hasMore ? String(offset + limit) : null,
+  };
+}
+
+async function handleReports(request, env, user, url) {
+  if (request.method !== "GET") return error("Method not allowed.", 405);
+
+  if (url.pathname === "/api/reports/export") {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
+    const offset = Math.max(Number(url.searchParams.get("cursor")) || 0, 0);
+    return json(await queryCombinedReportRecords(env.DB, user.id, { limit, offset }));
+  }
+
+  const month = String(url.searchParams.get("month") || "");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return error("A valid month in YYYY-MM format is required.");
+  const [year, monthNumber] = month.split("-").map(Number);
+  const from = month + "-01";
+  const to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+
+  const [monthly, legacyLifetime, sessionLifetime] = await Promise.all([
+    queryCombinedReportRecords(env.DB, user.id, { from, to, limit: 5000, offset: 0 }),
+    env.DB.prepare(
+      "SELECT COALESCE(SUM(total), 0) AS sum_total, COALESCE(MAX(total), 0) AS max_total, COUNT(*) AS count FROM shopping_records WHERE user_id = ?",
+    ).bind(user.id).first(),
+    env.DB.prepare(
+      "SELECT COALESCE(SUM(COALESCE(confirmed_actual_total_paise, 0)), 0) / 100.0 AS sum_total, COALESCE(MAX(confirmed_actual_total_paise), 0) / 100.0 AS max_total, COUNT(*) AS count FROM shopping_sessions WHERE user_id = ? AND status = 'completed' AND legacy_record_id IS NULL",
+    ).bind(user.id).first(),
+  ]);
+  const legacyTotal = Number(legacyLifetime?.sum_total) || 0;
+  const sessionTotal = Number(sessionLifetime?.sum_total) || 0;
+  return json({
+    month,
+    records: monthly.items,
+    records_truncated: monthly.has_more,
+    lifetime: {
+      total: legacyTotal + sessionTotal,
+      highest: Math.max(Number(legacyLifetime?.max_total) || 0, Number(sessionLifetime?.max_total) || 0),
+      entries: (Number(legacyLifetime?.count) || 0) + (Number(sessionLifetime?.count) || 0),
+    },
+  });
+}
+
 async function handleAI(request, env, user) {
   if (request.method !== "POST") return error("Method not allowed.", 405);
   let body;
@@ -966,6 +1082,9 @@ export async function handleNativeApi(request, env) {
     if (!authContext) return error("Please sign in to continue.", 401);
     const { user } = authContext;
 
+    if (url.pathname === "/api/reports" || url.pathname === "/api/reports/export") {
+      return await handleReports(request, env, user, url);
+    }
     if (url.pathname === "/api/records" || url.pathname.startsWith("/api/records/")) {
       return await handleRecords(request, env, user, url);
     }
