@@ -99,36 +99,28 @@ async function handleRecords(request, env, user, url) {
   const method = request.method;
 
   if (path === "/" && method === "GET") {
-    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 30, 1), 500);
-    const offset = Math.max(Number(url.searchParams.get("cursor")) || 0, 0);
+    const requestedLimit = Number(url.searchParams.get("limit") || 30);
+    const limit = Number.isSafeInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 30;
+    const requestedOffset = Number(url.searchParams.get("cursor") || 0);
+    const offset = Number.isSafeInteger(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 100000000) : 0;
     const shop = String(url.searchParams.get("shop") || "").trim().slice(0, 100);
     const from = url.searchParams.get("from") || "";
     const to = url.searchParams.get("to") || "";
-    const where = ["user_id = ?"];
-    const values = [user.id];
-    if (shop) {
-      where.push("instr(lower(shop_name), lower(?)) > 0");
-      values.push(shop);
-    }
-    if (from) { where.push("date >= ?"); values.push(from); }
-    if (to) { where.push("date <= ?"); values.push(to); }
-
-    const rows = await env.DB.prepare(
-      `SELECT id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
-       FROM shopping_records WHERE ${where.join(" AND ")}
-       ORDER BY date DESC, created_at DESC, id DESC LIMIT ? OFFSET ?`,
-    ).bind(...values, limit + 1, offset).all();
-    const raw = rows.results || [];
-    const hasMore = raw.length > limit;
-    const items = raw.slice(0, limit).map(mapRecord);
-    return json({ items, has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : null });
+    return json(await queryCombinedReportRecords(env.DB, user.id, { shop, from, to, limit, offset }));
   }
 
   if (path === "/aggregate" && method === "GET") {
-    const row = await env.DB.prepare(
-      "SELECT COALESCE(SUM(total), 0) AS sum_total, COALESCE(MAX(total), 0) AS max_total, COUNT(*) AS count FROM shopping_records WHERE user_id = ?",
-    ).bind(user.id).first();
-    return json({ rows: [row || { sum_total: 0, max_total: 0, count: 0 }] });
+    const [legacy, sessions] = await Promise.all([
+      env.DB.prepare("SELECT COALESCE(SUM(total), 0) AS sum_total, COALESCE(MAX(total), 0) AS max_total, COUNT(*) AS count FROM shopping_records WHERE user_id = ?")
+        .bind(user.id).first(),
+      env.DB.prepare("SELECT COALESCE(SUM(COALESCE(confirmed_actual_total_paise, 0)), 0) / 100.0 AS sum_total, COALESCE(MAX(confirmed_actual_total_paise), 0) / 100.0 AS max_total, COUNT(*) AS count FROM shopping_sessions WHERE user_id = ? AND status = 'completed' AND legacy_record_id IS NULL")
+        .bind(user.id).first(),
+    ]);
+    return json({ rows: [{
+      sum_total: (Number(legacy?.sum_total) || 0) + (Number(sessions?.sum_total) || 0),
+      max_total: Math.max(Number(legacy?.max_total) || 0, Number(sessions?.max_total) || 0),
+      count: (Number(legacy?.count) || 0) + (Number(sessions?.count) || 0),
+    }] });
   }
 
   if (path === "/" && method === "POST") {
@@ -158,7 +150,10 @@ async function handleRecords(request, env, user, url) {
   const recordId = match[1];
 
   if (method === "GET") {
-    const record = await fetchRecord(env.DB, user.id, recordId);
+    const legacyRecord = await fetchRecord(env.DB, user.id, recordId);
+    if (legacyRecord) return json(legacyRecord);
+    const page = await queryCombinedReportRecords(env.DB, user.id, { recordId, limit: 1, offset: 0 });
+    const record = page.items[0] || null;
     return record ? json(record) : error("Record not found.", 404);
   }
 
@@ -709,10 +704,39 @@ async function handleDirectBillRead(request, env, user) {
 }
 
 
-async function queryCombinedReportRecords(db, userId, { from = "", to = "", limit = 200, offset = 0 } = {}) {
-  const legacyDateFilter = from && to ? " AND date >= ? AND date <= ?" : "";
-  const sessionDateFilter = from && to ? " AND s.shopping_date >= ? AND s.shopping_date <= ?" : "";
-  const dateValues = from && to ? [from, to] : [];
+async function queryCombinedReportRecords(db, userId, { shop = "", from = "", to = "", recordId = "", limit = 200, offset = 0 } = {}) {
+  const cleanShop = String(shop || "").trim().slice(0, 100);
+  const cleanId = String(recordId || "").trim();
+  const legacyFilters = [];
+  const legacyValues = [];
+  const sessionFilters = [];
+  const sessionValues = [];
+  if (cleanShop) {
+    legacyFilters.push("instr(lower(shop_name), lower(?)) > 0");
+    legacyValues.push(cleanShop);
+    sessionFilters.push("instr(lower(COALESCE(NULLIF(s.name, ''), 'Shopping session')), lower(?)) > 0");
+    sessionValues.push(cleanShop);
+  }
+  if (from) {
+    legacyFilters.push("date >= ?");
+    legacyValues.push(from);
+    sessionFilters.push("s.shopping_date >= ?");
+    sessionValues.push(from);
+  }
+  if (to) {
+    legacyFilters.push("date <= ?");
+    legacyValues.push(to);
+    sessionFilters.push("s.shopping_date <= ?");
+    sessionValues.push(to);
+  }
+  if (cleanId) {
+    legacyFilters.push("id = ?");
+    legacyValues.push(cleanId);
+    sessionFilters.push("s.id = ?");
+    sessionValues.push(cleanId);
+  }
+  const legacyWhere = legacyFilters.map((filter) => " AND " + filter).join("");
+  const sessionWhere = sessionFilters.map((filter) => " AND " + filter).join("");
   const sql = `
     SELECT id, shop_name, date, items_json, total, item_count, notes, source,
       bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
@@ -720,7 +744,7 @@ async function queryCombinedReportRecords(db, userId, { from = "", to = "", limi
       SELECT id, shop_name, date, items_json, total, item_count, notes, source,
         bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
       FROM shopping_records
-      WHERE user_id = ?${legacyDateFilter}
+      WHERE user_id = ?${legacyWhere}
       UNION ALL
       SELECT
         s.id AS id,
@@ -756,10 +780,14 @@ async function queryCombinedReportRecords(db, userId, { from = "", to = "", limi
         NULL AS legacy_bill_file_uri,
         COALESCE((
           SELECT json_group_array(json_object(
+            'id', b.id,
+            'kind', 'actual',
             'shop_name', b.shop_name,
             'date', b.purchase_date,
             'receipt_number', b.receipt_number,
+            'amount', CASE WHEN b.bill_total_paise IS NULL THEN NULL ELSE b.bill_total_paise / 100.0 END,
             'total', CASE WHEN b.bill_total_paise IS NULL THEN NULL ELSE b.bill_total_paise / 100.0 END,
+            'item_count', (SELECT COUNT(*) FROM shopping_purchase_lines pl WHERE pl.bill_id=b.id AND pl.user_id=b.user_id AND pl.session_id=b.session_id),
             'file_uri', CASE WHEN b.file_id IS NULL THEN NULL ELSE 'cf-file:' || b.file_id END,
             'status', b.bill_status,
             'included_in_actual', b.included_in_actual
@@ -771,12 +799,12 @@ async function queryCombinedReportRecords(db, userId, { from = "", to = "", limi
         s.created_at AS created_at,
         s.updated_at AS updated_at
       FROM shopping_sessions s
-      WHERE s.user_id = ? AND s.status = 'completed' AND s.legacy_record_id IS NULL${sessionDateFilter}
+      WHERE s.user_id = ? AND s.status = 'completed' AND s.legacy_record_id IS NULL${sessionWhere}
     )
     ORDER BY date DESC, created_at DESC, id DESC
     LIMIT ? OFFSET ?
   `;
-  const rows = await db.prepare(sql).bind(userId, ...dateValues, userId, ...dateValues, limit + 1, offset).all();
+  const rows = await db.prepare(sql).bind(userId, ...legacyValues, userId, ...sessionValues, limit + 1, offset).all();
   const raw = rows.results || [];
   const hasMore = raw.length > limit;
   return {
