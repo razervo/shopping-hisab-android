@@ -19,7 +19,7 @@ export function RecordDetail({ record, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const items = record.items || [];
-  const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0;
+  const total = record.source === "session" ? (Number(record.total) || 0) : (items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0);
 
   const openBill = async () => {
     try {
@@ -57,7 +57,7 @@ export function RecordDetail({ record, onDeleted }) {
         <p className="tnum mt-3 text-[34px] font-extrabold leading-none">{inr(total)}</p>
         <p className="mt-2 text-[12px] text-white/65">
           {items.length} {items.length === 1 ? "item" : "items"} ·{" "}
-          {record.source === "bill" ? "Read from bill" : "Added manually"}
+          {record.source === "session" ? "Completed shopping session" : record.source === "bill" ? "Read from bill" : "Added manually"}
         </p>
       </div>
 
@@ -109,7 +109,14 @@ export function RecordDetail({ record, onDeleted }) {
               <div key={receipt.id || index} className="flex items-center justify-between gap-3 rounded-xl bg-secondary/40 px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[12px] font-bold">{receipt.kind === "actual" ? "Actual bill" : `Receipt ${index + 1}`}</p>
-                  <p className="text-[10.5px] text-muted-foreground">{receipt.status === "pending" ? "Actual bill still needed" : receipt.status === "skipped" ? "Actual bill skipped" : `${receipt.item_count || 0} item(s) recorded`}</p>
+                  <p className="text-[10.5px] text-muted-foreground">
+                  {receipt.shop_name ? `${receipt.shop_name} · ` : ""}
+                  {receipt.receipt_number ? `#${receipt.receipt_number} · ` : ""}
+                  {receipt.status === "pending" ? "Actual bill still needed" : receipt.status === "skipped" ? "Actual bill skipped" : receipt.status === "duplicate" ? "Duplicate receipt excluded" : receipt.status === "void" ? "Voided receipt excluded" : `${receipt.item_count || 0} item(s) recorded`}
+                </p>
+                {receipt.file_uri && /^cf-file:[a-f0-9-]{36}$/i.test(String(receipt.file_uri)) ? (
+                  <a href={`/api/files/${String(receipt.file_uri).slice(8)}/content`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10.5px] font-bold text-primary underline">Open receipt</a>
+                ) : null}
                 </div>
                 <span className="tnum shrink-0 text-[12px] font-bold">{receipt.amount > 0 ? inr(receipt.amount) : "Amount not recorded"}</span>
               </div>
@@ -135,6 +142,11 @@ export function RecordDetail({ record, onDeleted }) {
         </button>
       ) : null}
 
+      {record.source === "session" ? (
+        <div className="rounded-[20px] border border-border bg-secondary/40 px-4 py-3 text-[12px] text-muted-foreground">
+          This shopping session is completed. Its confirmed expense is read-only; receipt attachments remain available above.
+        </div>
+      ) : (
       <div className="!mt-6 rounded-[24px] border border-border bg-white px-4 py-3">
         <div className="flex items-center gap-2.5">
           <Link
@@ -171,6 +183,7 @@ export function RecordDetail({ record, onDeleted }) {
           </AlertDialog>
         </div>
       </div>
+      )}
     </div>
   );
 }
