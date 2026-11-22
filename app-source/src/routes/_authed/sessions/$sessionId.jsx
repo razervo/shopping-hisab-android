@@ -683,9 +683,28 @@ function SessionDetailPage() {
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/15 pt-4">
           <div><p className="text-[11px] text-white/65">Paid so far</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p></div>
-          <div><p className="text-[11px] text-white/65">Bill amounts pending</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{Number(session.bills_amount_pending || 0)}</p></div>
+          <div><p className="text-[11px] text-white/65">Bills to check</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{Number(session.bills_amount_pending || 0)}</p></div>
         </div>
       </div>
+
+      <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[18px] border border-border bg-white p-2">
+        <a href="#trip-list" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${items.length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">1</span>
+          Your list
+        </a>
+        <a href="#trip-estimate" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${latestEstimate ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">2</span>
+          Estimate
+        </a>
+        <a href="#trip-bills" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${(session.bills || []).length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">3</span>
+          Shop & bills
+        </a>
+        <a href="#trip-finish" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${completed ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">4</span>
+          Finish
+        </a>
+      </nav>
 
       {!completed ? (
         <>
@@ -767,7 +786,7 @@ function SessionDetailPage() {
         </>
       ) : null}
 
-      <section className="mt-6">
+      <section id="trip-list" className="mt-6">
         <div className="mb-3 flex items-center justify-between px-1">
           <div><h2 className="text-[15px] font-extrabold">Your shopping list</h2><p className="text-[11.5px] text-muted-foreground">{items.length} items in this trip</p></div>
           <button type="button" onClick={loadSession} aria-label="Refresh session" className="rounded-full border border-border p-2"><RefreshCw className="h-4 w-4" /></button>
@@ -872,7 +891,7 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
-      <section className="mt-6">
+      <section id="trip-estimate" className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-[18px] border border-border bg-white p-3">
@@ -973,7 +992,7 @@ function SessionDetailPage() {
         </section>
       ) : null}
 
-      <section className="mt-6">
+      <section id="trip-bills" className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Bills from your shops</h2>
         {(session.bills || []).length ? (
           <div className="space-y-2">{session.bills.map((bill) => (
@@ -1039,7 +1058,7 @@ function SessionDetailPage() {
       </section>
 
       {!completed ? (
-        <form onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
+        <form id="trip-finish" onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Finish this trip</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Check each bill, then confirm the total you paid. Any unpurchased planned items will remain visible in the completion record.</p>
@@ -1076,7 +1095,7 @@ function SessionDetailPage() {
           </button>
         </form>
       ) : (
-        <section className="mt-6 rounded-[24px] border border-border bg-white p-4">
+        <section id="trip-finish" className="mt-6 rounded-[24px] border border-border bg-white p-4">
           <p className="text-[15px] font-extrabold">Trip finished</p>
           <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. Your trip summary is saved and cannot be edited.</p>
           <p className="mt-2 text-[11px] text-muted-foreground">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length} planned item(s) remain unpurchased or partially purchased.</p>
