@@ -32,6 +32,11 @@ db.execute(
      "2026-11-22T14:00:30Z", "2026-11-22T14:00:30Z"),
 )
 
+detail_source = (ROOT / "src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
+assert "const unresolvedBills" in detail_source
+assert "Mark each one Verified, Duplicate or Void" in detail_source
+assert "disabled={confirmationSaving || unresolvedBills.length > 0" in detail_source
+
 source = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
 start = source.index('if(subpath==="confirm" && method==="POST"){')
 end = source.index('if (subpath === "audit" && method === "GET")', start)
