@@ -16,6 +16,8 @@ export default {
     }
 
     if (
+      url.pathname === "/api/reports" ||
+      url.pathname === "/api/reports/export" ||
       url.pathname === "/api/records" ||
       url.pathname.startsWith("/api/records/") ||
       url.pathname === "/api/files" ||
