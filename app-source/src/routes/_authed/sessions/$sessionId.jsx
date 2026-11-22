@@ -205,6 +205,7 @@ function SessionDetailPage() {
           purchase_date: billForm.purchase_date || null,
           receipt_number: billForm.receipt_number.trim(),
           bill_total_paise: Math.round(rupees * 100),
+          bill_status: "verified",
           duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
           original_ocr: { entry_method: "manual" },
         }),
