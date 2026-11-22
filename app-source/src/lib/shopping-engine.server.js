@@ -411,6 +411,26 @@ export async function handleShoppingEngine(request, env) {
       const file=await db.prepare("SELECT id FROM uploaded_files WHERE id=? AND user_id=?").bind(fileId,userId).first();
       if(!file) return fail("The selected bill file was not found in your account.",404);
     }
+    // Recover an already-created bill from its uploaded-file marker when the
+    // client lost its transient idempotency key (e.g. reload after header save).
+    if(fileId){
+      const recovered=await db.prepare("SELECT * FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND file_id=? ORDER BY uploaded_at,id LIMIT 1").bind(userId,sessionId,fileId).first();
+      if(recovered){
+        const responseBody={...recovered,possible_duplicate:null};
+        if(idempotencyKey){
+          const recoveryStatements=[
+            db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,after_json,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",recovered.id,"bill_upload_recovered",JSON.stringify({file_id:fileId}),"{}",now()),
+            db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),200,now())
+          ];
+          try{await db.batch(recoveryStatements);}catch(error){
+            const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+            if(winner){if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different bill request.",409);return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);}
+            throw error;
+          }
+        }
+        return json(responseBody,200);
+      }
+    }
     const fingerprint=text(body.duplicate_fingerprint,200)||null;
     const possibleDuplicate=fingerprint?await db.prepare("SELECT id,shop_name,purchase_date,receipt_number,bill_total_paise FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND duplicate_fingerprint=? LIMIT 1").bind(userId,sessionId,fingerprint).first():null;
     const requestedStatus=["uploaded","needs_review","verified","duplicate","void"].includes(body.bill_status)?body.bill_status:"uploaded";
