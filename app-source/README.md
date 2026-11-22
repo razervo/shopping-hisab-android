@@ -53,10 +53,17 @@ Base44 migration must preserve record IDs, item JSON, ownership, dates, totals, 
 
 ## Verification
 
-The hardening CI workflow runs lint, the application build and fresh-SQLite migration checks. It also runs reporting regression tests for:
-- combined monthly/lifetime totals across legacy records and completed sessions;
-- exclusion of sessions linked to a legacy record (avoids double counting);
-- exclusion of duplicate/void bill lines from actual purchase detail;
-- receipt metadata preservation and paginated export.
+The hardening CI workflow runs:
+- ESLint and the native application build;
+- all native D1 migrations against a fresh SQLite database, including foreign-key checks;
+- combined legacy/session History and monthly-report calculations, cross-account scoping, duplicate-bill exclusion and report/export pagination;
+- final expense confirmation review guards, duplicate/void exclusion, idempotency retries and confirmation race protection;
+- receipt MIME/extension validation, PDF passthrough and safe HEIC conversion failure handling;
+- D1-side Google Drive upload-marker and metadata-recovery scenarios, including same-key retry de-duplication and per-user isolation;
+- detailed CSV/PDF export and completed-session receipt-link assertions.
 
-Automated CI and the browser QA run are not substitutes for live tests with actual receipt photos, two independent accounts, Drive upload/recovery and final bill confirmation.
+The Cloudflare build workflow verifies the PWA/TWA assets and bundles the native Worker with Wrangler dry-run validation. These checks do not deploy the Worker.
+
+CI coverage for Drive recovery exercises the D1 idempotency and metadata state machine; it does not perform a live Google Drive upload. Browser QA confirmed the account's Drive connection status and completed a six-item AI price-estimate test without saving an estimate version. The temporary QA items were subsequently removed.
+
+Before public launch, still perform end-to-end checks with actual handwritten and printed receipt photos, a real Google Drive upload/download and interrupted-upload retry, two independent signed-in accounts, a complete bill-review/final-confirmation cycle, and Base44 import plus restore/reconciliation. Do not treat local SQL regression tests or browser screen inspection as substitutes for those live integration checks.
