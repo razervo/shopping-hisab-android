@@ -687,10 +687,21 @@ export async function handleShoppingEngine(request, env) {
     const stmts=[
       db.prepare(`INSERT INTO shopping_expense_confirmations (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,estimate_id,calculation_snapshot_json,confirmed_at)
         SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm'))`).bind(confirmationId,userId,sessionId,revision,calculated,confirmed,estimate?.id||null,JSON.stringify(snapshot),timestamp,sessionId,userId),
-      db.prepare("UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=? WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')").bind(confirmed,timestamp,sessionId,userId),
-      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"session",sessionId,"expense_confirmed",null,JSON.stringify({confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed}),timestamp)
+      db.prepare(`UPDATE shopping_sessions SET status='completed',confirmed_actual_total_paise=?,updated_at=?
+        WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
+          AND EXISTS (SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?)`)
+        .bind(confirmed,timestamp,sessionId,userId,confirmationId,userId,sessionId),
+      db.prepare(`INSERT INTO shopping_audit_events
+        (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
+          SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?
+        )`).bind(id(),userId,sessionId,"session",sessionId,"expense_confirmed",null,JSON.stringify({confirmation_id:confirmationId,revision_number:revision,calculated_total_paise:calculated,confirmed_total_paise:confirmed}),timestamp,confirmationId,userId,sessionId)
     ];
-    if(requestKey)stmts.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    if(requestKey)stmts.push(db.prepare(`INSERT INTO shopping_idempotency_keys
+      (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at)
+      SELECT ?,?,?,?,?,?,?,201,? WHERE EXISTS (
+        SELECT 1 FROM shopping_expense_confirmations WHERE id=? AND user_id=? AND session_id=?
+      )`).bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),timestamp,confirmationId,userId,sessionId));
     try{const results=await db.batch(stmts);if(!results?.[0]?.meta?.changes)return fail("This session has already been completed. Refresh to view the saved confirmation.",409);}catch(error){if(requestKey){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}throw error;}
     return json(responseBody,201);
   }
