@@ -458,8 +458,14 @@ export async function handleShoppingEngine(request, env) {
       const unitPrice=Number(line.estimated_unit_price_paise);
       if (!Number.isFinite(quantity)||quantity<0||quantity>1000000) return fail(`Estimate line ${index+1} has invalid quantity.`);
       if (!Number.isSafeInteger(unitPrice)||unitPrice<0) return fail(`Estimate line ${index+1} has invalid unit price in paise.`);
-      const lineTotal=line.estimated_line_total_paise==null?Math.round(quantity*unitPrice):Number(line.estimated_line_total_paise);
-      if (!Number.isSafeInteger(lineTotal)||lineTotal<0) return fail(`Estimate line ${index+1} has invalid line total.`);
+      const lineTotal = Math.round(quantity * unitPrice);
+      if (!Number.isSafeInteger(lineTotal) || lineTotal < 0) {
+        return fail(`Estimate line ${index+1} total is outside the supported range.`);
+      }
+      if (line.estimated_line_total_paise != null &&
+          Number(line.estimated_line_total_paise) !== lineTotal) {
+        return fail(`Estimate line ${index+1} total does not match its quantity and unit price.`);
+      }
       const priceSource=text(line.price_source,30);
       if (!["previous_purchase","market_data","manual","ai_estimate"].includes(priceSource)) return fail(`Estimate line ${index+1} has invalid price source.`);
       const confidence=line.confidence==null?null:Number(line.confidence);
