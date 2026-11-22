@@ -1,7 +1,11 @@
 name: Deploy Shopping Hisab native Worker
 
 on:
-  # Deliberately manual only: do not apply D1 migrations or deploy on push.
+  # Deploy automatically only when changes reach the designated deployment branch.
+  push:
+    branches:
+      - cloudflare-native-migration
+  # Keep manual deployment available as a fallback.
   workflow_dispatch:
 
 permissions:
@@ -14,10 +18,8 @@ jobs:
       run:
         working-directory: app-source
     steps:
-      - name: Check out native migration branch
+      - name: Check out selected deployment branch
         uses: actions/checkout@v4
-        with:
-          ref: cloudflare-native-migration
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

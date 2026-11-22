@@ -134,14 +134,23 @@ async function handleRecords(request, env, user, url) {
   if (path === "/" && method === "POST") {
     let data;
     try { data = validateRecord(await request.json()); } catch (e) { return error(e.message); }
+    const idempotencyKey = String(request.headers.get("Idempotency-Key") || "").trim();
+    if (!idempotencyKey || idempotencyKey.length > 180) return error("Missing or invalid Idempotency-Key. Please retry.", 400);
+    const operation = "legacy_record_create";
+    const requestHash = await sha256Hex(new TextEncoder().encode(JSON.stringify(data)));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await env.DB.prepare(
-      `INSERT INTO shopping_records
-       (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now).run();
-    return json(await fetchRecord(env.DB, user.id, id), 201);
+    const responseJson = JSON.stringify({ id });
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO shopping_idempotency_keys (id, user_id, session_id, operation, idempotency_key, request_hash, response_json, response_status, created_at) VALUES (?, ?, NULL, ?, ?, ?, ?, 201, ?)").bind(crypto.randomUUID(), user.id, operation, idempotencyKey, requestHash, responseJson, now),
+      env.DB.prepare("INSERT INTO shopping_records (id, user_id, shop_name, date, items_json, total, item_count, notes, source, bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM shopping_idempotency_keys WHERE user_id = ? AND operation = ? AND idempotency_key = ? AND response_json = ? AND request_hash = ?) AND NOT EXISTS (SELECT 1 FROM shopping_records WHERE id = ? AND user_id = ?)").bind(id, user.id, data.shop_name, data.date, data.items_json, data.total, data.item_count, data.notes, data.source, data.bill_file_id, data.legacy_bill_file_uri, data.receipts_json, data.reconciliation_status, now, now, user.id, operation, idempotencyKey, responseJson, requestHash, id, user.id),
+    ]);
+    const stored = await env.DB.prepare("SELECT request_hash, response_json FROM shopping_idempotency_keys WHERE user_id = ? AND operation = ? AND idempotency_key = ?").bind(user.id, operation, idempotencyKey).first();
+    if (!stored) return error("Save could not be confirmed. Please retry.", 503);
+    if (stored.request_hash !== requestHash) return error("This save key was already used for different shopping data. Please start a new save.", 409);
+    const savedId = JSON.parse(stored.response_json || "{}").id;
+    const record = await fetchRecord(env.DB, user.id, savedId);
+    return record ? json(record, 201) : error("Save could not be confirmed. Please retry.", 503);
   }
 
   const match = /^\/([a-f0-9-]{36})$/i.exec(path);
@@ -265,25 +274,77 @@ async function ensureGoogleDriveFolder(db, userId, token) {
   return folderId;
 }
 
-async function uploadGoogleDriveFile(db, userId, env, file, originalName) {
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function findDriveUploadByMarker(token, folderId, markerKey, contentHash) {
+  const query = new URLSearchParams({
+    q: `'${folderId}' in parents and trashed = false and appProperties has { key='shoppingHisabUploadKey' and value='${markerKey}' } and appProperties has { key='shoppingHisabContentHash' and value='${contentHash}' }`,
+    fields: "files(id,name,mimeType,size,appProperties)", pageSize: "10",
+  });
+  const response = await driveRequest(token, `https://www.googleapis.com/drive/v3/files?${query}`);
+  const listing = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("Could not check Google Drive for a previous upload. Please reconnect Drive and retry.");
+  return listing.files?.find((item) => item.id) || null;
+}
+async function uploadGoogleDriveFile(db, userId, env, file, originalName, idempotencyKey = crypto.randomUUID()) {
+  const fileBytes = await file.arrayBuffer();
+  const contentHash = await sha256Hex(fileBytes);
+  const normalizedKey = String(idempotencyKey).slice(0, 500);
+  const markerKey = await sha256Hex(new TextEncoder().encode(normalizedKey));
+  const leaseToken = crypto.randomUUID();
   const token = await getGoogleDriveToken(db, userId, env);
   const folderId = await ensureGoogleDriveFolder(db, userId, token);
-  const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId] };
-  const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
-  const fileBytes = await file.arrayBuffer();
-  const multipartBody = new Blob([
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-    `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`,
-    fileBytes,
-    `\r\n--${boundary}--`,
-  ], { type: `multipart/related; boundary=${boundary}` });
-  const response = await driveRequest(token,
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size",
-    { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody },
-  );
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.id) throw new Error("Google Drive could not save this attachment. Check your Drive storage and reconnect if needed.");
-  return { driveFileId: result.id, size: Number(result.size) || file.size, name: result.name || metadata.name };
+  await db.prepare("INSERT OR IGNORE INTO drive_upload_idempotency (id, user_id, idempotency_key, content_hash, status, lease_token) VALUES (?, ?, ?, ?, 'pending', ?)")
+    .bind(crypto.randomUUID(), userId, normalizedKey, contentHash, leaseToken).run();
+  const reservation = await db.prepare("SELECT * FROM drive_upload_idempotency WHERE user_id = ? AND idempotency_key = ?").bind(userId, normalizedKey).first();
+  if (!reservation || reservation.content_hash !== contentHash) throw new Error("This upload retry key was already used for different file content. Choose the file again.");
+  if (reservation.status === "complete" && reservation.drive_file_id) {
+    const known = await db.prepare("SELECT original_name, size_bytes FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?").bind(userId, reservation.drive_file_id).first();
+    return { driveFileId: reservation.drive_file_id, size: Number(known?.size_bytes) || file.size, name: known?.original_name || String(originalName || file.name || "attachment").slice(0, 180), recovered: true };
+  }
+  // A pending upload lease is considered stale only after 30 minutes to reduce
+  // the chance of taking over a slow active Drive upload and creating a duplicate.
+  let driveFile = await findDriveUploadByMarker(token, folderId, markerKey, contentHash);
+  if (!driveFile) {
+    if (reservation.lease_token !== leaseToken) {
+      const takeover = await db.prepare("UPDATE drive_upload_idempotency SET lease_token = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND idempotency_key = ? AND status = 'pending' AND updated_at < datetime('now', '-30 minutes')")
+        .bind(leaseToken, userId, normalizedKey).run();
+      if (!takeover?.meta?.changes) throw new Error("This upload is already being processed. Please wait a moment and retry.");
+    }
+    const metadata = { name: String(originalName || file.name || "attachment").slice(0, 180), parents: [folderId], appProperties: { shoppingHisabUploadKey: markerKey, shoppingHisabContentHash: contentHash } };
+    const boundary = `shoppinghisab_${crypto.randomUUID().replace(/-/g, "")}`;
+    const multipartBody = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+      `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`, fileBytes, `\r\n--${boundary}--`,
+    ], { type: `multipart/related; boundary=${boundary}` });
+    const response = await driveRequest(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,appProperties", {
+      method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody,
+    });
+    driveFile = await response.json().catch(() => ({}));
+    if (!response.ok || !driveFile.id) throw new Error("Google Drive could not save this attachment. Check your Drive storage and reconnect if needed.");
+  }
+  await db.prepare("UPDATE drive_upload_idempotency SET status = 'complete', drive_file_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND idempotency_key = ? AND content_hash = ?")
+    .bind(driveFile.id, userId, normalizedKey, contentHash).run();
+  return { driveFileId: driveFile.id, size: Number(driveFile.size) || file.size, name: driveFile.name || String(originalName || file.name || "attachment").slice(0, 180), recovered: Boolean(driveFile.recovered) };
+}
+async function ensureDriveUploadMetadata(db, userId, uploaded, contentType, legacyFileUri = null) {
+  let existing = await db.prepare("SELECT id FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?").bind(userId, uploaded.driveFileId).first();
+  if (existing) {
+    if (legacyFileUri) await db.prepare("UPDATE uploaded_files SET legacy_file_uri = COALESCE(legacy_file_uri, ?) WHERE id = ? AND user_id = ?").bind(legacyFileUri, existing.id, userId).run();
+    await db.prepare("UPDATE drive_upload_idempotency SET uploaded_file_id = ?, status = 'complete', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND drive_file_id = ?").bind(existing.id, userId, uploaded.driveFileId).run();
+    return existing.id;
+  }
+  const id = crypto.randomUUID();
+  const statement = legacyFileUri
+    ? db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)").bind(id, userId, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size, legacyFileUri)
+    : db.prepare("INSERT OR IGNORE INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)").bind(id, userId, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, contentType, uploaded.size);
+  await statement.run();
+  existing = await db.prepare("SELECT id FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?").bind(userId, uploaded.driveFileId).first();
+  if (!existing) throw new Error("Drive saved the attachment, but its metadata could not be recovered. Retry safely.");
+  await db.prepare("UPDATE drive_upload_idempotency SET uploaded_file_id = ?, status = 'complete', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND drive_file_id = ?").bind(existing.id, userId, uploaded.driveFileId).run();
+  return existing.id;
 }
 
 async function downloadGoogleDriveFile(db, userId, env, driveFileId) {
@@ -302,12 +363,10 @@ async function handleFiles(request, env, user, url) {
     const type = String(file.type || "application/octet-stream").toLowerCase();
     const allowed = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
     if (!allowed.has(type)) return error("Supported formats are JPG, PNG, WEBP and PDF.");
-    const id = crypto.randomUUID();
-    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "upload");
-    await env.DB.prepare(
-      "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
-    ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, type, uploaded.size).run();
-    return json({ file_uri: `cf-file:${id}`, file_id: id }, 201);
+    const key = request.headers.get("Idempotency-Key") || crypto.randomUUID();
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "upload", key);
+    const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, type);
+    return json({ file_uri: `cf-file:${id}`, file_id: id, recovered: Boolean(uploaded.recovered) }, uploaded.recovered ? 200 : 201);
   }
 
   const match = /^\/api\/files\/([a-f0-9-]{36})\/(content|signed)$/i.exec(url.pathname);
@@ -392,7 +451,7 @@ function extractModelText(result) {
 
 function parseModelJson(value) {
   if (value && typeof value === "object") return value;
-  const text = String(value || "").trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/, "").trim();
+  const text = String(value || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("AI did not return valid structured data.");
@@ -597,11 +656,9 @@ async function handleGeminiOcrTest(request, env, user) {
   })();
   const uploadPromise = (async () => {
     const uploadStarted = Date.now();
-    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "gemini-ocr-test.jpg");
-    const id = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
-    ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, mime, uploaded.size).run();
+    const key = request.headers.get("Idempotency-Key") || crypto.randomUUID();
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "gemini-ocr-test.jpg", key);
+    const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
     return { file_uri: `cf-file:${id}`, ms: Date.now() - uploadStarted };
   })();
   const [model, uploaded] = await Promise.all([modelPromise, uploadPromise]);
@@ -632,22 +689,23 @@ async function handleDirectBillRead(request, env, user) {
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
   const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200);
   // Upload to Drive at the same time as AI reads the original image.
-  const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg");
+  const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
+  const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
   const [readResult, uploadResult] = await Promise.allSettled([readPromise, uploadPromise]);
   if (uploadResult.status === "rejected") throw new Error(`Receipt could not be saved to Google Drive: ${uploadResult.reason?.message || "Please reconnect Drive and retry."}`);
-  if (readResult.status === "rejected") throw new Error(`Receipt was uploaded, but AI could not read it: ${readResult.reason?.message || "Try a clearer photo."}`);
-  const modelResult = readResult.value;
   const uploaded = uploadResult.value;
-  // callVisionModel already parses the model's answer into the draft object.
-  const parsed = modelResult;
-  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
-    throw new Error("The bill could not be interpreted. Try a clearer, straight photo.");
+  // Persist the Drive file before OCR finishes so a failed read remains recoverable.
+  const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
+  const fileUri = `cf-file:${id}`;
+  if (readResult.status === "rejected") {
+    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${readResult.reason?.message || "Try again."}` });
   }
-  const id = crypto.randomUUID();
-  await env.DB.prepare(
-    "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?)",
-  ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, mime, uploaded.size).run();
-  return json({ draft: parsed.draft, file_uri: `cf-file:${id}` });
+  // callVisionModel already parses the model's answer into the draft object.
+  const parsed = readResult.value;
+  if (!parsed?.draft || !Array.isArray(parsed.draft.items) || !parsed.draft.items.length) {
+    return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
+  }
+  return json({ draft: parsed.draft, file_uri: fileUri });
 }
 
 async function handleAI(request, env, user) {
@@ -891,12 +949,10 @@ async function handleMigrationFile(request, env, user) {
     return json({ file_uri: `cf-file:${existing.id}`, already_imported: true });
   }
 
-  const id = crypto.randomUUID();
   const originalName = String(file.name || "attachment").slice(0, 180);
-  const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName);
-  await env.DB.prepare(
-    "INSERT INTO uploaded_files (id, user_id, r2_key, storage_provider, drive_file_id, original_name, content_type, size_bytes, legacy_file_uri) VALUES (?, ?, ?, 'google_drive', ?, ?, ?, ?, ?)",
-  ).bind(id, user.id, `drive:${uploaded.driveFileId}`, uploaded.driveFileId, uploaded.name, type, uploaded.size, legacyUri).run();
+  const uploadKey = `legacy-file:${await sha256Hex(new TextEncoder().encode(legacyUri))}`;
+  const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, originalName, uploadKey);
+  const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, type, legacyUri);
   await env.DB.prepare(
     "UPDATE shopping_records SET bill_file_id = ?, legacy_bill_file_uri = NULL WHERE user_id = ? AND legacy_bill_file_uri = ?",
   ).bind(id, user.id, legacyUri).run();

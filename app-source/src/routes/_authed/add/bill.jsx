@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +31,8 @@ function AddBillPage() {
     storedDraft?.kind === "uploaded_list" ? storedDraft.billFileUri || "" : "",
   );
   const [saving, setSaving] = useState(false);
+  const saveLockRef = useRef(false);
+  const saveRequestRef = useRef(null);
 
   const handleExtracted = (extracted, fileUri) => {
     setDraft(extracted);
@@ -39,15 +41,22 @@ function AddBillPage() {
   };
 
   const save = async (values) => {
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = buildPayload({ ...values, source: "bill", billFileUri: billUri, receipts: values.receipts, reconciliationStatus: values.reconciliationStatus });
-      const created = await base44.entities.ShoppingRecord.create(payload);
+      const fingerprint = JSON.stringify(payload);
+      if (!saveRequestRef.current || saveRequestRef.current.fingerprint !== fingerprint) {
+        saveRequestRef.current = { fingerprint, key: crypto.randomUUID() };
+      }
+      const created = await base44.entities.ShoppingRecord.create(payload, saveRequestRef.current.key);
       clearDraft();
       toast.success("Shopping saved");
       navigate({ to: "/record/$recordId", params: { recordId: created.id } });
     } catch {
       toast.error("Could not save this shopping. Please try again.");
+      saveLockRef.current = false;
       setSaving(false);
     }
   };

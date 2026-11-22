@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,21 @@ function SessionDetailPage() {
   const [rows, setRows] = useState([blankRow()]);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
+  const billRequestKeyRef = useRef(null);
+  const billLineRequestKeysRef = useRef({});
+  const uploadedBillCreateKeyRef = useRef(null);
+  const uploadedBillLinesKeyRef = useRef(null);
+  const scannedSourceLinesKeyRef = useRef(null);
+  const manualSourceLinesKeyRef = useRef(null);
+  const scannedSourceListKeyRef = useRef(null);
+  const manualSourceListKeyRef = useRef(null);
+  const confirmationRequestKeyRef = useRef(null);
+  const confirmationLockRef = useRef(false);
+  const scannedListSaveLockRef = useRef(false);
+  const manualListSaveLockRef = useRef(false);
+  const manualBillSaveLockRef = useRef(false);
+  const uploadedBillSaveLockRef = useRef(false);
+  const billLineSaveLockRefs = useRef({});
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -178,10 +193,13 @@ function SessionDetailPage() {
       toast.error("Enter a valid bill total.");
       return;
     }
+    if (manualBillSaveLockRef.current) return;
+    manualBillSaveLockRef.current = true;
     setBillSaving(true);
     try {
       const savedBill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
         method: "POST",
+        headers: { "Idempotency-Key": billRequestKeyRef.current || (billRequestKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           shop_name: billForm.shop_name.trim(),
           purchase_date: billForm.purchase_date || null,
@@ -193,14 +211,17 @@ function SessionDetailPage() {
       });
       if (savedBill.possible_duplicate) toast.warning("Possible duplicate bill detected. Review it before trusting the spending total.");
       else toast.success("Bill added to actual spending.");
+      billRequestKeyRef.current = null;
       setBillForm({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not add this bill.");
     } finally {
+      manualBillSaveLockRef.current = false;
       setBillSaving(false);
     }
   };
+
 
   const handleUploadedBill = (draft, fileUri) => {
     const extracted = Array.isArray(draft?.items) ? draft.items : [];
@@ -243,6 +264,8 @@ function SessionDetailPage() {
     if (!lines.length || lines.some((line) => !line.product_name)) return toast.error("Check every extracted bill item name.");
     if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity < 0)) return toast.error("Check every extracted quantity.");
     if (lines.some((line) => line.amountRupees !== null && (!Number.isFinite(line.amountRupees) || line.amountRupees < 0))) return toast.error("Check every extracted item amount.");
+    if (uploadedBillSaveLockRef.current) return;
+    uploadedBillSaveLockRef.current = true;
     setUploadedBillSaving(true);
     try {
       let billId = uploadedBillId;
@@ -252,6 +275,7 @@ function SessionDetailPage() {
         const duplicateFingerprint = [shopKey, uploadedBillDate, Math.round(totalRupees * 100)].join("|").slice(0, 200);
         const bill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
           method: "POST",
+          headers: { "Idempotency-Key": uploadedBillCreateKeyRef.current || (uploadedBillCreateKeyRef.current = crypto.randomUUID()) },
           body: JSON.stringify({
             shop_name: uploadedBillShop.trim(),
             purchase_date: uploadedBillDate || null,
@@ -277,6 +301,7 @@ function SessionDetailPage() {
       }
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = (() => { const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri); return fileMatch ? `uploaded-file-lines:${fileMatch[1]}` : crypto.randomUUID(); })()) },
         body: JSON.stringify({ lines: lines.map((line) => ({
           product_name: line.product_name,
           quantity: line.quantity,
@@ -289,6 +314,8 @@ function SessionDetailPage() {
         })) }),
       });
       toast.success("Bill photo and reviewed item details saved. The bill total is counted once.");
+      uploadedBillCreateKeyRef.current = null;
+      uploadedBillLinesKeyRef.current = null;
       setUploadedBillDraft(null);
       setUploadedBillId("");
       setUploadedBillFileUri("");
@@ -299,6 +326,7 @@ function SessionDetailPage() {
     } catch (cause) {
       toast.error(cause.message || "Could not save the uploaded bill.");
     } finally {
+      uploadedBillSaveLockRef.current = false;
       setUploadedBillSaving(false);
     }
   };
@@ -316,10 +344,13 @@ function SessionDetailPage() {
     if (!line.product_name.trim()) return toast.error("Enter the bill item name.");
     if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid item quantity.");
     if (amountRupees !== null && (!Number.isFinite(amountRupees) || amountRupees < 0 || !Number.isSafeInteger(Math.round(amountRupees * 100)))) return toast.error("Enter a valid item amount.");
+    if (billLineSaveLockRefs.current[billId]) return;
+    billLineSaveLockRefs.current[billId] = true;
     setBillLineSaving(billId);
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": billLineRequestKeysRef.current[billId] || (billLineRequestKeysRef.current[billId] = crypto.randomUUID()) },
         body: JSON.stringify({ lines: [{
           product_name: line.product_name.trim(),
           quantity,
@@ -333,11 +364,13 @@ function SessionDetailPage() {
       });
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
       setBillLineDetails((current) => ({ ...current, [billId]: details.purchase_lines || [] }));
+      delete billLineRequestKeysRef.current[billId];
       setBillLineForms((current) => ({ ...current, [billId]: { product_name: "", quantity: "1", unit: "pcs", amount: "", shopping_item_id: "" } }));
       toast.success("Bill item added. Bill total remains the actual spending amount.");
     } catch (cause) {
       toast.error(cause.message || "Could not add this bill item.");
     } finally {
+      delete billLineSaveLockRefs.current[billId];
       setBillLineSaving("");
     }
   };
@@ -388,17 +421,22 @@ function SessionDetailPage() {
       const direction = difference > 0 ? "higher" : "lower";
       if (!window.confirm(`Your confirmed total is ₹${rupees.toFixed(2)}, but bills calculate to ₹${calculatedRupees.toFixed(2)} (₹${Math.abs(difference).toFixed(2)} ${direction}). Save this difference in the final confirmation?`)) return;
     }
+    if (confirmationLockRef.current) return;
+    confirmationLockRef.current = true;
     setConfirmationSaving(true);
     try {
       const result = await api(`/api/shopping/sessions/${sessionId}/confirm`, {
         method: "POST",
+        headers: { "Idempotency-Key": confirmationRequestKeyRef.current || (confirmationRequestKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ confirmed_total_paise: Math.round(rupees * 100) }),
       });
+      confirmationRequestKeyRef.current = null;
       toast.success(`Shopping session completed. Confirmation v${result.revision_number} saved.`);
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not complete this session.");
     } finally {
+      confirmationLockRef.current = false;
       setConfirmationSaving(false);
     }
   };
@@ -449,11 +487,14 @@ function SessionDetailPage() {
     const validRows = scannedRows.map((row) => ({ ...row, name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit.trim() || "pcs" }));
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
+    if (scannedListSaveLockRef.current) return;
+    scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
     try {
       const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(scannedFileUri);
       const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
         method: "POST",
+        headers: { "Idempotency-Key": scannedSourceListKeyRef.current || (scannedSourceListKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           source_type: "handwritten_scan",
           file_id: fileMatch?.[1] || null,
@@ -463,6 +504,7 @@ function SessionDetailPage() {
       });
       const lineResult = await api(`/api/shopping/sessions/${sessionId}/lists/${sourceList.id}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": scannedSourceLinesKeyRef.current || (scannedSourceLinesKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ lines: validRows.map((row, index) => ({
           line_number: index + 1,
           original_name: String(row.original?.name || row.name),
@@ -485,6 +527,8 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
+      scannedSourceListKeyRef.current = null;
+      scannedSourceLinesKeyRef.current = null;
       setScannedDraft(null);
       setScannedFileUri("");
       setScannedRows([]);
@@ -493,6 +537,7 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not save the scanned list.");
       await loadSession();
     } finally {
+      scannedListSaveLockRef.current = false;
       setScannedListSaving(false);
     }
   };
@@ -513,10 +558,13 @@ function SessionDetailPage() {
       return;
     }
 
+    if (manualListSaveLockRef.current) return;
+    manualListSaveLockRef.current = true;
     setSaving(true);
     try {
       const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
         method: "POST",
+        headers: { "Idempotency-Key": manualSourceListKeyRef.current || (manualSourceListKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           source_type: "manual_entry",
           source_metadata: { title: listName.trim() || "Manual shopping list" },
@@ -524,6 +572,7 @@ function SessionDetailPage() {
       });
       const lineResult = await api(`/api/shopping/sessions/${sessionId}/lists/${sourceList.id}/lines`, {
         method: "POST",
+        headers: { "Idempotency-Key": manualSourceLinesKeyRef.current || (manualSourceLinesKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({
           lines: validRows.map((row, index) => ({
             line_number: index + 1,
@@ -552,6 +601,8 @@ function SessionDetailPage() {
         });
       }
       toast.success(`${validRows.length} ${validRows.length === 1 ? "item" : "items"} added`);
+      manualSourceListKeyRef.current = null;
+      manualSourceLinesKeyRef.current = null;
       setListName("My shopping list");
       setRows([blankRow()]);
       await loadSession();
@@ -559,6 +610,7 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not save this list.");
       await loadSession();
     } finally {
+      manualListSaveLockRef.current = false;
       setSaving(false);
     }
   };
@@ -951,7 +1003,7 @@ function SessionDetailPage() {
           ) : null}
           <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final confirmed expense (₹)</label>
           <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
-            onChange={(event) => setConfirmationTotal(event.target.value)}
+            onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
           <button type="submit" disabled={confirmationSaving || Number(session.bills_amount_pending || 0) > 0}

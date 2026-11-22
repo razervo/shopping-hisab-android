@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, ChevronRight, Loader2, Plus, RefreshCw, ShoppingBasket } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ const prettyDate = (value) => {
 
 function SessionsPage() {
   const navigate = useNavigate();
+  const createSessionKeyRef = useRef(null);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -62,11 +63,12 @@ function SessionsPage() {
       const response = await fetch("/api/shopping/sessions", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": createSessionKeyRef.current || (createSessionKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ name: name.trim(), shopping_date: date }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Could not create this session.");
+      createSessionKeyRef.current = null;
       setName("");
       toast.success("Shopping session created");
       navigate({ to: "/sessions/$sessionId", params: { sessionId: result.id } });

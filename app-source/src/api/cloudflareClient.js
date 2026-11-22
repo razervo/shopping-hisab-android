@@ -40,17 +40,18 @@ const records = {
     })),
   aggregate: () => request("/api/records/aggregate"),
   get: (id) => request(`/api/records/${encodeURIComponent(id)}`),
-  create: (record) => request("/api/records", json("POST", record)),
+  create: (record, idempotencyKey = crypto.randomUUID()) => request("/api/records", { ...json("POST", record), headers: { "Idempotency-Key": idempotencyKey } }),
   update: (id, record) => request(`/api/records/${encodeURIComponent(id)}`, json("PATCH", record)),
   delete: (id) => request(`/api/records/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 const integrations = {
   Core: {
-    UploadPrivateFile: async ({ file }) => {
+    UploadPrivateFile: async ({ file, idempotencyKey }) => {
       const form = new FormData();
       form.set("file", file, file.name || "upload");
-      return request("/api/files", { method: "POST", body: form });
+      const key = idempotencyKey || crypto.randomUUID();
+      return request("/api/files", { method: "POST", body: form, headers: { "Idempotency-Key": key } });
     },
     CreateFileSignedUrl: async ({ file_uri }) => {
       const match = /^cf-file:([a-f0-9-]{36})$/i.exec(String(file_uri || ""));
