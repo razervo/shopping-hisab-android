@@ -790,8 +790,10 @@ async function handleReports(request, env, user, url) {
   if (request.method !== "GET") return error("Method not allowed.", 405);
 
   if (url.pathname === "/api/reports/export") {
-    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
-    const offset = Math.max(Number(url.searchParams.get("cursor")) || 0, 0);
+    const requestedLimit = Number(url.searchParams.get("limit") || 200);
+    const limit = Number.isSafeInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 200;
+    const requestedOffset = Number(url.searchParams.get("cursor") || 0);
+    const offset = Number.isSafeInteger(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 100000000) : 0;
     return json(await queryCombinedReportRecords(env.DB, user.id, { limit, offset }));
   }
 
