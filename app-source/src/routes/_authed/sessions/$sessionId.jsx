@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
-  head: () => ({ meta: [{ title: "Shopping Session · Shopping Hisab" }] }),
+  head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
   component: SessionDetailPage,
 });
 
@@ -108,9 +108,9 @@ function SessionDetailPage() {
   const saveEstimate = async (event) => {
     event.preventDefault();
     const currentItems = session?.items || [];
-    if (!currentItems.length) return toast.error("Add planned items before creating an estimate.");
+    if (!currentItems.length) return toast.error("Add items to your list before estimating.");
     const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
-    if (missing.length) return toast.error("Enter an estimated unit price for every planned item.");
+    if (missing.length) return toast.error("Add a price for each item before saving your estimate.");
     const lines = [];
     for (const item of currentItems) {
       const rupees = Number(estimatePrices[item.id]);
@@ -135,7 +135,7 @@ function SessionDetailPage() {
         method: "POST",
         body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
       });
-      toast.success("Estimate version saved. Previous versions are preserved.");
+      toast.success("Your estimate is saved.");
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not save this estimate.");
@@ -146,7 +146,7 @@ function SessionDetailPage() {
 
   const generateAiEstimate = async () => {
     const currentItems = session?.items || [];
-    if (!currentItems.length) return toast.error("Add planned items before creating an estimate.");
+    if (!currentItems.length) return toast.error("Add items to your list before estimating.");
     setAiEstimateSaving(true);
     try {
       const result = await api("/api/ai", {
@@ -432,7 +432,7 @@ function SessionDetailPage() {
         body: JSON.stringify({ confirmed_total_paise: Math.round(rupees * 100) }),
       });
       confirmationRequestKeyRef.current = null;
-      toast.success(`Shopping session completed. Confirmation v${result.revision_number} saved.`);
+      toast.success(`Shopping trip completed. Confirmation v${result.revision_number} saved.`);
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not complete this session.");
@@ -643,7 +643,7 @@ function SessionDetailPage() {
 
   if (error || !session) {
     return <div className="rounded-[22px] border border-border px-5 py-8 text-center">
-      <p className="text-sm font-bold">{error || "Shopping session not found."}</p>
+      <p className="text-sm font-bold">{error || "Shopping trip not found."}</p>
       <button type="button" onClick={loadSession} className="mt-3 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground">Try again</button>
       <Link to="/sessions" className="mt-3 block text-sm underline">Back to sessions</Link>
     </div>;
@@ -657,24 +657,32 @@ function SessionDetailPage() {
   );
   const latestEstimate = (session.estimates || [])[0] || null;
   const estimateDifference = latestEstimate ? Number(session.actual_total_paise || 0) - Number(latestEstimate.estimated_total_paise || 0) : null;
+  const pricedEstimateItems = items.filter((item) => {
+    const value = estimatePrices[item.id];
+    return value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+  });
+  const draftEstimateRupees = pricedEstimateItems.reduce(
+    (total, item) => total + Number(item.planned_quantity || 0) * Number(estimatePrices[item.id]),
+    0,
+  );
 
   return (
     <div className="pb-5">
       <Link to="/sessions" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
-        <ArrowLeft className="h-4 w-4" /> All sessions
+        <ArrowLeft className="h-4 w-4" /> All trips
       </Link>
 
       <div className="rounded-[24px] bg-primary p-5 text-primary-foreground">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/65">Shopping session</p>
-            <h1 className="mt-1 break-words text-[22px] font-extrabold leading-tight">{session.name || "Shopping session"}</h1>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/65">Shopping trip</p>
+            <h1 className="mt-1 break-words text-[22px] font-extrabold leading-tight">{session.name || "Shopping trip"}</h1>
             <p className="mt-2 flex items-center gap-1.5 text-[12px] text-white/75"><CalendarDays className="h-3.5 w-3.5" />{dateLabel(session.shopping_date)}</p>
           </div>
-          <span className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-[10.5px] font-bold">{completed ? "Completed" : "Open"}</span>
+          <span className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-[10.5px] font-bold">{completed ? "Finished" : "In progress"}</span>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/15 pt-4">
-          <div><p className="text-[11px] text-white/65">Actual spending</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p></div>
+          <div><p className="text-[11px] text-white/65">Paid so far</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p></div>
           <div><p className="text-[11px] text-white/65">Bill amounts pending</p><p className="mt-1 text-[20px] font-extrabold tabular-nums">{Number(session.bills_amount_pending || 0)}</p></div>
         </div>
       </div>
@@ -761,7 +769,7 @@ function SessionDetailPage() {
 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between px-1">
-          <div><h2 className="text-[15px] font-extrabold">Planned items</h2><p className="text-[11.5px] text-muted-foreground">{items.length} items in this session</p></div>
+          <div><h2 className="text-[15px] font-extrabold">Your shopping list</h2><p className="text-[11.5px] text-muted-foreground">{items.length} items in this trip</p></div>
           <button type="button" onClick={loadSession} aria-label="Refresh session" className="rounded-full border border-border p-2"><RefreshCw className="h-4 w-4" /></button>
         </div>
         {items.length ? (
@@ -807,7 +815,7 @@ function SessionDetailPage() {
         ) : (
           <div className="rounded-[22px] border border-dashed border-border px-5 py-7 text-center">
             <ShoppingBasket className="mx-auto h-6 w-6 text-muted-foreground" />
-            <p className="mt-2 text-[13px] font-bold">No planned items yet</p>
+            <p className="mt-2 text-[13px] font-bold">Your list is empty</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
           </div>
         )}
@@ -816,8 +824,8 @@ function SessionDetailPage() {
       {!completed ? (
         <form onSubmit={saveEstimate} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
-            <p className="text-[15px] font-extrabold">Create cost estimate</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Generate indicative AI market prices or enter your own. Review every price before saving; AI prices are estimates, not live shop quotes.</p>
+            <p className="text-[15px] font-extrabold">Estimate your shopping cost</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Ask the assistant for approximate market prices, or enter your own. These are planning estimates, not live shop quotes.</p>
           </div>
           {items.length ? items.map((item) => (
             <div key={item.id} className="flex items-center gap-3">
@@ -839,38 +847,50 @@ function SessionDetailPage() {
               </div>
             </div>
           )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
+          <div className="rounded-[18px] bg-accent/70 p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11.5px] font-bold text-accent-foreground">Estimated shopping total</p>
+              <p className="tnum text-[19px] font-extrabold text-accent-foreground">{inr(Math.round(draftEstimateRupees * 100))}</p>
+            </div>
+            <p className="mt-1 text-[10.5px] text-muted-foreground">
+              {pricedEstimateItems.length} of {items.length} items priced
+              {pricedEstimateItems.length === items.length && items.length > 0
+                ? " · Ready to save"
+                : " · Partial total — add prices for the remaining items"}
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={generateAiEstimate} disabled={aiEstimateSaving || estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/30 bg-accent py-3 text-[13px] font-bold text-primary disabled:opacity-60">
               {aiEstimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {aiEstimateSaving ? "Estimating…" : "AI Estimate prices"}
+              {aiEstimateSaving ? "Estimating…" : "Estimate with AI"}
             </button>
             <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
               {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {estimateSaving ? "Saving estimate…" : "Save estimate version"}
+              {estimateSaving ? "Saving estimate…" : "Save my estimate"}
             </button>
           </div>
         </form>
       ) : null}
 
       <section className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Cost comparison</h2>
+        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Latest estimate</p>
+            <p className="text-[11px] text-muted-foreground">Estimated cost</p>
             <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
             {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
           </div>
           <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Actual spending</p>
+            <p className="text-[11px] text-muted-foreground">Paid so far</p>
             <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
             {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
           </div>
         </div>
-        <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Actual spending uses included bill totals only. Bill item amounts are not added again.</p>
+        <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Source lists</h2>
+        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>
         {lists.length ? <div className="space-y-2">
           {lists.map((list) => (
             <div key={list.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
@@ -878,13 +898,13 @@ function SessionDetailPage() {
               <p className="mt-1 text-[11px] capitalize text-muted-foreground">{String(list.source_type).replaceAll("_", " ")} · {String(list.ocr_status).replaceAll("_", " ")}</p>
             </div>
           ))}
-        </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Lists added to this session will appear here.</p>}
+        </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your saved lists will appear here.</p>}
       </section>
 
       {!completed ? (
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
-            <p className="text-[15px] font-extrabold">Add actual bill</p>
+            <p className="text-[15px] font-extrabold">Add a shop purchase</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Record the amount you paid at each shop. This amount is counted immediately in actual spending.</p>
           </div>
           <input value={billForm.shop_name} onChange={(event) => setBillForm((v) => ({ ...v, shop_name: event.target.value }))}
@@ -908,13 +928,13 @@ function SessionDetailPage() {
       {!completed ? (
         <section className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
-            <p className="text-[15px] font-extrabold">Upload actual bill / priced receipt</p>
+            <p className="text-[15px] font-extrabold">Scan a shop bill</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Use the existing reader, review its item details, and enter the exact grand total printed on the bill. The bill total—not the sum of item lines—is counted as spending.</p>
           </div>
           <BillUploader purpose="priced_list" compact onExtracted={handleUploadedBill} />
           {uploadedBillDraft ? (
             <form onSubmit={saveUploadedBill} className="space-y-3 rounded-[18px] border border-primary/25 bg-background p-3">
-              <p className="text-[13px] font-extrabold">Review uploaded bill</p>
+              <p className="text-[13px] font-extrabold">Check the bill details</p>
               <input value={uploadedBillShop} onChange={(event) => setUploadedBillShop(event.target.value)} placeholder="Shop name" maxLength={160}
                 className="h-10 w-full rounded-xl border border-border bg-white px-3 text-[12px]" />
               <input type="date" value={uploadedBillDate} onChange={(event) => setUploadedBillDate(event.target.value)}
@@ -940,9 +960,9 @@ function SessionDetailPage() {
                   </div>
                 ))}
               </div>
-              <label className="block text-[11.5px] font-bold" htmlFor="uploaded-bill-total">Grand total paid (₹) — read from the bill</label>
+              <label className="block text-[11.5px] font-bold" htmlFor="uploaded-bill-total">Total paid (₹) — check the printed total</label>
               <input id="uploaded-bill-total" type="number" inputMode="decimal" min="0" step="0.01" required value={uploadedBillTotal}
-                onChange={(event) => setUploadedBillTotal(event.target.value)} placeholder="Enter exact bill total"
+                onChange={(event) => setUploadedBillTotal(event.target.value)} placeholder="Enter the exact total from the receipt"
                 className="h-11 w-full rounded-xl border border-border bg-white px-3 text-[14px] font-semibold" />
               <button type="submit" disabled={uploadedBillSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[12px] font-bold text-primary-foreground disabled:opacity-60">
                 {uploadedBillSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -954,7 +974,7 @@ function SessionDetailPage() {
       ) : null}
 
       <section className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Actual bills</h2>
+        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Bills from your shops</h2>
         {(session.bills || []).length ? (
           <div className="space-y-2">{session.bills.map((bill) => (
             <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
@@ -1015,14 +1035,14 @@ function SessionDetailPage() {
               ) : null}
             </div>
           ))}</div>
-        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No actual bills added yet. Add a bill or enter the purchase details above to record real spending.</p>}
+        ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No bills added yet. Add a shop purchase or scan a receipt to record what you paid.</p>}
       </section>
 
       {!completed ? (
         <form onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
           <div>
-            <p className="text-[15px] font-extrabold">Finish shopping session</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Review the actual bill totals, then confirm the final expense. Any unpurchased planned items will remain visible in the completion record.</p>
+            <p className="text-[15px] font-extrabold">Finish this trip</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Check each bill, then confirm the total you paid. Any unpurchased planned items will remain visible in the completion record.</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11.5px]">
             <div className="rounded-xl bg-secondary/50 p-3">
@@ -1044,27 +1064,27 @@ function SessionDetailPage() {
               {session.bills_amount_pending} bill amount(s) are unreadable or missing. Enter or correct those amounts before completing the session.
             </p>
           ) : null}
-          <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final confirmed expense (₹)</label>
+          <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final total paid (₹)</label>
           <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
             onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
-          <p className="text-[10.5px] text-muted-foreground">Calculated from included bill totals: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
+          <p className="text-[10.5px] text-muted-foreground">Total from included bills: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
           <button type="submit" disabled={confirmationSaving || unresolvedBills.length > 0 || Number(session.bills_amount_pending || 0) > 0}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
             {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
-            {confirmationSaving ? "Completing session…" : "Confirm expense and finish"}
+            {confirmationSaving ? "Finishing trip…" : "Confirm and finish trip"}
           </button>
         </form>
       ) : (
         <section className="mt-6 rounded-[24px] border border-border bg-white p-4">
-          <p className="text-[15px] font-extrabold">Session completed</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. The completion snapshot is stored and this session is read-only.</p>
+          <p className="text-[15px] font-extrabold">Trip finished</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. Your trip summary is saved and cannot be edited.</p>
           <p className="mt-2 text-[11px] text-muted-foreground">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length} planned item(s) remain unpurchased or partially purchased.</p>
         </section>
       )}
 
       <section className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate versions</h2>
+        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Saved estimates</h2>
         {(session.estimates || []).length ? (
           <div className="space-y-2">{session.estimates.map((estimate) => (
             <div key={estimate.id} className="flex items-center justify-between rounded-[18px] border border-border bg-white px-4 py-3">
