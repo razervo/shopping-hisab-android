@@ -48,3 +48,5 @@ jobs:
           PY
       - name: Test combined legacy and session reporting
         run: python3 scripts/test-reporting.py
+      - name: Test final expense confirmation retry safety
+        run: python3 scripts/test-confirmation.py
