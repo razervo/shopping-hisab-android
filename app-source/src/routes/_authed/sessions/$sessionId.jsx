@@ -1082,6 +1082,37 @@ function SessionDetailPage() {
           </span>
         </summary>
         <div className="space-y-3 px-3 pb-4">
+          {items.length > 0 ? (
+            <div className="rounded-[20px] border border-border bg-background p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-extrabold">Your shopping progress</p>
+                  <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+                    {fullyPurchasedItemCount} of {items.length} items fully bought
+                  </p>
+                </div>
+                <span className="text-[17px] font-extrabold tabular-nums text-primary">{shoppingProgress}%</span>
+              </div>
+              <div
+                className="mt-3 h-2 overflow-hidden rounded-full bg-secondary"
+                role="progressbar"
+                aria-label="Shopping list progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={shoppingProgress}
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-300"
+                  style={{ width: `${shoppingProgress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-[10.5px] text-muted-foreground">
+                {shoppingProgress === 100
+                  ? "Everything on your list is marked as purchased."
+                  : `${items.length - fullyPurchasedItemCount} item(s) still need attention.`}
+              </p>
+            </div>
+          ) : null}
       {!completed ? (
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
