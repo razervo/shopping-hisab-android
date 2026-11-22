@@ -52,6 +52,8 @@ jobs:
         run: python3 scripts/test-confirmation.py
       - name: Test safe empty-trip deletion
         run: python3 scripts/test-session-deletion.py
+      - name: Test receipt-only manual total fallback
+        run: node scripts/test-receipt-manual-fallback.mjs
       - name: Test receipt file validation and preparation
         run: node scripts/test-bill-file.mjs
       - name: Test Google Drive upload and metadata recovery ledger
