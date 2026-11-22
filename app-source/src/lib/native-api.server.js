@@ -295,10 +295,12 @@ async function uploadGoogleDriveFile(db, userId, env, file, originalName, idempo
     const known = await db.prepare("SELECT original_name, size_bytes FROM uploaded_files WHERE user_id = ? AND drive_file_id = ?").bind(userId, reservation.drive_file_id).first();
     return { driveFileId: reservation.drive_file_id, size: Number(known?.size_bytes) || file.size, name: known?.original_name || String(originalName || file.name || "attachment").slice(0, 180), recovered: true };
   }
+  // A pending upload lease is considered stale only after 30 minutes to reduce
+  // the chance of taking over a slow active Drive upload and creating a duplicate.
   let driveFile = await findDriveUploadByMarker(token, folderId, markerKey, contentHash);
   if (!driveFile) {
     if (reservation.lease_token !== leaseToken) {
-      const takeover = await db.prepare("UPDATE drive_upload_idempotency SET lease_token = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND idempotency_key = ? AND status = 'pending' AND updated_at < datetime('now', '-5 minutes')")
+      const takeover = await db.prepare("UPDATE drive_upload_idempotency SET lease_token = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND idempotency_key = ? AND status = 'pending' AND updated_at < datetime('now', '-30 minutes')")
         .bind(leaseToken, userId, normalizedKey).run();
       if (!takeover?.meta?.changes) throw new Error("This upload is already being processed. Please wait a moment and retry.");
     }
