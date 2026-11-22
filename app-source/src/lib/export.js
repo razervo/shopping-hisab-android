@@ -14,12 +14,14 @@ function download(blob, filename) {
 const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
 export function exportRecordsCSV(records, label = "shopping-hisab") {
-  const header = ["Date", "Shop", "Items", "Total (INR)", "Notes"];
+  const header = ["Date", "Shop / Session", "Item count", "Total (INR)", "Item details (JSON)", "Receipt details (JSON)", "Notes"];
   const rows = records.map((r) => [
     ddmmyyyy(r.date),
     r.shop_name || "",
     r.item_count ?? (r.items?.length || 0),
     Number(r.total || 0).toFixed(2),
+    JSON.stringify(Array.isArray(r.items) ? r.items : []),
+    JSON.stringify(Array.isArray(r.receipts) ? r.receipts : []),
     r.notes || "",
   ]);
   const csv = [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n");
