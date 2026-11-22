@@ -77,7 +77,13 @@ db.executemany(
     ],
 )
 
+server_source = (ROOT / "src/server.js").read_text(encoding="utf-8")
+assert 'url.pathname === "/api/reports"' in server_source
+assert 'url.pathname === "/api/reports/export"' in server_source
+assert 'return handleNativeApi(request, env);' in server_source
+
 source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
+assert 'url.pathname === "/api/reports" || url.pathname === "/api/reports/export"' in source
 start_marker = "const sql = `"
 start = source.index(start_marker) + len("const sql = `")
 end = source.index("`;", start)
