@@ -136,6 +136,55 @@ assert round(legacy[0] + sessions[0], 2) == 27.50
 assert round(max(legacy[1], sessions[1]), 2) == 17.50
 assert legacy[2] + sessions[2] == 2
 
+# Planned-item deletion must be owner/session scoped, auditable, and blocked when referenced.
+engine_source = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
+delete_start = engine_source.index('if (itemMatch && method === "DELETE")')
+delete_end = engine_source.index('if (itemMatch && method === "PATCH")', delete_start)
+delete_handler = engine_source[delete_start:delete_end]
+assert "user_id=? AND session_id=?" in delete_handler
+assert "shopping_purchase_lines" in delete_handler
+assert "shopping_estimate_lines" in delete_handler
+assert "item_deleted" in delete_handler
+assert "DELETE FROM shopping_items" in delete_handler
+
+# An unused item can be deleted; source rows do not hold it in place.
+db.execute(
+    """INSERT INTO shopping_sessions
+       (id,user_id,name,shopping_date,status,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?)""",
+    ("delete-session", "u1", "Delete QA", "2026-11-22", "open",
+     "2026-11-22T13:00:00Z", "2026-11-22T13:00:00Z"),
+)
+db.execute(
+    """INSERT INTO shopping_items
+       (id,user_id,session_id,product_name,normalized_name,planned_quantity,unit,item_status,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+    ("unused-item", "u1", "delete-session", "Unused QA item", "unused qa item", 1, "kg", "planned",
+     "2026-11-22T13:01:00Z", "2026-11-22T13:01:00Z"),
+)
+purchase_refs = db.execute(
+    "SELECT COUNT(*) FROM shopping_purchase_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?",
+    ("unused-item", "u1", "delete-session"),
+).fetchone()[0]
+estimate_refs = db.execute(
+    "SELECT COUNT(*) FROM shopping_estimate_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?",
+    ("unused-item", "u1", "delete-session"),
+).fetchone()[0]
+assert purchase_refs == 0 and estimate_refs == 0
+db.execute(
+    """INSERT INTO shopping_audit_events
+       (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
+       SELECT ?,user_id,session_id,'shopping_item',id,'item_deleted','{}',NULL,?
+       FROM shopping_items WHERE id=? AND user_id=? AND session_id=?""",
+    ("delete-audit", "2026-11-22T13:02:00Z", "unused-item", "u1", "delete-session"),
+)
+db.execute(
+    "DELETE FROM shopping_items WHERE id=? AND user_id=? AND session_id=?",
+    ("unused-item", "u1", "delete-session"),
+)
+assert db.execute("SELECT COUNT(*) FROM shopping_items WHERE id='unused-item'").fetchone()[0] == 0
+assert db.execute("SELECT COUNT(*) FROM shopping_audit_events WHERE entity_id='unused-item' AND event_type='item_deleted'").fetchone()[0] == 1
+
 violations = db.execute("PRAGMA foreign_key_check").fetchall()
 assert not violations, f"Foreign key violations: {violations}"
-print("Reporting regression checks passed: combined totals, legacy de-duplication, duplicate bills, item/receipt details and pagination.")
+print("Regression checks passed: combined reports, legacy de-duplication, duplicate bills, item/receipt details, pagination and audited removal of unused planned items.")
