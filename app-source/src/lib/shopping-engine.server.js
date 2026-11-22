@@ -308,6 +308,29 @@ export async function handleShoppingEngine(request, env) {
   }
 
   const itemMatch=/^items\/([a-f0-9-]{36})$/i.exec(subpath);
+  if (itemMatch && method === "DELETE") {
+    const itemId=itemMatch[1];
+    const existing=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?")
+      .bind(itemId,userId,sessionId).first();
+    if (!existing) return fail("Shopping item not found.",404);
+    const [purchases,estimates]=await Promise.all([
+      db.prepare("SELECT COUNT(*) AS count FROM shopping_purchase_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId).first(),
+      db.prepare("SELECT COUNT(*) AS count FROM shopping_estimate_lines WHERE shopping_item_id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId).first(),
+    ]);
+    if (Number(purchases?.count||0)>0) return fail("This item is linked to a bill. Remove or correct its bill lines before deleting the planned item.",409);
+    if (Number(estimates?.count||0)>0) return fail("This item is part of a saved estimate. Keep it in the session or create a new session.",409);
+    const timestamp=now();
+    await db.batch([
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+        .bind(id(),userId,sessionId,"shopping_item",itemId,"item_deleted",JSON.stringify(existing),null,timestamp),
+      db.prepare("DELETE FROM shopping_items WHERE id=? AND user_id=? AND session_id=?")
+        .bind(itemId,userId,sessionId),
+    ]);
+    return json({success:true,id:itemId});
+  }
+
   if (itemMatch && method === "PATCH") {
     const itemId=itemMatch[1];
     const existing=await db.prepare("SELECT * FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first();
