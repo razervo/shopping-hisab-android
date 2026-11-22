@@ -713,14 +713,14 @@ async function queryCombinedReportRecords(db, userId, { from = "", to = "", limi
   const legacyDateFilter = from && to ? " AND date >= ? AND date <= ?" : "";
   const sessionDateFilter = from && to ? " AND s.shopping_date >= ? AND s.shopping_date <= ?" : "";
   const dateValues = from && to ? [from, to] : [];
-  const sql = \`
+  const sql = `
     SELECT id, shop_name, date, items_json, total, item_count, notes, source,
       bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
     FROM (
       SELECT id, shop_name, date, items_json, total, item_count, notes, source,
         bill_file_id, legacy_bill_file_uri, receipts_json, reconciliation_status, created_at, updated_at
       FROM shopping_records
-      WHERE user_id = ?\${legacyDateFilter}
+      WHERE user_id = ?${legacyDateFilter}
       UNION ALL
       SELECT
         s.id AS id,
@@ -771,11 +771,11 @@ async function queryCombinedReportRecords(db, userId, { from = "", to = "", limi
         s.created_at AS created_at,
         s.updated_at AS updated_at
       FROM shopping_sessions s
-      WHERE s.user_id = ? AND s.status = 'completed' AND s.legacy_record_id IS NULL\${sessionDateFilter}
+      WHERE s.user_id = ? AND s.status = 'completed' AND s.legacy_record_id IS NULL${sessionDateFilter}
     )
     ORDER BY date DESC, created_at DESC, id DESC
     LIMIT ? OFFSET ?
-  \`;
+  `;
   const rows = await db.prepare(sql).bind(userId, ...dateValues, userId, ...dateValues, limit + 1, offset).all();
   const raw = rows.results || [];
   const hasMore = raw.length > limit;
