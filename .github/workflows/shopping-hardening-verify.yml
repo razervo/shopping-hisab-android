@@ -50,3 +50,5 @@ jobs:
         run: python3 scripts/test-reporting.py
       - name: Test final expense confirmation retry safety
         run: python3 scripts/test-confirmation.py
+      - name: Test receipt file validation and preparation
+        run: node scripts/test-bill-file.mjs
