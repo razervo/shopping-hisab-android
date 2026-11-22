@@ -113,8 +113,8 @@ function HomePage() {
 
       <section className="mt-5">
         <div className="mb-2 px-1">
-          <h2 className="text-[14px] font-extrabold">Or pick up where you left off</h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">Your saved shopping is always close by.</p>
+          <h2 className="text-[14px] font-extrabold">Your shopping tools</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Open past trips or quickly record a purchase.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
