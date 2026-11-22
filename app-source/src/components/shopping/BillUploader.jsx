@@ -114,7 +114,8 @@ export function BillUploader({
     setError("");
     try {
       const result = await readShoppingBill({ data: { fileUri: recoveryFileUri, purpose } });
-      if (!result?.draft || !Array.isArray(result.draft.items) || !result.draft.items.length) {
+      if (!result?.draft || !Array.isArray(result.draft.items) ||
+          (!result.draft.items.length && purpose !== "priced_list")) {
         throw new Error(result?.error || "AI still could not read this receipt. You can enter items manually.");
       }
       const savedUri = recoveryFileUri;

@@ -74,7 +74,7 @@ export function AppShell() {
             <span className="leading-tight">
               <span className="block text-[15px] font-extrabold tracking-tight">Shopping Hisab</span>
               <span className="block text-[11px] font-medium text-muted-foreground">
-                Your Daily Shopping Account
+                Your shopping companion
               </span>
             </span>
           </Link>

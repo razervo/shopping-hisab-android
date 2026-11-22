@@ -1,83 +1,167 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, Plus } from "lucide-react";
+import { ArrowRight, CalendarDays, ClipboardList, History, PlayCircle, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
-import { SummaryCards } from "@/components/dashboard/SummaryCards";
-import { TodayHero } from "@/components/dashboard/TodayHero";
 import { useOverview } from "@/components/dashboard/useOverview";
+import { inr } from "@/lib/format";
 
 export const Route = createFileRoute("/_authed/")({
   head: () => ({ meta: [{ title: "Home · Shopping Hisab" }] }),
   component: HomePage,
 });
 
-function Loading() {
-  return (
-    <div className="animate-pulse space-y-4">
-      <div className="h-[196px] rounded-[30px] bg-muted" />
-      <div className="h-14 rounded-full bg-muted" />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="h-56 rounded-[24px] bg-muted" />
-        <div className="h-56 rounded-[24px] bg-muted" />
-      </div>
-    </div>
-  );
-}
+const formatTripDate = (value) => value
+  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+  : "Date not set";
+
+const formatPaise = (value) => new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 2,
+}).format(Number(value || 0) / 100);
 
 function HomePage() {
-  const { loading, overview, error } = useOverview();
+  const { loading, overview } = useOverview();
+  const [activeTrips, setActiveTrips] = useState([]);
+
+  useEffect(() => {
+    let current = true;
+    fetch("/api/shopping/sessions?status=open", {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) return { sessions: [] };
+        return response.json().catch(() => ({ sessions: [] }));
+      })
+      .then((result) => {
+        if (current) setActiveTrips(Array.isArray(result.sessions) ? result.sessions.slice(0, 2) : []);
+      })
+      .catch(() => {
+        if (current) setActiveTrips([]);
+      });
+    return () => { current = false; };
+  }, []);
 
   return (
-    <div className="pb-2">
-      <div className="mb-4">
-        <p className="micro text-muted-foreground">Namaste</p>
-        <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight">
-          Your shopping hisab
+    <div className="pb-4">
+      <section className="mb-5">
+        <p className="micro text-primary">YOUR SHOPPING COMPANION</p>
+        <h1 className="mt-2 max-w-[19ch] text-[29px] font-extrabold leading-[1.12] tracking-tight">
+          What are we shopping for today?
         </h1>
-      </div>
+        <p className="mt-2 max-w-[34ch] text-[13.5px] leading-relaxed text-muted-foreground">
+          Make a list, get an idea of the cost, and keep everything together while you shop.
+        </p>
+      </section>
+
+      {activeTrips.length > 0 ? (
+        <section className="mb-5">
+          <div className="mb-2 px-1">
+            <h2 className="text-[14px] font-extrabold">Pick up where you left off</h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished shopping trips are ready.</p>
+          </div>
+          <div className="space-y-2">
+            {activeTrips.map((trip) => (
+              <Link
+                key={trip.id}
+                to="/sessions/$sessionId"
+                params={{ sessionId: trip.id }}
+                className="flex items-center gap-3 rounded-[22px] border border-primary/20 bg-accent/40 p-4 transition-colors hover:bg-accent/70"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+                  <PlayCircle className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-extrabold">{trip.name || "Shopping trip"}</span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatTripDate(trip.shopping_date)}</span>
+                    <span>·</span>
+                    <span>{Number(trip.item_count || 0)} items</span>
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[12px] font-extrabold tabular-nums">{formatPaise(trip.actual_total_paise)}</span>
+                  <span className="mt-1 block text-[10px] font-bold text-primary">Continue →</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="animate-fade-up overflow-hidden rounded-[30px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <p className="micro mt-5 text-white/65">LET'S GET READY</p>
+        <h2 className="mt-2 text-[21px] font-extrabold leading-tight">
+          Plan your next shopping trip
+        </h2>
+        <p className="mt-2 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
+          Add everything you need. Your assistant will help organise the list and estimate the cost before you go.
+        </p>
+        <Link
+          to="/sessions"
+          className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-[14px] font-extrabold text-primary transition-transform active:scale-[0.99]"
+        >
+          <ShoppingBag className="h-[18px] w-[18px]" />
+          Start a shopping trip
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </section>
+
+      <section className="mt-5">
+        <div className="mb-2 px-1">
+          <h2 className="text-[14px] font-extrabold">Your shopping tools</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Open past trips or quickly record a purchase.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/history"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <History className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-[13px] font-extrabold">My shopping</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">See your past trips and purchases</span>
+            </span>
+          </Link>
+          <Link
+            to="/add/manual"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <ClipboardList className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-[13px] font-extrabold">Add a purchase</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record something you already bought</span>
+            </span>
+          </Link>
+        </div>
+      </section>
 
       {loading ? (
-        <Loading />
-      ) : error ? (
-        <div className="rounded-[24px] border border-border bg-secondary/40 px-5 py-8 text-center">
-          <p className="text-sm font-semibold">Could not load your hisab</p>
-          <p className="mt-1 text-[13px] text-muted-foreground">Please refresh the page to try again.</p>
-        </div>
-      ) : (
-        <>
-          <TodayHero
-            todayTotal={overview.todayTotal}
-            yesterdayTotal={overview.yesterdayTotal}
-            monthTotal={overview.monthTotal}
-            entriesToday={overview.entriesToday}
-          />
-
-          <Link
-            to="/add"
-            className="mt-4 flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-[15px] font-bold text-primary-foreground shadow-[0_14px_30px_-16px_rgba(11,60,40,0.85)] transition-transform duration-200 active:scale-[0.99]"
-          >
-            <Plus className="h-5 w-5" strokeWidth={2.8} />
-            Add Shopping
+        <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
+      ) : overview ? (
+        <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-border bg-white px-4 py-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+            <ReceiptText className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold text-muted-foreground">Your shopping this month</p>
+            <p className="tnum mt-0.5 text-[20px] font-extrabold">{inr(overview.monthTotal)}</p>
+          </div>
+          <Link to="/history" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
+            See all <ArrowRight className="h-3.5 w-3.5" />
           </Link>
+        </section>
+      ) : null}
 
-          <Link
-            to="/sessions"
-            className="mt-2 flex items-center justify-center gap-2 rounded-full border border-border bg-white px-6 py-3.5 text-[13.5px] font-bold text-foreground transition-colors hover:bg-secondary/50"
-          >
-            <CalendarDays className="h-4 w-4" />
-            Shopping Sessions · New workflow
-          </Link>
-
-          <SummaryCards
-            monthTotal={overview.monthTotal}
-            entriesMonth={overview.entriesMonth}
-            last7={overview.last7}
-            daily14={overview.daily14}
-            avgPerDay={overview.avgPerDay}
-          />
-
-          <RecentRecords records={overview.recent} />
-        </>
-      )}
+      {overview ? <RecentRecords records={overview.recent} /> : null}
     </div>
   );
 }

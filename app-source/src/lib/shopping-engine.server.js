@@ -1,4 +1,5 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
+import { calculateEstimateLineTotalPaise } from "@/lib/estimate-money";
 
 const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
@@ -125,6 +126,88 @@ export async function handleShoppingEngine(request, env) {
   const sessionMatch = /^\/sessions\/([a-f0-9-]{36})(?:\/(.*))?$/i.exec(path);
   if (!sessionMatch) return fail("Shopping endpoint not found.",404);
   const sessionId = sessionMatch[1], subpath = sessionMatch[2] || "";
+
+  if (!subpath && method === "DELETE") {
+    const requestKey = text(request.headers.get("Idempotency-Key"), 160);
+    if (!requestKey) return fail("A retry key is required to delete this trip safely.");
+
+    const prior = await db.prepare(
+      "SELECT deleted_session_id FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?",
+    ).bind(userId, sessionId).first();
+    if (prior) return json({ success: true, deleted: true, already_deleted: true });
+
+    const keyUse = await db.prepare(
+      "SELECT deleted_session_id FROM shopping_session_deletion_log WHERE user_id=? AND idempotency_key=?",
+    ).bind(userId, requestKey).first();
+    if (keyUse && keyUse.deleted_session_id !== sessionId) {
+      return fail("This retry key was already used for another trip.", 409);
+    }
+
+    const current = await ownedSession(db, userId, sessionId);
+    if (!current) return fail("Shopping trip not found.", 404);
+    if (current.status === "completed") return fail("Finished trips are protected and cannot be deleted.", 409);
+
+    const childTables = [
+      "shopping_source_lists",
+      "shopping_source_lines",
+      "shopping_items",
+      "shopping_item_sources",
+      "shopping_purchase_lines",
+      "shopping_actual_bills",
+      "shopping_estimates",
+      "shopping_estimate_lines",
+      "shopping_expense_confirmations",
+    ];
+    const countSql = childTables.map((table, index) =>
+      `(SELECT COUNT(*) FROM ${table} WHERE user_id=? AND session_id=?) AS child_${index}`
+    ).join(", ");
+    const countValues = childTables.flatMap(() => [userId, sessionId]);
+    const childCounts = await db.prepare(`SELECT ${countSql}`).bind(...countValues).first();
+    if (childTables.some((_, index) => Number(childCounts?.[`child_${index}`] || 0) > 0)) {
+      return fail("This trip already contains a list, item, estimate or bill. We protect it from deletion.", 409);
+    }
+
+    const events = await db.prepare(
+      "SELECT id,entity_type,entity_id,event_type,before_json,after_json,created_at FROM shopping_audit_events WHERE user_id=? AND session_id=? ORDER BY created_at,id",
+    ).bind(userId, sessionId).all();
+    const snapshot = JSON.stringify({ session: current, audit_events: events.results || [] });
+    const timestamp = now();
+    const guardSql = childTables.map((table) =>
+      `NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id=? AND session_id=?)`
+    ).join(" AND ");
+    const guardValues = childTables.flatMap(() => [userId, sessionId]);
+    const statements = [
+      db.prepare(`INSERT INTO shopping_session_deletion_log
+        (id,user_id,deleted_session_id,idempotency_key,session_snapshot_json,created_at)
+        SELECT ?,?,?,?,?,?
+        WHERE EXISTS (
+          SELECT 1 FROM shopping_sessions
+          WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
+        ) AND ${guardSql}`)
+        .bind(id(), userId, sessionId, requestKey, snapshot, timestamp, sessionId, userId, ...guardValues),
+      db.prepare(`DELETE FROM shopping_sessions
+        WHERE id=? AND user_id=?
+          AND EXISTS (
+            SELECT 1 FROM shopping_session_deletion_log
+            WHERE user_id=? AND deleted_session_id=?
+          )`)
+        .bind(sessionId, userId, userId, sessionId),
+    ];
+    const results = await db.batch(statements);
+    if (!Number(results?.[1]?.meta?.changes || 0)) {
+      const stillExists = await ownedSession(db, userId, sessionId);
+      if (!stillExists) {
+        const deletion = await db.prepare(
+          "SELECT deleted_session_id FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?",
+        ).bind(userId, sessionId).first();
+        if (deletion) return json({ success: true, deleted: true, already_deleted: true });
+        return fail("Shopping trip not found.", 404);
+      }
+      return fail("This trip now contains shopping data and is protected from deletion. Refresh and review it.", 409);
+    }
+    return json({ success: true, deleted: true });
+  }
+
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
   if (session.status === "completed" && method !== "GET" && subpath !== "confirm") return fail("This shopping session is completed and read-only.",409);
@@ -376,8 +459,14 @@ export async function handleShoppingEngine(request, env) {
       const unitPrice=Number(line.estimated_unit_price_paise);
       if (!Number.isFinite(quantity)||quantity<0||quantity>1000000) return fail(`Estimate line ${index+1} has invalid quantity.`);
       if (!Number.isSafeInteger(unitPrice)||unitPrice<0) return fail(`Estimate line ${index+1} has invalid unit price in paise.`);
-      const lineTotal=line.estimated_line_total_paise==null?Math.round(quantity*unitPrice):Number(line.estimated_line_total_paise);
-      if (!Number.isSafeInteger(lineTotal)||lineTotal<0) return fail(`Estimate line ${index+1} has invalid line total.`);
+      const lineTotal = calculateEstimateLineTotalPaise(quantity, unitPrice);
+      if (lineTotal === null) {
+        return fail(`Estimate line ${index+1} total is outside the supported range.`);
+      }
+      if (line.estimated_line_total_paise != null &&
+          Number(line.estimated_line_total_paise) !== lineTotal) {
+        return fail(`Estimate line ${index+1} total does not match its quantity and unit price.`);
+      }
       const priceSource=text(line.price_source,30);
       if (!["previous_purchase","market_data","manual","ai_estimate"].includes(priceSource)) return fail(`Estimate line ${index+1} has invalid price source.`);
       const confidence=line.confidence==null?null:Number(line.confidence);
