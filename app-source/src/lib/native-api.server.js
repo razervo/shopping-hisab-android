@@ -795,7 +795,7 @@ async function queryCombinedReportRecords(db, userId, { shop = "", from = "", to
           FROM shopping_actual_bills b
           WHERE b.user_id = s.user_id AND b.session_id = s.id
         ), '[]') AS receipts_json,
-        'confirmed' AS reconciliation_status,
+        'complete' AS reconciliation_status,
         s.created_at AS created_at,
         s.updated_at AS updated_at
       FROM shopping_sessions s
