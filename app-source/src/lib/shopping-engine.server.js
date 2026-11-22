@@ -673,6 +673,9 @@ export async function handleShoppingEngine(request, env) {
     const operation="session_confirm:"+sessionId;
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:confirmed}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
     if(requestKey){const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}
+    const unresolvedBills=await db.prepare(`SELECT COUNT(*) AS count FROM shopping_actual_bills
+      WHERE user_id=? AND session_id=? AND bill_status NOT IN ('verified','duplicate','void')`).bind(userId,sessionId).first();
+    if(Number(unresolvedBills?.count||0)>0)return fail("Review every bill and mark it Verified, Duplicate or Void before confirming the expense.");
     const totals=await db.prepare(`SELECT COALESCE(SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') THEN bill_total_paise ELSE 0 END),0) AS actual_total_paise,
       SUM(CASE WHEN included_in_actual=1 AND bill_status NOT IN ('duplicate','void') AND bill_total_paise IS NULL THEN 1 ELSE 0 END) AS pending_bill_amounts
       FROM shopping_actual_bills WHERE user_id=? AND session_id=?`).bind(userId,sessionId).first();
