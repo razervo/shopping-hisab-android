@@ -4,6 +4,13 @@ import { readFile } from "node:fs/promises";
 const nativeApi = await readFile(new URL("../src/lib/native-api.server.js", import.meta.url), "utf8");
 const uploader = await readFile(new URL("../src/components/shopping/BillUploader.jsx", import.meta.url), "utf8");
 const tripPage = await readFile(new URL("../src/routes/_authed/sessions/$sessionId.jsx", import.meta.url), "utf8");
+const { parseReceiptMoney } = await import("../src/lib/receipt-money.js");
+
+assert.equal(parseReceiptMoney("Rs. 1,234.50"), 1234.5);
+assert.equal(parseReceiptMoney("₹ 2,000/-"), 2000);
+assert.equal(parseReceiptMoney("INR 80"), 80);
+assert.equal(parseReceiptMoney("unreadable"), null);
+assert.equal(parseReceiptMoney(-25), null);
 
 const fallbackStart = nativeApi.indexOf("async function readBillWithFallback");
 const fallbackEnd = nativeApi.indexOf("async function handleGeminiOcrTest", fallbackStart);
