@@ -274,8 +274,7 @@ function SessionDetailPage() {
   const handleUploadedBill = (draft, fileUri) => {
     const extracted = Array.isArray(draft?.items) ? draft.items : [];
     if (!extracted.length) {
-      toast.error("No bill items were detected. You can still enter the bill total manually.");
-      return;
+      toast.warning("No item rows were detected. You can still save the receipt and enter the shop total manually.");
     }
     const rows = extracted.map((item) => ({
       product_name: String(item?.name || ""),
@@ -340,7 +339,7 @@ function SessionDetailPage() {
       unit: row.unit.trim() || "pcs",
       amountRupees: row.amount.trim() === "" ? null : Number(row.amount),
     }));
-    if (!lines.length || lines.some((line) => !line.product_name)) return toast.error("Check every extracted bill item name.");
+    if (lines.some((line) => !line.product_name)) return toast.error("Check every extracted bill item name.");
     if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity < 0)) return toast.error("Check every extracted quantity.");
     if (lines.some((line) => line.amountRupees !== null && (!Number.isFinite(line.amountRupees) || line.amountRupees < 0))) return toast.error("Check every extracted item amount.");
     if (uploadedBillSaveLockRef.current) return;
@@ -378,21 +377,25 @@ function SessionDetailPage() {
           }),
         });
       }
-      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
-        method: "POST",
-        headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = (() => { const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri); return fileMatch ? `uploaded-file-lines:${fileMatch[1]}` : crypto.randomUUID(); })()) },
-        body: JSON.stringify({ lines: lines.map((line) => ({
-          product_name: line.product_name,
-          quantity: line.quantity,
-          unit: line.unit,
-          line_amount_paise: line.amountRupees === null ? null : Math.round(line.amountRupees * 100),
-          shopping_item_id: line.shopping_item_id || null,
-          is_extra: !line.shopping_item_id,
-          match_method: line.shopping_item_id ? "confirmed" : "extra",
-          original_ocr: line.original || {},
-        })) }),
-      });
-      toast.success("Bill photo and reviewed item details saved. The bill total is counted once.");
+      if (lines.length) {
+        await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines`, {
+          method: "POST",
+          headers: { "Idempotency-Key": uploadedBillLinesKeyRef.current || (uploadedBillLinesKeyRef.current = (() => { const fileMatch = /^cf-file:([a-f0-9-]{36})$/i.exec(uploadedBillFileUri); return fileMatch ? `uploaded-file-lines:${fileMatch[1]}` : crypto.randomUUID(); })()) },
+          body: JSON.stringify({ lines: lines.map((line) => ({
+            product_name: line.product_name,
+            quantity: line.quantity,
+            unit: line.unit,
+            line_amount_paise: line.amountRupees === null ? null : Math.round(line.amountRupees * 100),
+            shopping_item_id: line.shopping_item_id || null,
+            is_extra: !line.shopping_item_id,
+            match_method: line.shopping_item_id ? "confirmed" : "extra",
+            original_ocr: line.original || {},
+          })) }),
+        });
+      }
+      toast.success(lines.length
+        ? "Receipt and reviewed item details saved. The bill total is counted once."
+        : "Receipt and total saved. You can add item details later.");
       uploadedBillCreateKeyRef.current = null;
       uploadedBillLinesKeyRef.current = null;
       setUploadedBillDraft(null);
