@@ -830,9 +830,13 @@ async function handleReports(request, env, user, url) {
   const [year, monthNumber] = month.split("-").map(Number);
   const from = month + "-01";
   const to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  const requestedLimit = Number(url.searchParams.get("limit") || 500);
+  const monthlyLimit = Number.isSafeInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 500;
+  const requestedCursor = Number(url.searchParams.get("cursor") || 0);
+  const monthlyOffset = Number.isSafeInteger(requestedCursor) ? Math.min(Math.max(requestedCursor, 0), 100000000) : 0;
 
   const [monthly, legacyLifetime, sessionLifetime] = await Promise.all([
-    queryCombinedReportRecords(env.DB, user.id, { from, to, limit: 5000, offset: 0 }),
+    queryCombinedReportRecords(env.DB, user.id, { from, to, limit: monthlyLimit, offset: monthlyOffset }),
     env.DB.prepare(
       "SELECT COALESCE(SUM(total), 0) AS sum_total, COALESCE(MAX(total), 0) AS max_total, COUNT(*) AS count FROM shopping_records WHERE user_id = ?",
     ).bind(user.id).first(),
@@ -846,6 +850,7 @@ async function handleReports(request, env, user, url) {
     month,
     records: monthly.items,
     records_truncated: monthly.has_more,
+    next_cursor: monthly.next_cursor,
     lifetime: {
       total: legacyTotal + sessionTotal,
       highest: Math.max(Number(legacyLifetime?.max_total) || 0, Number(sessionLifetime?.max_total) || 0),
