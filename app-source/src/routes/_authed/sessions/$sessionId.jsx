@@ -51,6 +51,7 @@ function SessionDetailPage() {
   const confirmationRequestKeyRef = useRef(null);
   const confirmationLockRef = useRef(false);
   const scannedListSaveLockRef = useRef(false);
+  const manualListSaveLockRef = useRef(false);
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -544,6 +545,8 @@ function SessionDetailPage() {
       return;
     }
 
+    if (manualListSaveLockRef.current) return;
+    manualListSaveLockRef.current = true;
     setSaving(true);
     try {
       const sourceList = await api(`/api/shopping/sessions/${sessionId}/lists`, {
@@ -594,6 +597,7 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not save this list.");
       await loadSession();
     } finally {
+      manualListSaveLockRef.current = false;
       setSaving(false);
     }
   };
