@@ -16,11 +16,31 @@ export function useReport(monthKey) {
     setState((prev) => ({ ...prev, loading: true }));
     (async () => {
       try {
-        const report = await cloudflareRequest(`/api/reports?month=${encodeURIComponent(monthKey)}`);
+        const allRecords = [];
+        let cursor = 0;
+        let lifetime = null;
+        for (let pageNumber = 0; pageNumber < 1000; pageNumber += 1) {
+          const params = new URLSearchParams({
+            month: monthKey,
+            limit: "500",
+            cursor: String(cursor),
+          });
+          const report = await cloudflareRequest(`/api/reports?${params.toString()}`);
+          if (cancelled) return;
+          allRecords.push(...(report.records || []));
+          lifetime = report.lifetime || lifetime;
+          if (!report.records_truncated || !report.next_cursor) break;
+          const nextCursor = Number(report.next_cursor);
+          if (!Number.isSafeInteger(nextCursor) || nextCursor <= cursor) {
+            throw new Error("The monthly report returned an invalid pagination cursor.");
+          }
+          cursor = nextCursor;
+          if (pageNumber === 999) {
+            throw new Error("This month contains more than 500,000 records. Export a smaller date range.");
+          }
+        }
         if (cancelled) return;
-        const records = report.records || [];
-        const lifetime = report.lifetime || {};
-        if (cancelled) return;
+        const records = allRecords;
 
         const monthTotal = records.reduce((s, r) => s + (Number(r.total) || 0), 0);
         const daily = Array.from({ length: days }, (_, i) => {
