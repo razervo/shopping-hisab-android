@@ -441,6 +441,27 @@ function SessionDetailPage() {
     }
   };
 
+  const deletePlannedItem = async (item) => {
+    if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items/${item.id}`, { method: "DELETE" });
+      setEstimatePrices((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      setEstimateSources((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      await loadSession();
+      toast.success("Planned item removed.");
+    } catch (cause) {
+      toast.error(cause.message || "Could not remove this planned item.");
+    }
+  };
+
   const loadBillLines = async (billId) => {
     try {
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
@@ -765,9 +786,17 @@ function SessionDetailPage() {
                     </div>
                   ) : null}
                 </div>
-                <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
-                  {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
+                    {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
+                  </span>
+                  {!completed ? (
+                    <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
+                      className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
