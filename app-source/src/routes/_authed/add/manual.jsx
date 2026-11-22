@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -15,12 +15,17 @@ export const Route = createFileRoute("/_authed/add/manual")({
 function AddManualPage() {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const saveRequestRef = useRef(null);
 
   const save = async (values) => {
     setSaving(true);
     try {
       const payload = buildPayload({ ...values, source: "manual", receipts: values.receipts, reconciliationStatus: values.reconciliationStatus });
-      const created = await base44.entities.ShoppingRecord.create(payload);
+      const fingerprint = JSON.stringify(payload);
+      if (!saveRequestRef.current || saveRequestRef.current.fingerprint !== fingerprint) {
+        saveRequestRef.current = { fingerprint, key: crypto.randomUUID() };
+      }
+      const created = await base44.entities.ShoppingRecord.create(payload, saveRequestRef.current.key);
       clearDraft();
       toast.success("Shopping saved");
       navigate({ to: "/record/$recordId", params: { recordId: created.id } });
