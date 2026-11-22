@@ -40,7 +40,7 @@ const records = {
     })),
   aggregate: () => request("/api/records/aggregate"),
   get: (id) => request(`/api/records/${encodeURIComponent(id)}`),
-  create: (record) => request("/api/records", json("POST", record)),
+  create: (record) => request("/api/records", { ...json("POST", record), headers: { "Idempotency-Key": crypto.randomUUID() } }),
   update: (id, record) => request(`/api/records/${encodeURIComponent(id)}`, json("PATCH", record)),
   delete: (id) => request(`/api/records/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
