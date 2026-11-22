@@ -8,7 +8,7 @@ import { buildPayload } from "@/lib/shopping";
 import { clearDraft } from "@/lib/draft";
 
 export const Route = createFileRoute("/_authed/add/manual")({
-  head: () => ({ meta: [{ title: "Manual Entry · Shopping Hisab" }] }),
+  head: () => ({ meta: [{ title: "Record a Purchase · Shopping Hisab" }] }),
   component: AddManualPage,
 });
 
@@ -49,9 +49,9 @@ function AddManualPage() {
         <ChevronLeft className="h-4 w-4" /> Add shopping
       </button>
 
-      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Manual entry</h1>
+      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Record a past purchase</h1>
       <p className="mb-4 mt-1 text-[13.5px] text-muted-foreground">
-        Quantity × price is calculated for you, and the grand total updates as you type.
+        Add something you have already bought. The total updates automatically as you enter quantities and prices.
       </p>
 
       <RecordForm submitLabel="Save shopping" saving={saving} onSave={save} footerNote="Added manually" />
