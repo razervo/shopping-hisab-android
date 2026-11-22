@@ -81,6 +81,15 @@ server_source = (ROOT / "src/server.js").read_text(encoding="utf-8")
 assert 'url.pathname === "/api/reports"' in server_source
 assert 'url.pathname === "/api/reports/export"' in server_source
 assert 'return handleNativeApi(request, env);' in server_source
+api_source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
+assert "const monthlyLimit = Number.isSafeInteger(requestedLimit)" in api_source
+assert "monthlyOffset" in api_source
+assert "next_cursor: monthly.next_cursor" in api_source
+report_hook = (ROOT / "src/components/reports/useReport.js").read_text(encoding="utf-8")
+assert 'limit: "500"' in report_hook
+assert "report.records_truncated" in report_hook
+assert "allRecords.push(...(report.records || []))" in report_hook
+
 
 source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
 assert 'url.pathname === "/api/reports" || url.pathname === "/api/reports/export"' in source
