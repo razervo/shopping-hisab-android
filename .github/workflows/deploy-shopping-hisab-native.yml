@@ -1,7 +1,11 @@
 name: Deploy Shopping Hisab native Worker
 
 on:
-  # Deliberately manual only: deploy the branch selected in the GitHub Actions UI.
+  # Deploy automatically only when changes reach the designated deployment branch.
+  push:
+    branches:
+      - cloudflare-native-migration
+  # Keep manual deployment available as a fallback.
   workflow_dispatch:
 
 permissions:
