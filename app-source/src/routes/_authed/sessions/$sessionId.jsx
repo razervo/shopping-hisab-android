@@ -1155,6 +1155,11 @@ function SessionDetailPage() {
               <input type="date" value={uploadedBillDate} onChange={(event) => setUploadedBillDate(event.target.value)}
                 className="h-10 w-full rounded-xl border border-border bg-white px-3 text-[12px]" />
               <div className="space-y-2">
+                {uploadedBillRows.length === 0 ? (
+                  <p className="rounded-xl bg-secondary/50 px-3 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                    We couldn't read the item rows. You can still save the receipt by checking the shop and total paid below. Item details can be added later.
+                  </p>
+                ) : null}
                 {uploadedBillRows.map((row, index) => (
                   <div key={index} className="space-y-2 rounded-xl bg-white p-2.5">
                     <input value={row.product_name} onChange={(event) => updateUploadedBillRow(index, "product_name", event.target.value)}
