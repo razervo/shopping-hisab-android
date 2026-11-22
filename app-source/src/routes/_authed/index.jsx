@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Camera, ClipboardList, Plus, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
+import { ArrowRight, ClipboardList, History, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { useOverview } from "@/components/dashboard/useOverview";
 import { inr } from "@/lib/format";
@@ -47,32 +47,32 @@ function HomePage() {
 
       <section className="mt-5">
         <div className="mb-2 px-1">
-          <h2 className="text-[14px] font-extrabold">Need to add something else?</h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">Quick actions for shopping you've already done.</p>
+          <h2 className="text-[14px] font-extrabold">Or pick up where you left off</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Your saved shopping is always close by.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
-            to="/add/bill"
-            className="flex min-h-[116px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            to="/history"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              <Camera className="h-5 w-5" />
+              <History className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">Add a bill</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Save a receipt from a purchase</span>
+              <span className="block text-[13px] font-extrabold">My shopping</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">See your past trips and purchases</span>
             </span>
           </Link>
           <Link
             to="/add/manual"
-            className="flex min-h-[116px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <ClipboardList className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">Enter a purchase</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Add details yourself</span>
+              <span className="block text-[13px] font-extrabold">Add a purchase</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record something you already bought</span>
             </span>
           </Link>
         </div>
@@ -90,14 +90,12 @@ function HomePage() {
             <p className="tnum mt-0.5 text-[20px] font-extrabold">{inr(overview.monthTotal)}</p>
           </div>
           <Link to="/history" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
-            My shopping <ArrowRight className="h-3.5 w-3.5" />
+            See all <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </section>
       ) : null}
 
-      {overview ? (
-        <RecentRecords records={overview.recent} />
-      ) : null}
+      {overview ? <RecentRecords records={overview.recent} /> : null}
     </div>
   );
 }
