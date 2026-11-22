@@ -75,6 +75,7 @@ function SessionDetailPage() {
   const [uploadedBillShop, setUploadedBillShop] = useState("");
   const [uploadedBillDate, setUploadedBillDate] = useState(new Date().toISOString().slice(0, 10));
   const [uploadedBillTotal, setUploadedBillTotal] = useState("");
+  const [uploadedBillTotalSource, setUploadedBillTotalSource] = useState("manual");
   const [uploadedBillRows, setUploadedBillRows] = useState([]);
   const [uploadedBillSaving, setUploadedBillSaving] = useState(false);
   const [uploadedBillId, setUploadedBillId] = useState("");
@@ -230,24 +231,55 @@ function SessionDetailPage() {
       toast.error("No bill items were detected. You can still enter the bill total manually.");
       return;
     }
-    setUploadedBillDraft(draft);
-    setUploadedBillId("");
-    setUploadedBillFileUri(fileUri || "");
-    setUploadedBillShop(String(draft.shopName || ""));
-    setUploadedBillDate(/^\d{4}-\d{2}-\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
-    setUploadedBillTotal("");
-    setUploadedBillRows(extracted.map((item) => ({
+    const rows = extracted.map((item) => ({
       product_name: String(item?.name || ""),
       quantity: String(item?.qty ?? 1),
       unit: String(item?.unit || "pcs"),
       amount: Number(item?.amount) > 0 ? String(item.amount) : "",
       shopping_item_id: "",
       original: item,
-    })));
+    }));
+    const totals = draft?.totals && typeof draft.totals === "object" ? draft.totals : {};
+    const rawGrandTotal = totals.grandTotal ?? draft?.grandTotal ?? draft?.grand_total ?? null;
+    const parsedGrandTotal = rawGrandTotal == null || String(rawGrandTotal).trim() === ""
+      ? null
+      : Number(rawGrandTotal);
+    const hasPrintedTotal = parsedGrandTotal !== null && Number.isFinite(parsedGrandTotal) && parsedGrandTotal >= 0;
+    const everyRowHasAmount = rows.length > 0 && rows.every((row) =>
+      row.amount.trim() !== "" && Number.isFinite(Number(row.amount)) && Number(row.amount) > 0
+    );
+    const itemLinesTotal = everyRowHasAmount
+      ? rows.reduce((sum, row) => sum + Number(row.amount), 0)
+      : null;
+
+    setUploadedBillDraft(draft);
+    setUploadedBillId("");
+    setUploadedBillFileUri(fileUri || "");
+    setUploadedBillShop(String(draft.shopName || ""));
+    setUploadedBillDate(/^\\d{4}-\\d{2}-\\d{2}$/.test(String(draft.date || "")) ? draft.date : new Date().toISOString().slice(0, 10));
+    setUploadedBillTotal(hasPrintedTotal
+      ? parsedGrandTotal.toFixed(2)
+      : itemLinesTotal !== null ? itemLinesTotal.toFixed(2) : "");
+    setUploadedBillTotalSource(hasPrintedTotal ? "receipt" : itemLinesTotal !== null ? "items" : "manual");
+    setUploadedBillRows(rows);
   };
 
   const updateUploadedBillRow = (index, key, value) => setUploadedBillRows((current) =>
     current.map((row, i) => i === index ? { ...row, [key]: value } : row));
+
+  useEffect(() => {
+    if (uploadedBillTotalSource !== "items") return;
+    const complete = uploadedBillRows.length > 0 && uploadedBillRows.every((row) =>
+      row.amount.trim() !== "" && Number.isFinite(Number(row.amount)) && Number(row.amount) > 0
+    );
+    if (!complete) {
+      setUploadedBillTotal("");
+      setUploadedBillTotalSource("manual");
+      return;
+    }
+    const lineTotal = uploadedBillRows.reduce((sum, row) => sum + Number(row.amount), 0);
+    setUploadedBillTotal(lineTotal.toFixed(2));
+  }, [uploadedBillRows, uploadedBillTotalSource]);
 
   const saveUploadedBill = async (event) => {
     event.preventDefault();
@@ -322,6 +354,7 @@ function SessionDetailPage() {
       setUploadedBillFileUri("");
       setUploadedBillRows([]);
       setUploadedBillTotal("");
+      setUploadedBillTotalSource("manual");
       setUploadedBillShop("");
       await loadSession();
     } catch (cause) {
@@ -979,10 +1012,46 @@ function SessionDetailPage() {
                   </div>
                 ))}
               </div>
-              <label className="block text-[11.5px] font-bold" htmlFor="uploaded-bill-total">Total paid (₹) — check the printed total</label>
-              <input id="uploaded-bill-total" type="number" inputMode="decimal" min="0" step="0.01" required value={uploadedBillTotal}
-                onChange={(event) => setUploadedBillTotal(event.target.value)} placeholder="Enter the exact total from the receipt"
-                className="h-11 w-full rounded-xl border border-border bg-white px-3 text-[14px] font-semibold" />
+              {uploadedBillDraft?.totals && Object.entries({
+                "Items subtotal": uploadedBillDraft.totals.subtotal,
+                "Discount": uploadedBillDraft.totals.discount,
+                "GST / tax": uploadedBillDraft.totals.tax,
+                "Round-off": uploadedBillDraft.totals.roundOff,
+              }).some(([, value]) => value != null && Number.isFinite(Number(value))) ? (
+                <div className="rounded-xl border border-border bg-white p-3">
+                  <p className="mb-2 text-[11.5px] font-bold">Amounts read from the receipt</p>
+                  <div className="space-y-1.5">
+                    {[
+                      ["Items subtotal", uploadedBillDraft.totals.subtotal],
+                      ["Discount", uploadedBillDraft.totals.discount],
+                      ["GST / tax", uploadedBillDraft.totals.tax],
+                      ["Round-off", uploadedBillDraft.totals.roundOff],
+                    ].filter(([, value]) => value != null && Number.isFinite(Number(value))).map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-3 text-[11.5px]">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-semibold tabular-nums">{inr(Math.round(Number(value) * 100))}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div className="rounded-xl border border-primary/20 bg-white p-3">
+                <label className="block text-[12px] font-bold" htmlFor="uploaded-bill-total">Total paid (₹)</label>
+                <input id="uploaded-bill-total" type="number" inputMode="decimal" min="0" step="0.01" required value={uploadedBillTotal}
+                  onChange={(event) => { setUploadedBillTotal(event.target.value); setUploadedBillTotalSource("manual"); }}
+                  placeholder="Enter the exact total from the receipt"
+                  className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
+                <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                  {uploadedBillTotalSource === "receipt"
+                    ? `AI read ${uploadedBillDraft?.totals?.grandTotalLabel || "a printed final total"}: ${inr(Math.round(Number(uploadedBillTotal || 0) * 100))}. Please check it against the receipt before saving.`
+                    : uploadedBillTotalSource === "items"
+                      ? "Provisional total calculated from all detected item amounts. This is not a confirmed receipt total; check taxes, discounts and the printed amount due."
+                      : "No reliable printed total was found. Enter the exact amount paid from the receipt."}
+                </p>
+                {uploadedBillDraft?.totals?.grandTotal != null && uploadedBillTotalSource === "receipt" ? (
+                  <p className="mt-1 text-[10.5px] text-muted-foreground">The AI-detected amount is only a suggestion. You must verify it.</p>
+                ) : null}
+              </div>
               <button type="submit" disabled={uploadedBillSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[12px] font-bold text-primary-foreground disabled:opacity-60">
                 {uploadedBillSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {uploadedBillSaving ? "Saving bill…" : "Confirm reviewed bill"}
