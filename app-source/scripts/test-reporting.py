@@ -17,15 +17,10 @@ db.execute(
     ("u1", "QA User", "qa@example.test"),
 )
 
-# A second account must not see the first account's completed session or legacy records.
 db.execute(
     'INSERT INTO "user" (id, name, email) VALUES (?, ?, ?)',
     ("u2", "Other QA User", "other-qa@example.test"),
 )
-other_history, _, _ = run_report(limit=30, offset=0, user_id="u2")
-assert other_history == []
-cross_account_detail, _, _ = run_report(record_id="session-1", limit=1, user_id="u2")
-assert cross_account_detail == [], "A second user must not retrieve another account's session by ID"
 
 # A legacy record is retained as the source of truth for its linked legacy session.
 db.execute(
@@ -124,6 +119,13 @@ def run_report(from_date=None, to_date=None, limit=200, offset=0, shop=None, rec
     columns = [column[0] for column in db.execute(sql, values).description]
     records = [dict(zip(columns, row)) for row in rows[:limit]]
     return records, len(rows) > limit, (str(offset + limit) if len(rows) > limit else None)
+
+
+# A second account must not see the first account's completed session or legacy records.
+other_history, _, _ = run_report(limit=30, offset=0, user_id="u2")
+assert other_history == []
+cross_account_detail, _, _ = run_report(record_id="session-1", limit=1, user_id="u2")
+assert cross_account_detail == [], "A second user must not retrieve another account's session by ID"
 
 
 monthly, has_more, next_cursor = run_report("2026-11-01", "2026-11-30", 10, 0)
