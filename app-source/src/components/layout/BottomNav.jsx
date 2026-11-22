@@ -3,10 +3,10 @@ import { BarChart3, History, Home, Plus } from "lucide-react";
 
 const left = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/history", label: "History", icon: History },
+  { to: "/history", label: "My shopping", icon: History },
 ];
 
-const right = [{ to: "/reports", label: "Reports", icon: BarChart3 }];
+const right = [{ to: "/reports", label: "Summary", icon: BarChart3 }];
 
 function NavItem({ to, label, icon: Icon }) {
   return (
@@ -40,7 +40,8 @@ export function BottomNav() {
         <div className="flex w-[74px] items-start justify-center">
           <Link
             to="/sessions"
-            aria-label="Start shopping session"
+            aria-label="Start a shopping trip"
+            title="Start a shopping trip"
             className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_10px_24px_-8px_rgba(16,88,58,0.65)] transition-transform duration-200 active:scale-95"
             activeProps={{ className: "ring-4 ring-accent" }}
           >
