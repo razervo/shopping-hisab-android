@@ -1,4 +1,5 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
+import { calculateEstimateLineTotalPaise } from "@/lib/estimate-money";
 
 const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
@@ -458,8 +459,8 @@ export async function handleShoppingEngine(request, env) {
       const unitPrice=Number(line.estimated_unit_price_paise);
       if (!Number.isFinite(quantity)||quantity<0||quantity>1000000) return fail(`Estimate line ${index+1} has invalid quantity.`);
       if (!Number.isSafeInteger(unitPrice)||unitPrice<0) return fail(`Estimate line ${index+1} has invalid unit price in paise.`);
-      const lineTotal = Math.round(quantity * unitPrice);
-      if (!Number.isSafeInteger(lineTotal) || lineTotal < 0) {
+      const lineTotal = calculateEstimateLineTotalPaise(quantity, unitPrice);
+      if (lineTotal === null) {
         return fail(`Estimate line ${index+1} total is outside the supported range.`);
       }
       if (line.estimated_line_total_paise != null &&
