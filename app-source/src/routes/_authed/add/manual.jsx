@@ -16,8 +16,11 @@ function AddManualPage() {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const saveRequestRef = useRef(null);
+  const saveLockRef = useRef(false);
 
   const save = async (values) => {
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = buildPayload({ ...values, source: "manual", receipts: values.receipts, reconciliationStatus: values.reconciliationStatus });
@@ -31,6 +34,7 @@ function AddManualPage() {
       navigate({ to: "/record/$recordId", params: { recordId: created.id } });
     } catch {
       toast.error("Could not save this shopping. Please try again.");
+      saveLockRef.current = false;
       setSaving(false);
     }
   };
