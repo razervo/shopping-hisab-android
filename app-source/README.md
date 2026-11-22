@@ -60,6 +60,7 @@ The hardening CI workflow runs:
 - final expense confirmation review guards, duplicate/void exclusion, idempotency retries and confirmation race protection;
 - receipt MIME/extension validation, PDF passthrough and safe HEIC conversion failure handling;
 - D1-side Google Drive upload-marker and metadata-recovery scenarios, including same-key retry de-duplication and per-user isolation;
+- Base44 import re-run idempotency, stable legacy record IDs and per-user attachment mapping;
 - detailed CSV/PDF export and completed-session receipt-link assertions.
 
 The Cloudflare build workflow verifies the PWA/TWA assets and bundles the native Worker with Wrangler dry-run validation. These checks do not deploy the Worker.
