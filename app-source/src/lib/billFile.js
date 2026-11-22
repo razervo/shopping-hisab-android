@@ -31,9 +31,9 @@ function loadImage(file) {
   });
 }
 
-// Bills are read by a vision model, which expects JPG or PNG. Big camera photos
-// and HEIC files are shrunk and converted in the browser first; if the browser
-// cannot decode the file it is uploaded as it is.
+// Bills are read by a vision model. Large camera photos and HEIC/HEIF files are
+// converted to JPEG in the browser first. If HEIC/HEIF cannot be decoded on the
+// device, fail with a clear message rather than uploading bytes the reader rejects.
 export async function prepareBillFile(file) {
   if (!file) throw new Error("No bill file selected");
   const type = String(file.type || "").toLowerCase();
