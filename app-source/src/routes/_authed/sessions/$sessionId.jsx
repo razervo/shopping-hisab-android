@@ -499,6 +499,8 @@ function SessionDetailPage() {
     if (Number(session?.bills_amount_pending || 0) > 0) {
       return toast.error("Resolve every bill with a pending amount before completing this session.");
     }
+    const includedBillCount = (session?.bills || []).filter((bill) => Number(bill.included_in_actual) === 1 && !["duplicate", "void"].includes(bill.bill_status)).length;
+    if (!includedBillCount && Math.round(rupees * 100) === 0 && !window.confirm("No included bills are recorded. Finish this trip with ₹0.00 paid?")) return;
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
       const difference = rupees - calculatedRupees;
@@ -1353,7 +1355,7 @@ function SessionDetailPage() {
           <button type="submit" disabled={confirmationSaving || unresolvedBills.length > 0 || Number(session.bills_amount_pending || 0) > 0}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
             {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
-            {confirmationSaving ? "Finishing trip…" : "Confirm and finish trip"}
+            {confirmationSaving ? "Finishing trip…" : "Finish trip"}
           </button>
         </form>
       ) : (
