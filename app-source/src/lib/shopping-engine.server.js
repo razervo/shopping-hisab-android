@@ -145,56 +145,56 @@ export async function handleShoppingEngine(request, env) {
 
     const current = await ownedSession(db, userId, sessionId);
     if (!current) return fail("Shopping trip not found.", 404);
-    if (current.status === "completed") return fail("Finished trips are protected and cannot be deleted.", 409);
 
-    const childTables = [
+    // Capture every trip-owned table before cleanup. Attachment metadata and physical
+    // files are intentionally not deleted: they may be shared with legacy records.
+    const snapshotTables = [
       "shopping_source_lists",
       "shopping_source_lines",
       "shopping_items",
       "shopping_item_sources",
-      "shopping_purchase_lines",
-      "shopping_actual_bills",
       "shopping_estimates",
       "shopping_estimate_lines",
+      "shopping_actual_bills",
+      "shopping_purchase_lines",
       "shopping_expense_confirmations",
+      "shopping_audit_events",
+      "shopping_idempotency_keys",
     ];
-    const countSql = childTables.map((table, index) =>
-      `(SELECT COUNT(*) FROM ${table} WHERE user_id=? AND session_id=?) AS child_${index}`
-    ).join(", ");
-    const countValues = childTables.flatMap(() => [userId, sessionId]);
-    const childCounts = await db.prepare(`SELECT ${countSql}`).bind(...countValues).first();
-    if (childTables.some((_, index) => Number(childCounts?.[`child_${index}`] || 0) > 0)) {
-      return fail("This trip already contains a list, item, estimate or bill. We protect it from deletion.", 409);
+    const snapshots = {};
+    for (const table of snapshotTables) {
+      const rows = await db.prepare(`SELECT * FROM ${table} WHERE user_id=? AND session_id=?`)
+        .bind(userId, sessionId).all();
+      snapshots[table] = rows.results || [];
     }
-
-    const events = await db.prepare(
-      "SELECT id,entity_type,entity_id,event_type,before_json,after_json,created_at FROM shopping_audit_events WHERE user_id=? AND session_id=? ORDER BY created_at,id",
-    ).bind(userId, sessionId).all();
-    const snapshot = JSON.stringify({ session: current, audit_events: events.results || [] });
+    const snapshot = JSON.stringify({ session: current, tables: snapshots });
     const timestamp = now();
-    const guardSql = childTables.map((table) =>
-      `NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id=? AND session_id=?)`
-    ).join(" AND ");
-    const guardValues = childTables.flatMap(() => [userId, sessionId]);
+
+    // Explicit child cleanup order handles restrictive FKs (bill duplicates,
+    // purchase-line item links, source-line links, estimate references).
     const statements = [
       db.prepare(`INSERT INTO shopping_session_deletion_log
         (id,user_id,deleted_session_id,idempotency_key,session_snapshot_json,created_at)
         SELECT ?,?,?,?,?,?
-        WHERE EXISTS (
-          SELECT 1 FROM shopping_sessions
-          WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
-        ) AND ${guardSql}`)
-        .bind(id(), userId, sessionId, requestKey, snapshot, timestamp, sessionId, userId, ...guardValues),
-      db.prepare(`DELETE FROM shopping_sessions
-        WHERE id=? AND user_id=?
-          AND EXISTS (
-            SELECT 1 FROM shopping_session_deletion_log
-            WHERE user_id=? AND deleted_session_id=?
-          )`)
-        .bind(sessionId, userId, userId, sessionId),
+        WHERE EXISTS (SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=?)
+          AND NOT EXISTS (SELECT 1 FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?)
+      `).bind(id(), userId, sessionId, requestKey, snapshot, timestamp, sessionId, userId, userId, sessionId),
+      db.prepare("DELETE FROM shopping_expense_confirmations WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_estimate_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_estimates WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_item_sources WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_actual_bills WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_source_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_source_lists WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_items WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_audit_events WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_idempotency_keys WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_sessions WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?)").bind(sessionId,userId,userId,sessionId),
     ];
     const results = await db.batch(statements);
-    if (!Number(results?.[1]?.meta?.changes || 0)) {
+    if (!Number(results?.[0]?.meta?.changes || 0) || !Number(results?.[results.length-1]?.meta?.changes || 0)) {
       const stillExists = await ownedSession(db, userId, sessionId);
       if (!stillExists) {
         const deletion = await db.prepare(
@@ -203,11 +203,10 @@ export async function handleShoppingEngine(request, env) {
         if (deletion) return json({ success: true, deleted: true, already_deleted: true });
         return fail("Shopping trip not found.", 404);
       }
-      return fail("This trip now contains shopping data and is protected from deletion. Refresh and review it.", 409);
+      return fail("Trip deletion did not complete. Refresh and try again.", 409);
     }
     return json({ success: true, deleted: true });
   }
-
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
   if (session.status === "completed" && method !== "GET" && subpath !== "confirm") return fail("This shopping session is completed and read-only.",409);
