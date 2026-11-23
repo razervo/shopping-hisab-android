@@ -581,7 +581,31 @@ export async function handleShoppingEngine(request, env) {
   }
 
   const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
-  if (billMatch && ["GET","PATCH"].includes(method)) {
+  if (billMatch && method === "DELETE") {
+    const billId=billMatch[1];
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!requestKey)return fail("An Idempotency-Key is required for bill deletion.",400);
+    const operation=`bill_delete:${sessionId}:${billId}`;
+    const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(billId)))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+    if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill deletion.",409);
+    const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    if(!existing)return fail("Bill not found.",404);
+    const lines=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=? ORDER BY created_at,id").bind(billId,userId,sessionId).all();
+    const snapshot=JSON.stringify({bill:existing,purchase_lines:lines.results||[]});
+    const timestamp=now();
+    const responseBody={success:true,deleted:true,bill_id:billId};
+    const statements=[
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshot,JSON.stringify(responseBody),timestamp),
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
+      db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
+      db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
+    ];
+    await db.batch(statements);
+    return json(responseBody);
+  }
+
+if (billMatch && ["GET","PATCH"].includes(method)) {
     const billId=billMatch[1];
     const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
     if(!existing) return fail("Bill not found.",404);
