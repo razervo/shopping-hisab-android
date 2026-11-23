@@ -43,7 +43,7 @@ await assert.rejects(
 );
 
 const uploader = await readFile(new URL("../src/components/shopping/BillUploader.jsx", import.meta.url), "utf8");
-assert.match(uploader, /setRecoveryFileUri\\(fileUri\\)/, "PDF OCR failure must preserve the saved file URI for recovery");
+assert.match(uploader, /setRecoveryFileUri\\(result.file_uri\\)/, "PDF OCR failure must preserve the saved file URI for recovery");
 assert.match(uploader, /readShoppingBill\\(\\{ data: \\{ fileUri: recoveryFileUri, purpose \\} \\}\\)/, "Retry must reread the saved Drive file, not reupload");
 assert.match(uploader, /Retry reading saved receipt|Retry reading saved receipt/, "Recovery UI must offer a retry for saved receipts");
 
