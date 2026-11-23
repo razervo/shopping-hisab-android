@@ -75,6 +75,7 @@ function SessionDetailPage() {
   const [scannedListSaving, setScannedListSaving] = useState(false);
   const [confirmationTotal, setConfirmationTotal] = useState("");
   const [confirmationSaving, setConfirmationSaving] = useState(false);
+  const [adjustFinalTotal, setAdjustFinalTotal] = useState(false);
   const [mergeTargets, setMergeTargets] = useState({});
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
@@ -498,6 +499,8 @@ function SessionDetailPage() {
     if (Number(session?.bills_amount_pending || 0) > 0) {
       return toast.error("Resolve every bill with a pending amount before completing this session.");
     }
+    const includedBillCount = (session?.bills || []).filter((bill) => Number(bill.included_in_actual) === 1 && !["duplicate", "void"].includes(bill.bill_status)).length;
+    if (!includedBillCount && Math.round(rupees * 100) === 0 && !window.confirm("No included bills are recorded. Finish this trip with ₹0.00 paid?")) return;
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
       const difference = rupees - calculatedRupees;
@@ -551,6 +554,22 @@ function SessionDetailPage() {
       setBillLineDetails((current) => ({ ...current, [billId]: details.purchase_lines || [] }));
     } catch (cause) {
       toast.error(cause.message || "Could not load bill items.");
+    }
+  };
+
+  const deleteBill = async (billId) => {
+    if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      });
+      setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
+      await loadSession();
+      toast.success("Bill deleted. Trip totals recalculated.");
+    } catch (cause) {
+      toast.error(cause.message || "Could not delete this bill.");
+      await loadSession();
     }
   };
 
@@ -1232,7 +1251,7 @@ function SessionDetailPage() {
             <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
-                <p className="shrink-0 text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>
+                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>{!completed ? <button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button> : null}</div>
               </div>
               {!completed ? (
                 <div className="mt-2">
@@ -1324,15 +1343,19 @@ function SessionDetailPage() {
               {session.bills_amount_pending} bill amount(s) are unreadable or missing. Enter or correct those amounts before completing the session.
             </p>
           ) : null}
-          <label className="block text-[11.5px] font-bold" htmlFor="confirmation-total">Final total paid (₹)</label>
-          <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
-            onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
-          <p className="text-[10.5px] text-muted-foreground">Total from included bills: {inr(session.actual_total_paise)}. If your confirmed amount differs, the difference is retained in the confirmation snapshot.</p>
+          <p className="text-[12px] text-muted-foreground">Ready to finish? The included bills total {inr(session.actual_total_paise)}. Unpurchased list items will remain in your summary.</p>
+          <button type="button" onClick={() => setAdjustFinalTotal((value) => !value)} className="text-[11.5px] font-bold text-primary underline">{adjustFinalTotal ? "Hide total adjustment" : "Adjust final total (optional)"}</button>
+          {adjustFinalTotal ? <div>
+            <label className="mb-1 block text-[11.5px] font-bold" htmlFor="confirmation-total">Final total paid (₹)</label>
+            <input id="confirmation-total" type="number" inputMode="decimal" min="0" step="0.01" required value={confirmationTotal}
+              onChange={(event) => { confirmationRequestKeyRef.current = null; setConfirmationTotal(event.target.value); }}
+              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
+            <p className="text-[10.5px] text-muted-foreground">Default is the total from included bills. Adjust only if your actual payment differs.</p>
+          </div> : null}
           <button type="submit" disabled={confirmationSaving || unresolvedBills.length > 0 || Number(session.bills_amount_pending || 0) > 0}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-50">
             {confirmationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBasket className="h-4 w-4" />}
-            {confirmationSaving ? "Finishing trip…" : "Confirm and finish trip"}
+            {confirmationSaving ? "Finishing trip…" : "Finish trip"}
           </button>
         </form>
       ) : (
