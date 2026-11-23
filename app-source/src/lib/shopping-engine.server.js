@@ -193,7 +193,14 @@ export async function handleShoppingEngine(request, env) {
       db.prepare("DELETE FROM shopping_idempotency_keys WHERE user_id=? AND session_id=?").bind(userId,sessionId),
       db.prepare("DELETE FROM shopping_sessions WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?)").bind(sessionId,userId,userId,sessionId),
     ];
-    const results = await db.batch(statements);
+    let results;
+    try {
+      results = await db.batch(statements);
+    } catch (error) {
+      console.error("[shopping-trip-delete] D1 batch failed", error);
+      const reason = text(error?.message || error, 220);
+      return fail(`Trip deletion failed on the database: ${reason || "unknown error"}`, 500);
+    }
     if (!Number(results?.[0]?.meta?.changes || 0) || !Number(results?.[results.length-1]?.meta?.changes || 0)) {
       const stillExists = await ownedSession(db, userId, sessionId);
       if (!stillExists) {
