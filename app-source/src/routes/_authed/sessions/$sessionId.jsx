@@ -1251,7 +1251,7 @@ function SessionDetailPage() {
             <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
-                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>{!completed ? <button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button> : null}</div>
+                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p><button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button></div>
               </div>
               {!completed ? (
                 <div className="mt-2">
@@ -1275,7 +1275,7 @@ function SessionDetailPage() {
                       <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
-                        {!completed ? <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button> : null}
+                        <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
                       </div>
                     </div>
                   )) : <p className="text-[11px] text-muted-foreground">No item details recorded yet.</p>}
