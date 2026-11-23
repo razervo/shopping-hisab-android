@@ -123,7 +123,7 @@ export async function handleShoppingEngine(request, env) {
     return json(responseBody,201);
   }
 
-  const sessionMatch = /^\/sessions\/([a-f0-9-]{36})(?:\/(.*))?$/i.exec(path);
+  const sessionMatch = /^\/sessions\/((?:legacy-session-)?[a-f0-9-]{36})(?:\/(.*))?$/i.exec(path);
   if (!sessionMatch) return fail("Shopping endpoint not found.",404);
   const sessionId = sessionMatch[1], subpath = sessionMatch[2] || "";
 
