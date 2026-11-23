@@ -1138,6 +1138,6 @@ export async function handleNativeApi(request, env) {
     return error("Not found.", 404);
   } catch (cause) {
     console.error("Native API request failed", cause);
-    return error(cause?.message || "Internal server error.", 500);
+    return error("Internal server error. Please try again.", 500);
   }
 }
