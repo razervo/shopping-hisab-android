@@ -23,12 +23,12 @@ assert "return error(\"Internal server error. Please try again.\", 500);" in sou
 
 # File-content and OCR reads must both authorize the file by owner ID.
 files_handler_start = source.index("async function handleFiles(")
-files_handler_end = source.index("\\nasync function handleDriveStatus", files_handler_start)
+files_handler_end = source.index("async function handleDriveStatus", files_handler_start)
 files_handler = source[files_handler_start:files_handler_end]
 assert "WHERE id = ? AND user_id = ?" in files_handler
 assert ".bind(id, user.id).first()" in files_handler
 ai_handler_start = source.index("async function handleAI(")
-ai_handler_end = source.index("\\nfunction safeImportedTimestamp", ai_handler_start)
+ai_handler_end = source.index("function safeImportedTimestamp", ai_handler_start)
 ai_handler = source[ai_handler_start:ai_handler_end]
 assert "WHERE id = ? AND user_id = ?" in ai_handler
 assert ".bind(fileId, user.id).first()" in ai_handler
