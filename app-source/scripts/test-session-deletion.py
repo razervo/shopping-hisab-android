@@ -81,7 +81,7 @@ assert db.execute("PRAGMA foreign_key_check").fetchall()==[]
 
 # Static assertions ensure the production handler follows the covered cleanup/snapshot strategy.
 engine=(ROOT/"src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
-handler=engine[engine.index('if (!subpath && method === "DELETE")'):engine.index("\\n  const session = await ownedSession(db,userId,sessionId);",engine.index('if (!subpath && method === "DELETE")'))]
+handler=engine[engine.index('if (!subpath && method === "DELETE")'):engine.index("\n  const session = await ownedSession(db,userId,sessionId);",engine.index('if (!subpath && method === "DELETE")'))]
 assert "const snapshots = {}" in handler and "tables: snapshots" in handler
 assert "shopping_session_deletion_log" in handler and "shopping_expense_confirmations" in handler
 assert 'UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL' in handler
