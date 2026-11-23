@@ -20,6 +20,18 @@ db.executemany(
 
 source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
 assert "return error(\"Internal server error. Please try again.\", 500);" in source
+
+# File-content and OCR reads must both authorize the file by owner ID.
+files_handler_start = source.index("async function handleFiles(")
+files_handler_end = source.index("\\nasync function handleDriveStatus", files_handler_start)
+files_handler = source[files_handler_start:files_handler_end]
+assert "WHERE id = ? AND user_id = ?" in files_handler
+assert ".bind(id, user.id).first()" in files_handler
+ai_handler_start = source.index("async function handleAI(")
+ai_handler_end = source.index("\\nfunction safeImportedTimestamp", ai_handler_start)
+ai_handler = source[ai_handler_start:ai_handler_end]
+assert "WHERE id = ? AND user_id = ?" in ai_handler
+assert ".bind(fileId, user.id).first()" in ai_handler
 start = source.index("async function findDriveUploadByMarker(")
 end = source.index("\nasync function downloadGoogleDriveFile", start)
 drive_code = source[start:end]
