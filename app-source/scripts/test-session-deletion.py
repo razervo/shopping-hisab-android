@@ -86,7 +86,7 @@ assert "const snapshots = {}" in handler and "tables: snapshots" in handler
 assert "shopping_session_deletion_log" in handler and "shopping_expense_confirmations" in handler
 assert 'UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL' in handler
 assert "Finished trips are protected and cannot be deleted." not in handler
-assert "Uploaded files" in handler
+assert "Attachment metadata and physical files are intentionally not deleted" in handler
 route=(ROOT/"src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
 assert "Delete trip" in route and "Delete empty trip" not in route
 assert "deleteTrip" in route and "ALL saved trip data" in route
