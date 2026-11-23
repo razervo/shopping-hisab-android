@@ -95,7 +95,8 @@ export function BillUploader({
         if (!fileUri) throw new Error("The bill could not be uploaded.");
         const result = await readShoppingBill({ data: { fileUri, purpose } });
         if (!result?.draft) {
-          throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
+          setRecoveryFileUri(fileUri);
+          throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
         }
         onExtracted(result.draft, fileUri);
       }
