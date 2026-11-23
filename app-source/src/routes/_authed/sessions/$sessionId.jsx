@@ -129,15 +129,16 @@ function SessionDetailPage() {
     }
   };
 
-  const deleteEmptyTrip = async () => {
-    const confirmed = window.confirm("Delete this empty shopping trip? This cannot be undone. Trips with shopping lists, items, estimates or bills are protected.");
+  const deleteTrip = async () => {
+    const confirmed = window.confirm("Delete this shopping trip and ALL saved trip data (lists, items, estimates, bills and history)? This cannot be undone. Uploaded files are retained and not physically deleted.");
+
     if (!confirmed) return;
     try {
       await api(`/api/shopping/sessions/${sessionId}`, {
         method: "DELETE",
         headers: { "Idempotency-Key": crypto.randomUUID() },
       });
-      toast.success("Empty trip deleted.");
+      toast.success("Shopping trip deleted.");
       navigate({ to: "/sessions" });
     } catch (cause) {
       toast.error(cause.message || "Could not delete this trip.");
@@ -737,9 +738,7 @@ function SessionDetailPage() {
     (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
   );
   const latestEstimate = (session.estimates || [])[0] || null;
-  const canDeleteEmptyTrip = !completed && !items.length && !lists.length &&
-    !(session.bills || []).length && !(session.estimates || []).length;
-  const fullyPurchasedItemCount = items.filter((item) =>
+    const fullyPurchasedItemCount = items.filter((item) =>
     Number(item.remaining_quantity ?? item.planned_quantity) <= 0
   ).length;
   const shoppingProgress = items.length ? Math.round((fullyPurchasedItemCount / items.length) * 100) : 0;
@@ -785,14 +784,10 @@ function SessionDetailPage() {
           className="rounded-full border border-border bg-white px-3.5 py-2 text-[11.5px] font-bold text-primary">
           {editingTrip ? "Close trip editor" : "Edit trip details"}
         </button>
-        {canDeleteEmptyTrip ? (
-          <button type="button" onClick={deleteEmptyTrip}
-            className="rounded-full border border-destructive/30 bg-white px-3.5 py-2 text-[11.5px] font-bold text-destructive">
-            Delete empty trip
-          </button>
-        ) : !completed ? (
-          <span className="text-[10.5px] text-muted-foreground">Trips with shopping data are protected from deletion.</span>
-        ) : null}
+        <button type="button" onClick={deleteTrip}
+          className="rounded-full border border-destructive/30 bg-white px-3.5 py-2 text-[11.5px] font-bold text-destructive">
+          Delete trip
+        </button>
       </div>
       {editingTrip && !completed ? (
         <form onSubmit={saveTripDetails} className="mt-3 space-y-3 rounded-[22px] border border-border bg-white p-4">
