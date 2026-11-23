@@ -145,56 +145,56 @@ export async function handleShoppingEngine(request, env) {
 
     const current = await ownedSession(db, userId, sessionId);
     if (!current) return fail("Shopping trip not found.", 404);
-    if (current.status === "completed") return fail("Finished trips are protected and cannot be deleted.", 409);
 
-    const childTables = [
+    // Capture every trip-owned table before cleanup. Attachment metadata and physical
+    // files are intentionally not deleted: they may be shared with legacy records.
+    const snapshotTables = [
       "shopping_source_lists",
       "shopping_source_lines",
       "shopping_items",
       "shopping_item_sources",
-      "shopping_purchase_lines",
-      "shopping_actual_bills",
       "shopping_estimates",
       "shopping_estimate_lines",
+      "shopping_actual_bills",
+      "shopping_purchase_lines",
       "shopping_expense_confirmations",
+      "shopping_audit_events",
+      "shopping_idempotency_keys",
     ];
-    const countSql = childTables.map((table, index) =>
-      `(SELECT COUNT(*) FROM ${table} WHERE user_id=? AND session_id=?) AS child_${index}`
-    ).join(", ");
-    const countValues = childTables.flatMap(() => [userId, sessionId]);
-    const childCounts = await db.prepare(`SELECT ${countSql}`).bind(...countValues).first();
-    if (childTables.some((_, index) => Number(childCounts?.[`child_${index}`] || 0) > 0)) {
-      return fail("This trip already contains a list, item, estimate or bill. We protect it from deletion.", 409);
+    const snapshots = {};
+    for (const table of snapshotTables) {
+      const rows = await db.prepare(`SELECT * FROM ${table} WHERE user_id=? AND session_id=?`)
+        .bind(userId, sessionId).all();
+      snapshots[table] = rows.results || [];
     }
-
-    const events = await db.prepare(
-      "SELECT id,entity_type,entity_id,event_type,before_json,after_json,created_at FROM shopping_audit_events WHERE user_id=? AND session_id=? ORDER BY created_at,id",
-    ).bind(userId, sessionId).all();
-    const snapshot = JSON.stringify({ session: current, audit_events: events.results || [] });
+    const snapshot = JSON.stringify({ session: current, tables: snapshots });
     const timestamp = now();
-    const guardSql = childTables.map((table) =>
-      `NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id=? AND session_id=?)`
-    ).join(" AND ");
-    const guardValues = childTables.flatMap(() => [userId, sessionId]);
+
+    // Explicit child cleanup order handles restrictive FKs (bill duplicates,
+    // purchase-line item links, source-line links, estimate references).
     const statements = [
       db.prepare(`INSERT INTO shopping_session_deletion_log
         (id,user_id,deleted_session_id,idempotency_key,session_snapshot_json,created_at)
         SELECT ?,?,?,?,?,?
-        WHERE EXISTS (
-          SELECT 1 FROM shopping_sessions
-          WHERE id=? AND user_id=? AND status IN ('open','ready_to_confirm')
-        ) AND ${guardSql}`)
-        .bind(id(), userId, sessionId, requestKey, snapshot, timestamp, sessionId, userId, ...guardValues),
-      db.prepare(`DELETE FROM shopping_sessions
-        WHERE id=? AND user_id=?
-          AND EXISTS (
-            SELECT 1 FROM shopping_session_deletion_log
-            WHERE user_id=? AND deleted_session_id=?
-          )`)
-        .bind(sessionId, userId, userId, sessionId),
+        WHERE EXISTS (SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=?)
+          AND NOT EXISTS (SELECT 1 FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?)
+      `).bind(id(), userId, sessionId, requestKey, snapshot, timestamp, sessionId, userId, userId, sessionId),
+      db.prepare("DELETE FROM shopping_expense_confirmations WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_estimate_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_estimates WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_item_sources WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_actual_bills WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_source_lines WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_source_lists WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_items WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_audit_events WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_idempotency_keys WHERE user_id=? AND session_id=?").bind(userId,sessionId),
+      db.prepare("DELETE FROM shopping_sessions WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM shopping_session_deletion_log WHERE user_id=? AND deleted_session_id=?)").bind(sessionId,userId,userId,sessionId),
     ];
     const results = await db.batch(statements);
-    if (!Number(results?.[1]?.meta?.changes || 0)) {
+    if (!Number(results?.[0]?.meta?.changes || 0) || !Number(results?.[results.length-1]?.meta?.changes || 0)) {
       const stillExists = await ownedSession(db, userId, sessionId);
       if (!stillExists) {
         const deletion = await db.prepare(
@@ -203,11 +203,10 @@ export async function handleShoppingEngine(request, env) {
         if (deletion) return json({ success: true, deleted: true, already_deleted: true });
         return fail("Shopping trip not found.", 404);
       }
-      return fail("This trip now contains shopping data and is protected from deletion. Refresh and review it.", 409);
+      return fail("Trip deletion did not complete. Refresh and try again.", 409);
     }
     return json({ success: true, deleted: true });
   }
-
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
   if (session.status === "completed" && method !== "GET" && subpath !== "confirm") return fail("This shopping session is completed and read-only.",409);
@@ -581,7 +580,31 @@ export async function handleShoppingEngine(request, env) {
   }
 
   const billMatch=/^bills\/([a-f0-9-]{36})$/.exec(subpath);
-  if (billMatch && ["GET","PATCH"].includes(method)) {
+  if (billMatch && method === "DELETE") {
+    const billId=billMatch[1];
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!requestKey)return fail("An Idempotency-Key is required for bill deletion.",400);
+    const operation=`bill_delete:${sessionId}:${billId}`;
+    const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(billId)))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+    if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill deletion.",409);
+    const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
+    if(!existing)return fail("Bill not found.",404);
+    const lines=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=? ORDER BY created_at,id").bind(billId,userId,sessionId).all();
+    const snapshot=JSON.stringify({bill:existing,purchase_lines:lines.results||[]});
+    const timestamp=now();
+    const responseBody={success:true,deleted:true,bill_id:billId};
+    const statements=[
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshot,JSON.stringify(responseBody),timestamp),
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
+      db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
+      db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
+    ];
+    await db.batch(statements);
+    return json(responseBody);
+  }
+
+if (billMatch && ["GET","PATCH"].includes(method)) {
     const billId=billMatch[1];
     const existing=await db.prepare("SELECT * FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).first();
     if(!existing) return fail("Bill not found.",404);

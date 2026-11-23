@@ -1,5 +1,6 @@
-/* global File, console */
+/* global File, console, URL */
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { BILL_MAX_BYTES, isAcceptedBill, prepareBillFile } from "../src/lib/billFile.js";
 
 const file = (name, type, bytes = 128) =>
@@ -41,4 +42,9 @@ await assert.rejects(
   "A HEIC file that cannot be decoded must fail clearly instead of being uploaded unchanged",
 );
 
-console.log("Receipt file checks passed: accepted formats, unsupported/empty files, PDF passthrough and safe HEIC failure.");
+const uploader = await readFile(new URL("../src/components/shopping/BillUploader.jsx", import.meta.url), "utf8");
+assert.ok(uploader.includes("setRecoveryFileUri(fileUri)"), "PDF OCR failure must preserve the saved file URI for recovery");
+assert.ok(uploader.includes("fileUri: recoveryFileUri, purpose"), "Retry must reread the saved Drive file, not reupload");
+assert.ok(uploader.includes("Retry reading saved receipt"), "Recovery UI must offer a retry for saved receipts");
+
+console.log("Receipt file checks passed: accepted formats, unsupported/empty files, PDF passthrough, safe HEIC failure and saved-PDF OCR recovery.");

@@ -2,7 +2,7 @@ name: Shopping Hisab hardening verification
 
 on:
   push:
-    branches: [shopping-hisab-idempotency-hardening]
+    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification]
     paths:
       - "app-source/**"
       - ".github/workflows/shopping-hardening-verify.yml"
@@ -50,7 +50,7 @@ jobs:
         run: python3 scripts/test-reporting.py
       - name: Test final expense confirmation retry safety
         run: python3 scripts/test-confirmation.py
-      - name: Test safe empty-trip deletion
+      - name: Test safe populated-trip deletion
         run: python3 scripts/test-session-deletion.py
       - name: Test receipt-only manual total fallback
         run: node scripts/test-receipt-manual-fallback.mjs
