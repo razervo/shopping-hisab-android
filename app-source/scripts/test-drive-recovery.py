@@ -19,6 +19,7 @@ db.executemany(
 )
 
 source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
+assert "return error(\"Internal server error. Please try again.\", 500);" in source
 start = source.index("async function findDriveUploadByMarker(")
 end = source.index("\nasync function downloadGoogleDriveFile", start)
 drive_code = source[start:end]
