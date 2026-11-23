@@ -36,7 +36,7 @@ def seed_trip(sid, status="open"):
     db.execute("""INSERT INTO shopping_audit_events(id,user_id,session_id,entity_type,entity_id,event_type,created_at)
                   VALUES(?,?,?,?,?,?,?)""",("audit-"+sid,"u1",sid,"session",sid,"trip_created","2026-11-23T10:00:00Z"))
     db.execute("""INSERT INTO shopping_idempotency_keys(id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status)
-                  VALUES(?,?,?,?,?,?,?,?,?)""",("key-"+sid,"u1",sid,"op","idem-"+sid,"hash","{}",200))
+                  VALUES(?,?,?,?,?,?,?,?)""",("key-"+sid,"u1",sid,"op","idem-"+sid,"hash","{}",200))
 
 def delete_trip(sid, key):
     current=db.execute("SELECT * FROM shopping_sessions WHERE id=? AND user_id='u1'",(sid,)).fetchone()
