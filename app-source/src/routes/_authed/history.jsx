@@ -33,25 +33,25 @@ function HistoryPage() {
 
   return (
     <div className="pb-2">
-      <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">My shopping</h1>
+      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">My shopping</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">
         Your past shopping trips and purchases, newest first.
       </p>
 
-      <form onSubmit={applyFilters} className="mt-4 space-y-2.5 rounded-[24px] border border-border bg-white p-3.5">
+      <form onSubmit={applyFilters} className="mt-4 space-y-2.5 rounded-[20px] border border-border bg-white p-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={shop}
             onChange={(e) => setShop(e.target.value)}
             placeholder="Search shop name"
-            className="h-11 pl-10 text-[14px]"
+            className="h-12 pl-10 text-[14px]"
           />
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           <label className="block">
             <span className="micro mb-1 block text-muted-foreground">From</span>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-10 text-[13.5px]" />
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-11 text-[13.5px]" />
           </label>
           <label className="block">
             <span className="micro mb-1 block text-muted-foreground">To</span>
@@ -61,7 +61,7 @@ function HistoryPage() {
         <div className="flex gap-2">
           <button
             type="submit"
-            className="flex-1 rounded-full bg-primary py-2.5 text-[13.5px] font-bold text-primary-foreground"
+            className="flex-1 rounded-full bg-primary py-3 text-[13.5px] font-bold text-primary-foreground"
           >
             Search
           </button>
@@ -112,13 +112,13 @@ function HistoryPage() {
           </Link>
         </div>
       ) : (
-        <ul className="overflow-hidden rounded-[24px] border border-border bg-white">
+        <ul className="overflow-hidden rounded-[20px] border border-border bg-white">
           {records.map((r, i) => (
             <li key={r.id}>
               <Link
                 to="/record/$recordId"
                 params={{ recordId: r.id }}
-                className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-secondary/60"
+                className="flex items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-secondary/60"
                 style={{ borderTop: i === 0 ? "none" : "1px solid hsl(var(--border) / 0.8)" }}
               >
                 <div className="min-w-0 flex-1">
