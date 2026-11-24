@@ -6,13 +6,14 @@ export function estimatePriceMemoryKey(item = {}) {
   const brand = normalize(item.brand);
   const pack = normalize(item.pack_size);
   const unit = normalize(item.unit || "pcs");
-  if (!name || !pack || !unit) return null;
+  if (!name || !unit) return null;
   return [name, brand, pack, unit].join("|");
 }
 
-export function readEstimatePriceMemory(storage = globalThis.localStorage) {
+export function readEstimatePriceMemory(storage) {
   try {
-    const raw = storage?.getItem(STORAGE_KEY);
+    const safeStorage = storage ?? globalThis.localStorage;
+    const raw = safeStorage?.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -20,9 +21,10 @@ export function readEstimatePriceMemory(storage = globalThis.localStorage) {
   }
 }
 
-export function rememberEstimatePrices(items = [], prices = {}, storage = globalThis.localStorage) {
+export function rememberEstimatePrices(items = [], prices = {}, storage) {
   try {
-    const memory = readEstimatePriceMemory(storage);
+    const safeStorage = storage ?? globalThis.localStorage;
+    const memory = readEstimatePriceMemory(safeStorage);
     for (const item of items) {
       const key = estimatePriceMemoryKey(item);
       const value = prices[item.id];
@@ -31,14 +33,14 @@ export function rememberEstimatePrices(items = [], prices = {}, storage = global
         memory[key] = { price, saved_at: new Date().toISOString() };
       }
     }
-    storage?.setItem(STORAGE_KEY, JSON.stringify(memory));
+    safeStorage?.setItem(STORAGE_KEY, JSON.stringify(memory));
     return true;
   } catch {
     return false;
   }
 }
 
-export function findRememberedEstimatePrices(items = [], storage = globalThis.localStorage) {
+export function findRememberedEstimatePrices(items = [], storage) {
   const memory = readEstimatePriceMemory(storage);
   const results = {};
   for (const item of items) {
