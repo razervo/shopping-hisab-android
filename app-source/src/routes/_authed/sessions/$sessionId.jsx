@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, Search, ShoppingBask
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
-import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory } from "@/lib/shopping-categories";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -765,12 +765,7 @@ function SessionDetailPage() {
   }
 
   const items = session.items || [];
-  const smartListItems = items.filter((item) => {
-    const nameMatches = !smartListSearch.trim() || String(item.product_name || "").toLowerCase().includes(smartListSearch.trim().toLowerCase());
-    const remaining = Number(item.remaining_quantity ?? item.planned_quantity) > 0;
-    const filterMatches = smartListFilter === "all" || (smartListFilter === "remaining" && remaining) || (smartListFilter === "purchased" && !remaining);
-    return nameMatches && filterMatches;
-  });
+  const smartListItems = filterShoppingListItems(items, smartListSearch, smartListFilter);
   const smartListGroups = groupShoppingItems(smartListItems, categoryOverrides);
 
   const lists = session.source_lists || [];
