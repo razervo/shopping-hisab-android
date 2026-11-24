@@ -115,7 +115,20 @@ function SessionDetailPage() {
     const remembered = findRememberedEstimatePrices(session.items);
     setEstimatePrices((current) => {
       const next = { ...current };
-      for (const [itemId, price] of Object.entries(remembered)) if (next[itemId] == null || String(next[itemId]).trim() === "") next[itemId] = price;
+      const inserted = [];
+      for (const [itemId, price] of Object.entries(remembered)) {
+        if (next[itemId] == null || String(next[itemId]).trim() === "") {
+          next[itemId] = price;
+          inserted.push(itemId);
+        }
+      }
+      if (inserted.length) {
+        setEstimateSources((sources) => {
+          const updated = { ...sources };
+          for (const itemId of inserted) if (!updated[itemId]) updated[itemId] = "remembered";
+          return updated;
+        });
+      }
       return next;
     });
   }, [session?.id, session?.items]);
@@ -1066,6 +1079,9 @@ function SessionDetailPage() {
                   onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); }}
                   placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+                {estimateSources[item.id] === "remembered" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Saved price · exact pack match</p>
+                  : estimateSources[item.id] === "ai_estimate" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">AI estimate · review price</p>
+                  : estimateSources[item.id] === "manual" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Manual price</p> : null}
               </div>
             </div>
           )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
