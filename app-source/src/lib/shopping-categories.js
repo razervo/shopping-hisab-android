@@ -33,3 +33,14 @@ export function groupShoppingItems(items = [], overrides = {}) {
   }
   return [...groups.entries()].sort(([a], [b]) => SHOPPING_CATEGORIES.indexOf(a) - SHOPPING_CATEGORIES.indexOf(b));
 }
+
+export function filterShoppingListItems(items = [], search = "", filter = "all") {
+  const normalizedSearch = String(search || "").trim().toLowerCase();
+  return items.filter((item) => {
+    const nameMatches = !normalizedSearch || String(item?.product_name || "").toLowerCase().includes(normalizedSearch);
+    const remaining = item?.item_status !== "cancelled" && Number(item?.remaining_quantity ?? item?.planned_quantity) > 0;
+    const purchased = item?.item_status !== "cancelled" && !remaining;
+    const filterMatches = filter === "all" || (filter === "remaining" && remaining) || (filter === "purchased" && purchased);
+    return nameMatches && filterMatches;
+  });
+}
