@@ -499,8 +499,9 @@ function SessionDetailPage() {
     if (Number(session?.bills_amount_pending || 0) > 0) {
       return toast.error("Resolve every bill with a pending amount before completing this session.");
     }
-    const includedBillCount = (session?.bills || []).filter((bill) => Number(bill.included_in_actual) === 1 && !["duplicate", "void"].includes(bill.bill_status)).length;
-    if (!includedBillCount && Math.round(rupees * 100) === 0 && !window.confirm("No included bills are recorded. Finish this trip with ₹0.00 paid?")) return;
+    if (Math.round(rupees * 100) <= 0) {
+      return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
+    }
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
       const difference = rupees - calculatedRupees;
