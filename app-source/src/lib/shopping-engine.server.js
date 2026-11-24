@@ -456,10 +456,13 @@ export async function handleShoppingEngine(request, env) {
     const calculationSource = text(body.calculation_source || "mixed",30);
     if (!["previous_purchase","market_data","manual","ai_estimate","mixed"].includes(calculationSource)) return fail("Invalid estimate calculation source.");
     const prepared = [];
+    const seenEstimateItemIds = new Set();
     let totalPaise = 0;
     for (let index=0; index<lines.length; index++) {
       const line=lines[index] || {};
       const itemId=text(line.shopping_item_id,80);
+      if (seenEstimateItemIds.has(itemId)) return fail("Estimate line " + (index+1) + " duplicates a shopping item.");
+      seenEstimateItemIds.add(itemId);
       const item=await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first();
       if (!item) return fail(`Estimate line ${index+1} references an item outside this session.`,404);
       const quantity=Number(line.quantity);
