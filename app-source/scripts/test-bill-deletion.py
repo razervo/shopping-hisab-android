@@ -131,6 +131,8 @@ line_delete_end=engine.index('if(subpath==="confirm" && method==="POST")',line_d
 line_delete_handler=engine[line_delete_start:line_delete_end]
 for required in ["Idempotency-Key","bill_line_delete:","shopping_idempotency_keys","bill_line_deleted","db.batch(statements)","line_total_paise=CASE"]:
     assert required in line_delete_handler, f"Missing bill-line deletion safeguard: {required}"
+assert "routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2]" in line_delete_handler
+assert "line.bill_id!==routeBillId" in line_delete_handler, "Bill-line delete must validate the bill path ownership"
 assert "completedDeleteAllowed" in engine and "bills\\/" in engine, "Completed trips must allow only bill and bill-line deletes"
 ui=(ROOT/"src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
 assert 'headers: { "Idempotency-Key": requestKey }' in ui, "Bill-line delete must send a stable retry key"
