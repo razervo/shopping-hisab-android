@@ -1025,12 +1025,10 @@ function SessionDetailPage() {
                             if (event.target.value === "__auto") delete next[item.id];
                             else next[item.id] = event.target.value;
                             return next;
-                          })}>
+                          })}
+                          aria-label={`Category for ${item.product_name}`} className="mt-2 h-8 max-w-full rounded-lg border border-border bg-background px-2 text-[10.5px]">
                           <option value="__auto">Auto: {inferShoppingCategory(item.product_name)}</option>
                           {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
-                        </select>
-                          aria-label={`Category for ${item.product_name}`} className="mt-2 h-8 max-w-full rounded-lg border border-border bg-background px-2 text-[10.5px]">
-                          <option value="__auto">Auto: {inferShoppingCategory(item.product_name)}</option>\n                          {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
                         </select>
                       ) : <span className="mt-2 inline-block rounded-full bg-secondary px-2.5 py-1 text-[10px] font-semibold">{category}</span>}
                     </div>
