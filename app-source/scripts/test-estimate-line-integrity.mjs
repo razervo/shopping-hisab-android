@@ -21,6 +21,9 @@ assert.notEqual(routeStart, -1, "estimate creation endpoint exists");
 const route = engine.slice(routeStart, routeEnd);
 
 assert.match(route, /calculateEstimateLineTotalPaise\(quantity, unitPrice\)/, "server recalculates every estimate line total");
+assert.match(route, /const seenEstimateItemIds = new Set\(\)/, "the server tracks item IDs within one estimate submission");
+assert.match(route, /seenEstimateItemIds\.has\(itemId\)/, "duplicate item lines are rejected before estimate persistence");
+assert.match(route, /duplicates a shopping item/, "duplicate estimates return a clear validation error");
 assert.match(route, /Number\(line\.estimated_line_total_paise\) !== lineTotal/, "a mismatching client total is rejected");
 assert.match(route, /total does not match its quantity and unit price/, "mismatch has a clear response");
 assert.match(ui, /estimated_line_total_paise: Math\.round\(Number\(item\.planned_quantity \|\| 0\) \* unitPrice\)/, "the UI sends the same quantity-times-unit-price calculation");
