@@ -655,6 +655,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   if(purchaseLinesMatch && method==="POST"){
     const billId=purchaseLinesMatch[1];
     const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!idempotencyKey)return fail("An Idempotency-Key is required for bill-line creation.",400);
     const operation=`bill_lines_create:${sessionId}:${billId}`;
     const requestHash=idempotencyKey?await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")):null;
     if(idempotencyKey){
