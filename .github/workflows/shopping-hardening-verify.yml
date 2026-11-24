@@ -62,6 +62,8 @@ jobs:
         run: node scripts/test-estimate-line-integrity.mjs
       - name: Test smart estimate review warnings
         run: node scripts/test-estimate-review.mjs
+      - name: Test pack-size price memory key integrity
+        run: node scripts/test-estimate-price-memory.mjs
       - name: Test pack-size-specific estimate price memory
         run: node scripts/test-estimate-price-memory.mjs
       - name: Test receipt file validation and preparation
