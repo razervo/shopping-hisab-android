@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, Search, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -77,6 +78,14 @@ function SessionDetailPage() {
   const [confirmationSaving, setConfirmationSaving] = useState(false);
   const [adjustFinalTotal, setAdjustFinalTotal] = useState(false);
   const [mergeTargets, setMergeTargets] = useState({});
+  const [categoryOverrides, setCategoryOverrides] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem(`shopping-hisab-categories-${sessionId}`) || "{}"); }
+    catch { return {}; }
+  });
+  const [smartListSearch, setSmartListSearch] = useState("");
+  const [smartListFilter, setSmartListFilter] = useState("all");
+
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
   const [uploadedBillShop, setUploadedBillShop] = useState("");
@@ -101,6 +110,11 @@ function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => {
+    try { window.localStorage.setItem(`shopping-hisab-categories-${sessionId}`, JSON.stringify(categoryOverrides)); }
+    catch { /* category preferences are optional local-only enhancements */ }
+  }, [categoryOverrides, sessionId]);
+
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
@@ -751,6 +765,14 @@ function SessionDetailPage() {
   }
 
   const items = session.items || [];
+  const smartListItems = items.filter((item) => {
+    const nameMatches = !smartListSearch.trim() || String(item.product_name || "").toLowerCase().includes(smartListSearch.trim().toLowerCase());
+    const remaining = Number(item.remaining_quantity ?? item.planned_quantity) > 0;
+    const filterMatches = smartListFilter === "all" || (smartListFilter === "remaining" && remaining) || (smartListFilter === "purchased" && !remaining);
+    return nameMatches && filterMatches;
+  });
+  const smartListGroups = groupShoppingItems(smartListItems, categoryOverrides);
+
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
   const unresolvedBills = (session.bills || []).filter(
@@ -953,44 +975,89 @@ function SessionDetailPage() {
               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${shoppingProgress}%` }} />
             </div>
           </div>
-          <div className="overflow-hidden rounded-[22px] border border-border bg-white">
-            {items.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
-                <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-bold">{item.product_name}</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
-                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                    Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
-                    {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
-                    {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
-                  </p>
-                  {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
-                        aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
-                        <option value="">Keep separate / choose merge target</option>
-                        {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()).map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
-                        ))}
-                      </select>
-                      <button type="button" onClick={() => mergePlannedItem(item.id)} disabled={!mergeTargets[item.id]}
-                        className="rounded-full border border-primary px-3 py-1.5 text-[10.5px] font-bold text-primary disabled:opacity-40">Merge</button>
+          <div className="mb-3 rounded-[22px] border border-border bg-white p-3">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input value={smartListSearch} onChange={(event) => setSmartListSearch(event.target.value)} placeholder="Find an item in this trip" aria-label="Search shopping list" className="h-10 min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              {[
+                ["all", "All items"],
+                ["remaining", "To buy"],
+                ["purchased", "Bought"],
+              ].map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setSmartListFilter(value)}
+                  className={`flex-1 rounded-full px-3 py-2 text-[11px] font-bold ${smartListFilter === value ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">Categories are suggested automatically. You can change any item’s category; your choices stay on this device for this trip.</p>
+          </div>
+          <div className="space-y-3">
+            {smartListGroups.length ? smartListGroups.map(([category, categoryItems]) => (
+              <section key={category} className="overflow-hidden rounded-[22px] border border-border bg-white">
+                <div className="flex items-center justify-between bg-secondary/40 px-4 py-3">
+                  <h3 className="text-[12.5px] font-extrabold">{category}</h3>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold">{categoryItems.length}</span>
+                </div>
+                {categoryItems.map((item, index) => (
+                  <div key={item.id} className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[13.5px] font-bold">{item.product_name}</p>
+                      <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
+                      <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                        Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
+                        {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
+                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
+                      </p>
+                      {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
+                            aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                            <option value="">Keep separate / choose merge target</option>
+                            {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()).map((candidate) => (
+                              <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => mergePlannedItem(item.id)} disabled={!mergeTargets[item.id]}
+                            className="rounded-full border border-primary px-3 py-1.5 text-[10.5px] font-bold text-primary disabled:opacity-40">Merge</button>
+                        </div>
+                      ) : null}
+                      {!completed ? (
+                        <select value={categoryOverrides[item.id] || category} onChange={(event) => setCategoryOverrides((current) => {
+                            const next = { ...current };
+                            if (event.target.value === inferShoppingCategory(item.product_name)) delete next[item.id];
+                            else next[item.id] = event.target.value;
+                            return next;
+                          })}
+                          aria-label={`Category for ${item.product_name}`} className="mt-2 h-8 max-w-full rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                          {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      ) : <span className="mt-2 inline-block rounded-full bg-secondary px-2.5 py-1 text-[10px] font-semibold">{category}</span>}
                     </div>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
-                    {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
-                  </span>
-                  {!completed ? (
-                    <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
-                      className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
+                        {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
+                      </span>
+                      {!completed ? (
+                        <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
+                          className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )) : (
+              <div className="rounded-[22px] border border-dashed border-border bg-white px-5 py-7 text-center">
+                <Search className="mx-auto h-6 w-6 text-muted-foreground" />
+                <p className="mt-2 text-[13px] font-bold">No items match this view</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Clear the search or switch back to All items.</p>
               </div>
-            ))}
+            )}
+          </div>
           </div>
           </>
         ) : (
