@@ -98,6 +98,7 @@ export function BillUploader({
           setRecoveryFileUri(fileUri);
           throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
         }
+        uploadKeyRef.current = { fingerprint: "", key: "" };
         onExtracted(result.draft, fileUri);
       }
     } catch (cause) {
