@@ -220,7 +220,7 @@ export function BillUploader({
         </div>
         {busy ? (
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
-            <Loader2 className="h-4 w-4 animate-spin" /> Reading actual prices from {fileName || "your list"}…
+            <Loader2 className="h-4 w-4 animate-spin" /> Reading {purpose === "priced_list" ? "actual prices from" : "item names and quantities from"} {fileName || "your list"}…
           </div>
         ) : null}
         {error ? (
