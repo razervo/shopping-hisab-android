@@ -714,7 +714,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
 
-  const purchaseLineMatch=/^bills\/[a-f0-9-]{36}\/lines\/([a-f0-9-]{36})$/.exec(subpath);
+  const purchaseLineMatch=/^bills\/([a-f0-9-]{36})\/lines\/([a-f0-9-]{36})$/i.exec(subpath);
   if(purchaseLineMatch && method==="PATCH"){
     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
@@ -757,7 +757,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
   if(purchaseLineMatch && method==="DELETE"){
-     const lineId=purchaseLineMatch[1];
+     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
      const requestKey=text(request.headers.get("Idempotency-Key"),160);
      if(!requestKey)return fail("An Idempotency-Key is required for bill-line deletion.",400);
      const operation=`bill_line_delete:${sessionId}:${lineId}`;
@@ -765,7 +765,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
      if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
      const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
-     if(!line)return fail("Bill line not found.",404);
+     if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
      const timestamp=now();
      const responseBody={success:true,bill_id:line.bill_id,line_id:lineId};
      const statements=[
