@@ -1,10 +1,27 @@
 const STORAGE_KEY = "shopping-hisab-estimate-price-memory-v1";
 
+function normalize(value) {
+  return String(value || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function normalizePack(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  const match = raw.match(/^(\d+(?:\.\d+)?)\s*(kg|g|gram|grams|l|lt|liter|litre|ml|milliliter|millilitre)$/i);
+  if (!match) return normalize(raw);
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit === "kg") return String(amount * 1000) + "g";
+  if (unit === "gram" || unit === "grams") return String(amount) + "g";
+  if (unit === "l" || unit === "lt" || unit === "liter" || unit === "litre") return String(amount * 1000) + "ml";
+  if (unit === "milliliter" || unit === "millilitre") return String(amount) + "ml";
+  return String(amount) + unit;
+}
+
 export function estimatePriceMemoryKey(item = {}) {
-  const normalize = (value) => String(value || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const name = normalize(item.product_name || item.name);
   const brand = normalize(item.brand);
-  const pack = normalize(item.pack_size);
+  const pack = normalizePack(item.pack_size);
   const unit = normalize(item.unit || "pcs");
   if (!name || !unit) return null;
   return [name, brand, pack, unit].join("|");
