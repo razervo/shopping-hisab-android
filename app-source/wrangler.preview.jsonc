@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shopping-hisab-preview",
+  "main": "src/server.js",
+  "compatibility_date": "2026-11-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": { "enabled": true },
+  "vars": {
+    "APP_BASE_URL": "https://shopping-hisab-preview.hasimabd13.workers.dev",
+    "GOOGLE_CLIENT_ID": "189772988026-mi8a3o3he7lcsvvmtt2598kh070aqvni.apps.googleusercontent.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shopping-hisab-preview",
+      "database_id": "2f5e0a14-59c9-40d8-8d17-e2f5856934d6",
+      "migrations_dir": "migrations-native"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  }
+}
