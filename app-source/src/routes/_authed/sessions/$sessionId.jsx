@@ -112,6 +112,18 @@ function SessionDetailPage() {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
   useEffect(() => {
+    if (!session) return;
+    const validIds = new Set((session.items || []).map((item) => item.id));
+    const pruneRemovedItems = (current) => {
+      const entries = Object.entries(current).filter(([itemId]) => validIds.has(itemId));
+      return entries.length === Object.keys(current).length ? current : Object.fromEntries(entries);
+    };
+    setEstimatePrices(pruneRemovedItems);
+    setEstimateSources(pruneRemovedItems);
+    setRememberedEstimateKeys(pruneRemovedItems);
+  }, [session?.id, session?.items]);
+
+  useEffect(() => {
     if (!session?.items?.length || typeof window === "undefined") return;
     const remembered = findRememberedEstimatePrices(session.items);
     const currentKeys = Object.fromEntries(session.items.map((item) => [item.id, estimatePriceMemoryKey(item)]));
