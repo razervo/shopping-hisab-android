@@ -60,6 +60,8 @@ jobs:
         run: node scripts/test-receipt-manual-fallback.mjs
       - name: Test estimate total integrity
         run: node scripts/test-estimate-line-integrity.mjs
+      - name: Test smart estimate review warnings
+        run: node scripts/test-estimate-review.mjs
       - name: Test receipt file validation and preparation
         run: node scripts/test-bill-file.mjs
       - name: Test Google Drive upload and metadata recovery ledger
