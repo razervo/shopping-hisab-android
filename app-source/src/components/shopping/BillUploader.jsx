@@ -124,7 +124,7 @@ export function BillUploader({
       }
     } catch (cause) {
       setError(cause?.name === "AbortError"
-        ? "Reading timed out after 90 seconds. Your file may already be saved—retry this file or use the saved receipt option if shown."
+        ? "This request timed out after 90 seconds. Your bill may already be saved, so retrying uses the same upload key to help prevent duplicate uploads. If a saved receipt option appears, retry reading that receipt instead."
         : cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
       uploadLockRef.current = false;
