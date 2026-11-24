@@ -1020,12 +1020,15 @@ function SessionDetailPage() {
                         </div>
                       ) : null}
                       {!completed ? (
-                        <select value={categoryOverrides[item.id] || category} onChange={(event) => setCategoryOverrides((current) => {
+                        <select value={categoryOverrides[item.id] || "__auto"} onChange={(event) => setCategoryOverrides((current) => {
                             const next = { ...current };
-                            if (event.target.value === inferShoppingCategory(item.product_name)) delete next[item.id];
+                            if (event.target.value === "__auto") delete next[item.id];
                             else next[item.id] = event.target.value;
                             return next;
-                          })}
+                          })}>
+                          <option value="__auto">Auto: {inferShoppingCategory(item.product_name)}</option>
+                          {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
                           aria-label={`Category for ${item.product_name}`} className="mt-2 h-8 max-w-full rounded-lg border border-border bg-background px-2 text-[10.5px]">
                           <option value="__auto">Auto: {inferShoppingCategory(item.product_name)}</option>\n                          {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
                         </select>
