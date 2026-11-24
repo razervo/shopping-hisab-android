@@ -293,6 +293,11 @@ function SessionDetailPage() {
       }
       setEstimatePrices((current) => ({ ...current, ...updates }));
       setEstimateSources((current) => ({ ...current, ...sources }));
+      setRememberedEstimateKeys((current) => {
+        const next = { ...current };
+        for (const itemId of Object.keys(updates)) delete next[itemId];
+        return next;
+      });
       const missingCount = currentItems.length - Object.keys(updates).length;
       toast.success(`AI estimated ${Object.keys(updates).length} of ${currentItems.length} items. Review the prices${missingCount ? `; enter the remaining ${missingCount} manually` : ""} before saving.`);
     } catch (cause) {
@@ -1104,7 +1109,7 @@ function SessionDetailPage() {
               <div className="w-28 shrink-0">
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={estimatePrices[item.id] ?? ""}
-                  onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); }}
+                  onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); setRememberedEstimateKeys((current) => { if (!(item.id in current)) return current; const next = { ...current }; delete next[item.id]; return next; }); }}
                   placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
                 {estimateSources[item.id] === "remembered" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Saved price · exact pack match</p>
