@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Spar
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
+import { reviewEstimateItems } from "@/lib/estimate-review";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -68,6 +69,8 @@ function SessionDetailPage() {
   const [billLineDetails, setBillLineDetails] = useState({});
   const [estimatePrices, setEstimatePrices] = useState({});
   const [estimateSources, setEstimateSources] = useState({});
+  const [estimateReviewWarnings, setEstimateReviewWarnings] = useState([]);
+  const [estimateReviewOpen, setEstimateReviewOpen] = useState(false);
   const [estimateSaving, setEstimateSaving] = useState(false);
   const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
   const [scannedDraft, setScannedDraft] = useState(null);
@@ -163,6 +166,13 @@ function SessionDetailPage() {
     if (!currentItems.length) return toast.error("Add items to your list before estimating.");
     const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
     if (missing.length) return toast.error("Add a price for each item before saving your estimate.");
+    const warnings = reviewEstimateItems(currentItems);
+    if (warnings.length && !estimateReviewOpen) {
+      setEstimateReviewWarnings(warnings);
+      setEstimateReviewOpen(true);
+      toast.warning("Review the quantity and pack-size warnings before saving.");
+      return;
+    }
     const lines = [];
     for (const item of currentItems) {
       const rupees = Number(estimatePrices[item.id]);
@@ -188,6 +198,8 @@ function SessionDetailPage() {
         body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
       });
       toast.success("Your estimate is saved.");
+      setEstimateReviewOpen(false);
+      setEstimateReviewWarnings([]);
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not save this estimate.");
@@ -1058,15 +1070,32 @@ function SessionDetailPage() {
                 : " · Partial total — add prices for the remaining items"}
             </p>
           </div>
+          {estimateReviewOpen ? (
+            <div role="alert" className="mb-3 rounded-[18px] border border-amber-300 bg-amber-50 p-3 text-amber-950">
+              <p className="text-[12.5px] font-extrabold">Smart estimate review</p>
+              <p className="mt-1 text-[11px] leading-relaxed">Please check these suggestions. Nothing is automatically changed.</p>
+              <ul className="mt-2 space-y-1.5">
+                {estimateReviewWarnings.map((warning, index) => (
+                  <li key={index} className="rounded-lg bg-white/70 px-2.5 py-2 text-[11px]">
+                    <span className="font-bold">{warning.itemName}:</span> {warning.message}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => { setEstimateReviewOpen(false); setEstimateReviewWarnings([]); }} className="flex-1 rounded-full border border-amber-700/30 py-2 text-[11px] font-bold">Back to edit</button>
+                <button type="submit" disabled={estimateSaving} className="flex-1 rounded-full bg-amber-900 py-2 text-[11px] font-bold text-white disabled:opacity-60">{estimateSaving ? "Saving…" : "Save anyway"}</button>
+              </div>
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={generateAiEstimate} disabled={aiEstimateSaving || estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/30 bg-accent py-3 text-[13px] font-bold text-primary disabled:opacity-60">
               {aiEstimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {aiEstimateSaving ? "Estimating…" : "Estimate with AI"}
             </button>
-            <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+            {!estimateReviewOpen ? <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
               {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               {estimateSaving ? "Saving estimate…" : "Save my estimate"}
-            </button>
+            </button> : null}
           </div>
         </form>
       ) : null}
