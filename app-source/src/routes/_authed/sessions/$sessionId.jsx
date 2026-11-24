@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
 import { reviewEstimateItems } from "@/lib/estimate-review";
+import { findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -109,6 +110,15 @@ function SessionDetailPage() {
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
+  useEffect(() => {
+    if (!session?.items?.length || typeof window === "undefined") return;
+    const remembered = findRememberedEstimatePrices(session.items);
+    setEstimatePrices((current) => {
+      const next = { ...current };
+      for (const [itemId, price] of Object.entries(remembered)) if (next[itemId] == null || String(next[itemId]).trim() === "") next[itemId] = price;
+      return next;
+    });
+  }, [session?.id, session?.items]);
 
   useEffect(() => {
     if (!session) return;
@@ -197,6 +207,7 @@ function SessionDetailPage() {
         method: "POST",
         body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
       });
+      rememberEstimatePrices(currentItems, estimatePrices);
       toast.success("Your estimate is saved.");
       setEstimateReviewOpen(false);
       setEstimateReviewWarnings([]);
