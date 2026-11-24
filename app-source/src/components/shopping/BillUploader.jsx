@@ -135,6 +135,8 @@ export function BillUploader({
       }
       const savedUri = recoveryFileUri;
       setRecoveryFileUri("");
+      selectedFileRef.current = null;
+      uploadKeyRef.current = { fingerprint: "", key: "" };
       onExtracted(result.draft, savedUri);
     } catch (cause) {
       setError(cause?.message || "Retry failed. Your receipt is still saved in Drive.");
@@ -253,7 +255,7 @@ export function BillUploader({
         </div>
 
         <p className="mt-4 inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" /> Receipt file is saved to Drive; nothing is added until you confirm
+          <ShieldCheck className="h-3.5 w-3.5" /> Uploaded receipt is saved to Drive; nothing is added until you confirm
         </p>
       </div>
 
