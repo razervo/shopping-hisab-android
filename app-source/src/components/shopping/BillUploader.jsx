@@ -44,6 +44,7 @@ export function BillUploader({
     try {
       file = await prepareBillFile(picked);
     } catch (cause) {
+      selectedFileRef.current = null;
       setError(cause?.message || "This image could not be prepared. Please choose a JPG, PNG or WEBP photo.");
       uploadLockRef.current = false;
       setBusy(false);
@@ -51,6 +52,7 @@ export function BillUploader({
     }
 
     if (file.size > BILL_MAX_BYTES) {
+      selectedFileRef.current = null;
       setError("That file is too large. Please use a photo or PDF under 10 MB.");
       uploadLockRef.current = false;
       setBusy(false);
@@ -106,7 +108,9 @@ export function BillUploader({
         onExtracted(result.draft, fileUri);
       }
     } catch (cause) {
-      setError(cause?.message || "We could not read this bill. Please try again or enter the items manually.");
+      setError(cause?.name === "AbortError"
+        ? "Reading timed out after 90 seconds. Your file may already be saved—retry this file or use the saved receipt option if shown."
+        : cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
       uploadLockRef.current = false;
       setBusy(false);
