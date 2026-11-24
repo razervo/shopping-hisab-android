@@ -62,6 +62,8 @@ jobs:
         run: node scripts/test-estimate-line-integrity.mjs
       - name: Test smart estimate review warnings
         run: node scripts/test-estimate-review.mjs
+      - name: Test pack-size-specific estimate price memory
+        run: node scripts/test-estimate-price-memory.mjs
       - name: Test receipt file validation and preparation
         run: node scripts/test-bill-file.mjs
       - name: Test Google Drive upload and metadata recovery ledger
