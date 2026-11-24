@@ -96,6 +96,18 @@ export function RecordDetail({ record, onDeleted }) {
         </div>
       </section>
 
+      <section className="rounded-[20px] border border-border bg-white px-4 py-3.5">
+        <h2 className="text-[13px] font-extrabold">How this total is calculated</h2>
+        <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted-foreground">
+          <p>Each item row shows its recorded quantity and line amount. A unit price is shown underneath an item when available.</p>
+          {record.source === "session" ? (
+            <p>The grand total is the final expense you confirmed for this trip. It is the authoritative paid total, even if item details or receipt rows are incomplete.</p>
+          ) : (
+            <p>The total is based on recorded item amounts, with the saved record total used as a fallback when item amounts are missing.</p>
+          )}
+        </div>
+      </section>
+
       {Array.isArray(record.receipts) && record.receipts.length > 0 ? (
         <section className="rounded-[22px] border border-border bg-white p-4">
           <div className="flex items-center justify-between gap-2">
