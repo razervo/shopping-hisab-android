@@ -15,11 +15,13 @@ export function BillUploader({
   const [recoveryFileUri, setRecoveryFileUri] = useState("");
   const uploadLockRef = useRef(false);
   const uploadKeyRef = useRef({ fingerprint: "", key: "" });
+  const selectedFileRef = useRef(null);
 
   const handleFile = async (picked) => {
     if (!picked || uploadLockRef.current) return;
     setError("");
     setRecoveryFileUri("");
+    selectedFileRef.current = picked;
     if (!isAcceptedBill(picked)) {
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
@@ -87,6 +89,7 @@ export function BillUploader({
           throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
         }
         uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
         onExtracted(result.draft, result.file_uri);
       } else {
         // Keep the existing PDF/other supported-file route unchanged.
@@ -99,6 +102,7 @@ export function BillUploader({
           throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
         }
         uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
         onExtracted(result.draft, fileUri);
       }
     } catch (cause) {
@@ -107,6 +111,11 @@ export function BillUploader({
       uploadLockRef.current = false;
       setBusy(false);
     }
+  };
+
+  const retrySelectedFile = () => {
+    const selected = selectedFileRef.current;
+    if (selected && !uploadLockRef.current) handleFile(selected);
   };
 
   const retrySavedReceipt = async () => {
@@ -253,6 +262,11 @@ export function BillUploader({
       {recoveryFileUri ? (
         <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground disabled:opacity-50">
           {busy ? "Retrying saved receipt…" : "Retry reading saved receipt"}
+        </button>
+      ) : null}
+      {error && selectedFileRef.current && !recoveryFileUri ? (
+        <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-full bg-primary px-4 py-3 text-[12.5px] font-bold text-primary-foreground disabled:opacity-50">
+          {busy ? "Retrying upload and reading…" : "Retry this file"}
         </button>
       ) : null}
     </div>
