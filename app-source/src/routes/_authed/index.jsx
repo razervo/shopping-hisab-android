@@ -45,12 +45,12 @@ function HomePage() {
 
   return (
     <div className="pb-4">
-      <section className="mb-5">
+      <section className="mb-4">
         <p className="micro text-primary">YOUR SHOPPING COMPANION</p>
-        <h1 className="mt-2 max-w-[19ch] text-[29px] font-extrabold leading-[1.12] tracking-tight">
+        <h1 className="mt-2 max-w-[19ch] text-[26px] font-extrabold leading-[1.15] tracking-tight">
           What are we shopping for today?
         </h1>
-        <p className="mt-2 max-w-[34ch] text-[13.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 max-w-[34ch] text-[13px] leading-[1.65] text-muted-foreground">
           Make a list, get an idea of the cost, and keep everything together while you shop.
         </p>
       </section>
@@ -67,7 +67,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex items-center gap-3 rounded-[22px] border border-primary/20 bg-accent/40 p-4 transition-colors hover:bg-accent/70"
+                className="flex items-center gap-3 rounded-[20px] border border-primary/15 bg-accent/35 p-3.5 transition-colors hover:bg-accent/70"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
@@ -90,7 +90,7 @@ function HomePage() {
         </section>
       ) : null}
 
-      <section className="animate-fade-up overflow-hidden rounded-[30px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
+      <section className="animate-fade-up overflow-hidden rounded-[26px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
           <Sparkles className="h-5 w-5" />
         </div>
@@ -119,7 +119,7 @@ function HomePage() {
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/history"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-3.5 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <History className="h-5 w-5" />
@@ -147,7 +147,7 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-border bg-white px-4 py-4">
+        <section className="mt-5 flex items-center gap-3 rounded-[20px] border border-border bg-white px-3.5 py-3.5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
             <ReceiptText className="h-5 w-5" />
           </span>
