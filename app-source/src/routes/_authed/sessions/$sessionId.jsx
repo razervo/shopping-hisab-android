@@ -140,7 +140,7 @@ function SessionDetailPage() {
         toast.error("No items were recognized. Try again or type them manually.");
         return;
       }
-      const parsed = transcript.split(/[,;\\n]|\\band\\b/gi).map((name) => name.trim()).filter(Boolean);
+      const parsed = transcript.split(/[,;\n]|\band\b/gi).map((name) => name.trim()).filter(Boolean);
       if (!parsed.length) return toast.error("No item names were recognized.");
       setRows((current) => {
         const existing = current.filter((row) => row.name.trim());
