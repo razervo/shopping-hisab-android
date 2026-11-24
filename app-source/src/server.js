@@ -1,30 +1,40 @@
 import handler from "@tanstack/react-start/server-entry";
-
-const BASE44_APP_ORIGIN = "https://shopping-hisab-71a084c3.base44.app";
+import { createNativeAuth } from "@/lib/native-auth.server";
+import { handleNativeApi } from "@/lib/native-api.server";
+import { handleShoppingEngine } from "@/lib/shopping-engine.server";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Keep the existing Base44 authentication/MFA platform endpoints
-    // on this Worker origin while forwarding them to the original backend.
-    if (url.pathname.startsWith("/api/apps/")) {
-      const upstreamUrl = new URL(`${url.pathname}${url.search}`, BASE44_APP_ORIGIN);
-      const headers = new Headers(request.headers);
-      headers.set("origin", BASE44_APP_ORIGIN);
-
-      const upstreamRequest = new Request(upstreamUrl, {
-        method: request.method,
-        headers,
-        body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
-        redirect: "manual",
-      });
-
-      return fetch(upstreamRequest);
+    if (url.pathname.startsWith("/api/auth/")) {
+      return createNativeAuth(env).handler(request);
     }
 
-    // Use TanStack Start's generated server entry so its router manifest,
-    // SSR handler, and client/server build assets stay in sync.
+    if (url.pathname === "/api/shopping" || url.pathname.startsWith("/api/shopping/")) {
+      return handleShoppingEngine(request, env);
+    }
+
+    if (
+      url.pathname === "/api/reports" ||
+      url.pathname === "/api/reports/export" ||
+      url.pathname === "/api/records" ||
+      url.pathname.startsWith("/api/records/") ||
+      url.pathname === "/api/files" ||
+      url.pathname.startsWith("/api/files/") ||
+      url.pathname === "/api/profile" ||
+      url.pathname === "/api/drive/status" ||
+      url.pathname === "/api/drive/initialize" ||
+      url.pathname === "/api/ai" ||
+      url.pathname === "/api/ai/read-bill" ||
+      url.pathname === "/api/ai/gemini-test" ||
+      url.pathname === "/api/migration/status" ||
+      url.pathname === "/api/migration/import" ||
+      url.pathname === "/api/migration/file"
+    ) {
+      return handleNativeApi(request, env);
+    }
+
     return handler.fetch(request, env, ctx);
   },
 };

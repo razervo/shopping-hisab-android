@@ -22,6 +22,19 @@ export function qtyOptions(unit) {
   return [1, 2, 3, 4, 6, 10, 12];
 }
 
+export function normalizeShoppingUnit(value) {
+  const key = String(value || "").trim().toLowerCase().replace(/\\s+/g, "");
+  const aliases = {
+    gm: "g", gms: "g", gram: "g", grams: "g",
+    kilo: "kg", kgs: "kg", kilogram: "kg", kilograms: "kg",
+    litre: "L", liter: "L", litres: "L", liters: "L", ltr: "L",
+    millilitre: "ml", milliliter: "ml", millilitres: "ml", milliliters: "ml",
+    packet: "pkt", packets: "pkt", pack: "pkt", packs: "pkt",
+    piece: "pcs", pieces: "pcs", pc: "pcs",
+  };
+  return aliases[key] || (key === "l" ? "L" : key);
+}
+
 export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 export function amountOf(item) {
@@ -38,12 +51,16 @@ export function cleanItems(items) {
     .map((i) => ({
       name: String(i.name || "").trim() || "Item",
       qty: Number(i.qty) || 0,
-      unit: String(i.unit || "").trim(),
+      unit: normalizeShoppingUnit(i.unit || ""),
       price: round2(i.price),
       ...(Number(i.estimatedPrice ?? i.estimated_price) > 0
         ? { estimated_price: round2(i.estimatedPrice ?? i.estimated_price) }
         : {}),
       amount: amountOf(i) || round2(i.amount),
+      ...(i.productType ? { product_type: i.productType } : {}),
+      ...(i.brand ? { brand: String(i.brand).trim() } : {}),
+      ...(i.packSize ? { pack_size: String(i.packSize).trim() } : {}),
+      ...(Array.isArray(i.receiptRefs) && i.receiptRefs.length ? { receipt_refs: i.receiptRefs } : {}),
     }));
 }
 
@@ -56,14 +73,18 @@ export function toFormItems(items) {
     id: i.id || `i${idx}-${Math.random().toString(36).slice(2, 6)}`,
     name: i.name || "",
     qty: i.qty ?? 1,
-    unit: i.unit || "pcs",
+    unit: normalizeShoppingUnit(i.unit || "pcs"),
     price: i.price ?? "",
     estimatedPrice: i.estimated_price ?? i.estimatedPrice ?? "",
     amount: i.amount ?? "",
+    productType: i.product_type ?? i.productType ?? "unsure",
+    brand: i.brand ?? "",
+    packSize: i.pack_size ?? i.packSize ?? "",
+    receiptRefs: i.receipt_refs ?? i.receiptRefs ?? [],
   }));
 }
 
-export function buildPayload({ shopName, date, notes, items, source, billFileUri }) {
+export function buildPayload({ shopName, date, notes, items, source, billFileUri, receipts = [], reconciliationStatus = "not_required" }) {
   const cleaned = cleanItems(items);
   return {
     shop_name: String(shopName || "").trim(),
@@ -74,5 +95,7 @@ export function buildPayload({ shopName, date, notes, items, source, billFileUri
     total: round2(cleaned.reduce((s, i) => s + (Number(i.amount) || 0), 0)),
     source: source || "manual",
     ...(billFileUri ? { bill_file_uri: billFileUri } : {}),
+    receipts,
+    reconciliation_status: reconciliationStatus,
   };
 }

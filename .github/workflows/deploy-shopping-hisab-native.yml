@@ -1,0 +1,46 @@
+name: Deploy Shopping Hisab native Worker
+
+on:
+  # Deploy automatically only when changes reach the designated deployment branch.
+  push:
+    branches:
+      - cloudflare-native-migration
+  # Keep manual deployment available as a fallback.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-source
+    steps:
+      - name: Check out selected deployment branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install
+      - name: Build native Cloudflare app
+        run: npm run build:native
+      - name: Verify isolated deployment target
+        run: |
+          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('wrangler.native.jsonc','utf8')); if(c.name!=='shopping-hisab-native') process.exit(1)"
+      - name: Verify Vite-generated isolated Worker bundle
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; const p='.wrangler/deploy/config.json'; if(!fs.existsSync(p)) throw new Error('Vite-generated Wrangler redirect is missing'); const redirect=JSON.parse(fs.readFileSync(p,'utf8')); if(typeof redirect.configPath!=='string') throw new Error('Unexpected Wrangler redirect format'); const target=path.resolve('.wrangler/deploy',redirect.configPath); if(!fs.existsSync(target)) throw new Error('Generated Wrangler config not found: '+target); const c=JSON.parse(fs.readFileSync(target,'utf8')); if(c.name!=='shopping-hisab-native') throw new Error('Refusing deployment: generated Worker name is '+c.name); if(!c.main) throw new Error('Generated Worker entry point is missing'); console.log('Verified generated Worker:',c.name,'config:',target,'entry:',c.main)"
+      - name: Apply pending native D1 migrations
+        run: npx wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
+      - name: Deploy only the native Worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f

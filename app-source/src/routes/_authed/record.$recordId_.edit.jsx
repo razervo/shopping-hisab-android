@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { RecordForm } from "@/components/shopping/RecordForm";
 import { buildPayload } from "@/lib/shopping";
 
@@ -34,6 +34,8 @@ function EditRecordPage() {
         ...values,
         source: record.source || "manual",
         billFileUri: record.bill_file_uri,
+        receipts: values.receipts,
+        reconciliationStatus: values.reconciliationStatus,
       });
       await base44.entities.ShoppingRecord.update(recordId, payload);
       toast.success("Shopping updated");

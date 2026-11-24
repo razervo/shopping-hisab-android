@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Camera, ChevronLeft, MapPin, Phone, Save, UserRound } from "lucide-react";
+import { Camera, ChevronLeft, HardDrive, MapPin, Phone, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/AuthContext";
+import { authClient } from "@/lib/native-auth-client";
 import { prepareBillFile } from "@/lib/billFile";
 
 export const Route = createFileRoute("/_authed/profile")({
@@ -27,16 +28,55 @@ function ProfilePage() {
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [preferredMarket, setPreferredMarket] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [locationBusy, setLocationBusy] = useState(false);
   const [photoUri, setPhotoUri] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/drive/status", { credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() : null)
+      .then(async (result) => {
+        if (!result?.connected) {
+          if (!cancelled) setDriveConnected(false);
+          return;
+        }
+        const initialized = await fetch("/api/drive/initialize", { method: "POST", credentials: "same-origin" });
+        if (!initialized.ok) throw new Error("Could not prepare your Shopping Hisab folder in Google Drive.");
+        if (!cancelled) setDriveConnected(true);
+      })
+      .catch(() => { if (!cancelled) setDriveConnected(false); });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const connectGoogleDrive = async () => {
+    setDriveBusy(true);
+    try {
+      const result = await authClient.linkSocial({
+        provider: "google",
+        scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"],
+        callbackURL: "/profile",
+        additionalParams: { access_type: "offline", prompt: "consent" },
+      });
+      if (result?.error) throw new Error(result.error.message || "Could not connect Google Drive.");
+      if (result?.data?.url) window.location.assign(result.data.url);
+    } catch (error) {
+      toast.error(error?.message || "Could not connect Google Drive. Please try again.");
+      setDriveBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
     setDisplayName(user.display_name || user.full_name || "");
     setPhone(user.phone || "");
-    setPreferredMarket(user.preferred_market || "");
+    setPreferredMarket(user.preferred_market || user.preferredMarket || "");
+    setPostalCode(user.postal_code || user.postalCode || "");
     setPhotoUri(user.profile_picture_uri || "");
   }, [
     user?.id,
@@ -44,6 +84,8 @@ function ProfilePage() {
     user?.full_name,
     user?.phone,
     user?.preferred_market,
+    user?.postal_code,
+    user?.postalCode,
     user?.profile_picture_uri,
   ]);
 
@@ -105,12 +147,24 @@ function ProfilePage() {
 
   const saveProfile = async (event) => {
     event.preventDefault();
+    if (!displayName.trim()) {
+      toast.error("Enter your full name.");
+      return;
+    }
     if (displayName.trim().length > 80) {
       toast.error("Display name must be 80 characters or fewer.");
       return;
     }
     if (phone.trim().length > 24) {
       toast.error("Phone number must be 24 characters or fewer.");
+      return;
+    }
+    if (!/^\d{6}$/.test(postalCode.trim())) {
+      toast.error("Enter a valid 6-digit Indian PIN code.");
+      return;
+    }
+    if (!preferredMarket.trim()) {
+      toast.error("Enter your locality or nearest market.");
       return;
     }
     if (preferredMarket.trim().length > 80) {
@@ -124,10 +178,17 @@ function ProfilePage() {
         display_name: displayName.trim(),
         phone: phone.trim(),
         preferred_market: preferredMarket.trim(),
+        postal_code: postalCode.trim(),
         profile_picture_uri: photoUri,
       });
-      await refresh();
+      const updated = await refresh();
+      const savedUser = updated?.user;
+      const complete = !!savedUser &&
+        String(savedUser.displayName || savedUser.display_name || "").trim().length > 0 &&
+        /^\d{6}$/.test(String(savedUser.postalCode || savedUser.postal_code || "").trim()) &&
+        String(savedUser.preferredMarket || savedUser.preferred_market || "").trim().length > 0;
       toast.success("Profile saved");
+      if (complete) navigate({ to: "/" });
     } catch (error) {
       toast.error(error?.message || "Could not save your profile. Please try again.");
     } finally {
@@ -135,17 +196,28 @@ function ProfilePage() {
     }
   };
 
+  const profileComplete =
+    displayName.trim().length > 0 &&
+    /^\d{6}$/.test(postalCode.trim()) &&
+    preferredMarket.trim().length > 0;
   const profileTitle = displayName.trim() || user?.full_name || "Your profile";
 
   return (
     <div className="space-y-4 pb-4">
-      <button
-        type="button"
-        onClick={() => navigate({ to: "/" })}
-        className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronLeft className="h-4 w-4" /> Home
-      </button>
+      {profileComplete ? (
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/" })}
+          className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" /> Home
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <h1 className="text-[17px] font-extrabold">Complete your profile</h1>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Add your name, 6-digit PIN code and nearest market to continue. This helps Shopping Hisab tailor local grocery estimates to your area.</p>
+        </div>
+      )}
 
       <div className="rounded-[26px] bg-primary px-5 py-5 text-primary-foreground">
         <div className="flex items-center gap-4">
@@ -163,6 +235,22 @@ function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <section className="flex items-center justify-between gap-3 rounded-[20px] border border-border bg-white p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary">
+            <HardDrive className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold">Google Drive storage</p>
+            <p className="text-[11px] text-muted-foreground">{driveConnected ? "Connected · receipts save to your Drive" : "Connect to store receipts in your own Drive"}</p>
+          </div>
+        </div>
+        <button type="button" onClick={connectGoogleDrive} disabled={driveBusy}
+          className="shrink-0 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground disabled:opacity-60">
+          {driveBusy ? "Connecting…" : driveConnected ? "Reconnect" : "Connect"}
+        </button>
+      </section>
 
       <form onSubmit={saveProfile} className="space-y-4 rounded-[24px] border border-border bg-white p-4">
         <div className="flex items-center justify-between gap-3">
@@ -186,7 +274,7 @@ function ProfilePage() {
 
         <div>
           <Label htmlFor="profile-display-name" className="micro mb-1.5 block text-muted-foreground">
-            Display name
+            Full name (required)
           </Label>
           <Input
             id="profile-display-name"
@@ -195,6 +283,7 @@ function ProfilePage() {
             maxLength={80}
             placeholder="Your name"
             className="h-11"
+            required
           />
         </div>
 
@@ -229,8 +318,27 @@ function ProfilePage() {
         </div>
 
         <div>
+          <Label htmlFor="profile-postal-code" className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" /> PIN code (required)
+          </Label>
+          <Input
+            id="profile-postal-code"
+            value={postalCode}
+            onChange={(event) => setPostalCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6-digit area PIN code"
+            className="h-11"
+            required
+          />
+          <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
+            Used to estimate local grocery prices. You can also choose location access when comparing prices.
+          </p>
+        </div>
+
+        <div>
           <Label htmlFor="profile-market" className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" /> Preferred local market (optional)
+            <MapPin className="h-3.5 w-3.5" /> Locality / nearest market (required)
           </Label>
           <Input
             id="profile-market"
@@ -239,9 +347,10 @@ function ProfilePage() {
             maxLength={80}
             placeholder="e.g. Jagiroad, Morigaon, Assam"
             className="h-11"
+            required
           />
           <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
-            This can help tailor grocery price estimates to your area.
+            Enter your town, locality or nearest market.
           </p>
         </div>
 

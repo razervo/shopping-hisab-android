@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GoogleIcon } from "./GoogleIcon";
-import { signInWithProvider } from "@/lib/authMfaFlow";
+import { authClient } from "@/lib/native-auth-client";
 import { returnToSearch } from "@/lib/authReturnTo";
 
 // Small pieces the auth pages share.
@@ -37,7 +37,14 @@ export function GoogleButton({ returnTo, onError }) {
       type="button"
       variant="outline"
       className="mb-6 h-12 w-full text-sm font-medium"
-      onClick={() => signInWithProvider("google", returnTo).catch((err) => onError(err.message || "Unable to sign in with Google"))}
+      onClick={async () => {
+        try {
+          const result = await authClient.signIn.social({ provider: "google", callbackURL: returnTo });
+          if (result?.error) onError(result.error.message || "Unable to sign in with Google");
+        } catch (err) {
+          onError(err.message || "Unable to sign in with Google");
+        }
+      }}
     >
       <GoogleIcon className="mr-2 h-5 w-5" />
       Continue with Google

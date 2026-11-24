@@ -1,5 +1,5 @@
 {
-  "name": "shopping-hisab-web",
+  "name": "shopping-hisab-native",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,10 +9,12 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
+    "deploy:native": "npm run build:native && wrangler deploy --config dist/server/wrangler.json",
+    "build:native": "node scripts/build-native.mjs"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.63",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.9.1",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -44,7 +46,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^5.2.0",
-    "@tanstack/react-query": "^5.84.1",
+    "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "^1.170.0",
     "@tanstack/react-router-ssr-query": "1.167.3",
     "@tanstack/react-start": "^1.168.60",
@@ -77,7 +79,9 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.171.0",
     "vaul": "^1.1.2",
-    "zod": "~4.6.7"
+    "zod": "~4.6.7",
+    "better-auth": "1.7.25",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.6",
@@ -93,6 +97,8 @@
     "wrangler": "^4.130.0"
   },
   "overrides": {
-    "undici": "7.30.1"
+    "undici": "7.30.1",
+    "@tanstack/start-plugin-core": "1.171.56",
+    "@tanstack/query-core": "5.107.1"
   }
 }

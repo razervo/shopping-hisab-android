@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, Search, Sparkles, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,10 +29,10 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
     setAsking(true);
     setMarket(null);
     try {
-      const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit } });
+      const res = await fetchMarketRate({ data: { name: String(item.name).trim(), unit, productType: item.productType || "unsure", brand: item.brand || "", packSize: item.packSize || "" } });
       setMarket(res?.suggestion ? { suggestion: res.suggestion } : { error: res?.error || "" });
     } catch {
-      setMarket({ error: "Could not fetch a market rate right now." });
+      setMarket({ error: "Estimate unavailable. Check your connection or AI service quota, then retry." });
     } finally {
       setAsking(false);
     }
@@ -61,6 +61,26 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
         </button>
       </div>
 
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div>
+          <span className="micro mb-1 block text-muted-foreground">Product type</span>
+          <Select value={item.productType || "unsure"} onValueChange={(v) => onChange({ productType: v, brand: v === "loose" || v === "unsure" ? "" : item.brand || "" })}>
+            <SelectTrigger className="h-10 border-0 bg-white text-[13px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="branded">Branded</SelectItem>
+              <SelectItem value="local">Local / regional brand</SelectItem>
+              <SelectItem value="loose">Loose / unbranded</SelectItem>
+              <SelectItem value="unsure">Not sure</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {["branded", "local"].includes(item.productType || "unsure") ? (
+          <div>
+            <span className="micro mb-1 block text-muted-foreground">{item.productType === "local" ? "Local brand / shop" : "Brand name"}</span>
+            <Input value={item.brand || ""} onChange={(e) => onChange({ brand: e.target.value })} placeholder={item.productType === "local" ? "Optional" : "e.g. Amul"} className="h-10 border-0 bg-white text-[13px]" />
+          </div>
+        ) : null}
+      </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <div>
           <span className="micro mb-1 block text-muted-foreground">Qty</span>
@@ -116,6 +136,12 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
         </div>
       </div>
 
+      {unit === "pkt" ? (
+        <div className="mt-2">
+          <span className="micro mb-1 block text-muted-foreground">Packet size (optional)</span>
+          <Input value={item.packSize || ""} onChange={(e) => onChange({ packSize: e.target.value })} placeholder="e.g. 500 g, 1 kg, 200 ml" className="h-10 border-0 bg-white text-[14px]" />
+        </div>
+      ) : null}
       <div className="mt-2">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="micro text-muted-foreground">
@@ -137,7 +163,7 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
             ) : (
               <Sparkles className="h-3 w-3" />
             )}
-            {asking ? "Checking…" : "Market rate"}
+            {asking ? "Estimating…" : "Estimate"}
           </button>
         </div>
         <Input
@@ -165,20 +191,33 @@ export function ItemRow({ item, onChange, onRemove, canRemove, isEstimated = fal
             </button>
           </div>
         ) : (
-          <p className="mt-1 text-[10.5px] text-muted-foreground">
-            Enter the actual shop price here before saving.
-          </p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10.5px] text-muted-foreground">
+              {Number(item.price) > 0 ? "Actual shop price entered." : "Price not found? Search this item online."}
+            </p>
+            {!(Number(item.price) > 0) && String(item.name || "").trim() ? (
+              <a
+                href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent([item.name, item.brand, item.packSize].filter(Boolean).join(" "))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-white px-3 py-1.5 text-[11px] font-bold text-primary"
+              >
+                <Search className="h-3 w-3" /> Search product online
+              </a>
+            ) : null}
+          </div>
         )}
         {market?.suggestion ? (
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-accent px-3 py-2">
             <p className="text-[11.5px] leading-snug">
               <span className="font-bold">
-                Market {inr(market.suggestion.rate)} / {unit}
+                Approx. {inr(market.suggestion.rate)} / {unit}
               </span>
               <span className="text-muted-foreground">
                 {" "}
                 ({inr(market.suggestion.min)}–{inr(market.suggestion.max)})
               </span>
+              <span className="block text-muted-foreground">AI estimate · not a live shop price</span>
               {market.suggestion.note ? (
                 <span className="block text-muted-foreground">{market.suggestion.note}</span>
               ) : null}

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { FileImage, Pencil, Trash2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
+import { base44 } from "@/api/cloudflareClient";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -17,8 +17,9 @@ import { ddmmyyyy, formatQty, inr } from "@/lib/format";
 
 export function RecordDetail({ record, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const items = record.items || [];
-  const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0;
+  const total = record.source === "session" ? (Number(record.total) || 0) : (items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0);
 
   const openBill = async () => {
     try {
@@ -36,7 +37,11 @@ export function RecordDetail({ record, onDeleted }) {
     setDeleting(true);
     try {
       await base44.entities.ShoppingRecord.delete(record.id);
+      toast.success("Shopping deleted", { description: "The record and its total have been removed from your history." });
+      setDeleteDialogOpen(false);
       onDeleted();
+    } catch (error) {
+      toast.error("Could not delete this shopping", { description: error?.message || "Please try again." });
     } finally {
       setDeleting(false);
     }
@@ -52,7 +57,7 @@ export function RecordDetail({ record, onDeleted }) {
         <p className="tnum mt-3 text-[34px] font-extrabold leading-none">{inr(total)}</p>
         <p className="mt-2 text-[12px] text-white/65">
           {items.length} {items.length === 1 ? "item" : "items"} ·{" "}
-          {record.source === "bill" ? "Read from bill" : "Added manually"}
+          {record.source === "session" ? "Completed shopping session" : record.source === "bill" ? "Read from bill" : "Added manually"}
         </p>
       </div>
 
@@ -91,6 +96,47 @@ export function RecordDetail({ record, onDeleted }) {
         </div>
       </section>
 
+      <section className="rounded-[20px] border border-border bg-white px-4 py-3.5">
+        <h2 className="text-[13px] font-extrabold">How this total is calculated</h2>
+        <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted-foreground">
+          <p>Each item row shows its recorded quantity and line amount. A unit price is shown underneath an item when available.</p>
+          {record.source === "session" ? (
+            <p>The grand total is the final expense you confirmed for this trip. It is the authoritative paid total, even if item details or receipt rows are incomplete.</p>
+          ) : (
+            <p>The total is based on recorded item amounts, with the saved record total used as a fallback when item amounts are missing.</p>
+          )}
+        </div>
+      </section>
+
+      {Array.isArray(record.receipts) && record.receipts.length > 0 ? (
+        <section className="rounded-[22px] border border-border bg-white p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[13px] font-extrabold">Receipts ({record.receipts.length})</h2>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${record.reconciliation_status === "complete" ? "bg-emerald-50 text-emerald-700" : record.reconciliation_status === "pending" ? "bg-amber-50 text-amber-800" : "bg-secondary text-muted-foreground"}`}>
+              {record.reconciliation_status === "complete" ? "Reconciled" : record.reconciliation_status === "pending" ? "Pending actual bill" : record.reconciliation_status === "partial" ? "Partially reconciled" : "Receipt records"}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {record.receipts.map((receipt, index) => (
+              <div key={receipt.id || index} className="flex items-center justify-between gap-3 rounded-xl bg-secondary/40 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-bold">{receipt.kind === "actual" ? "Actual bill" : `Receipt ${index + 1}`}</p>
+                  <p className="text-[10.5px] text-muted-foreground">
+                  {receipt.shop_name ? `${receipt.shop_name} · ` : ""}
+                  {receipt.receipt_number ? `#${receipt.receipt_number} · ` : ""}
+                  {receipt.status === "pending" ? "Actual bill still needed" : receipt.status === "skipped" ? "Actual bill skipped" : receipt.status === "duplicate" ? "Duplicate receipt excluded" : receipt.status === "void" ? "Voided receipt excluded" : `${receipt.item_count || 0} item(s) recorded`}
+                </p>
+                {receipt.file_uri && /^cf-file:[a-f0-9-]{36}$/i.test(String(receipt.file_uri)) ? (
+                  <a href={`/api/files/${String(receipt.file_uri).slice(8)}/content`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10.5px] font-bold text-primary underline">Open receipt</a>
+                ) : null}
+                </div>
+                <span className="tnum shrink-0 text-[12px] font-bold">{receipt.amount > 0 ? inr(receipt.amount) : "Amount not recorded"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {record.notes ? (
         <div className="rounded-[20px] border border-border bg-white px-5 py-4">
           <p className="micro text-muted-foreground">Notes</p>
@@ -108,6 +154,11 @@ export function RecordDetail({ record, onDeleted }) {
         </button>
       ) : null}
 
+      {record.source === "session" ? (
+        <div className="rounded-[20px] border border-border bg-secondary/40 px-4 py-3 text-[12px] text-muted-foreground">
+          This shopping session is completed. Its confirmed expense is read-only; receipt attachments remain available above.
+        </div>
+      ) : (
       <div className="!mt-6 rounded-[24px] border border-border bg-white px-4 py-3">
         <div className="flex items-center gap-2.5">
           <Link
@@ -117,7 +168,7 @@ export function RecordDetail({ record, onDeleted }) {
           >
             <Pencil className="h-4 w-4" /> Edit
           </Link>
-          <AlertDialog>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!deleting) setDeleteDialogOpen(open); }}>
             <AlertDialogTrigger asChild>
               <button
                 type="button"
@@ -135,15 +186,16 @@ export function RecordDetail({ record, onDeleted }) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Keep it</AlertDialogCancel>
-                <AlertDialogAction onClick={remove} disabled={deleting}>
-                  {deleting ? "Deleting…" : "Delete"}
-                </AlertDialogAction>
+                <AlertDialogCancel disabled={deleting}>Keep it</AlertDialogCancel>
+                <button type="button" onClick={remove} disabled={deleting} className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-60">
+                  {deleting ? "Deleting…" : "Delete record"}
+                </button>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
       </div>
+      )}
     </div>
   );
 }

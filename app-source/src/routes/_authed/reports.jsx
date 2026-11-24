@@ -31,8 +31,8 @@ function ReportsPage() {
       if (!records.length) {
         toast.error("There is nothing to back up yet.");
       } else {
-        exportRecordsCSV(records, "shopping-hisab-backup");
-        toast.success("Backup downloaded");
+        exportRecordsCSV(records, "shopping-hisab-export");
+        toast.success("Export downloaded");
       }
     } catch {
       toast.error("Could not create the backup. Please try again.");
@@ -46,7 +46,7 @@ function ReportsPage() {
 
   return (
     <div className="pb-2">
-      <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Monthly report</h1>
+      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Spending summary</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">A simple look at where your shopping went.</p>
 
       <label className="mt-4 block">
@@ -71,16 +71,16 @@ function ReportsPage() {
         </p>
       ) : (
         <>
-          <section className="mt-4 rounded-[28px] bg-primary px-6 py-6 text-primary-foreground">
+          <section className="mt-4 rounded-[24px] bg-primary px-5 py-5 text-primary-foreground">
             <p className="micro text-white/65">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
             <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-[12px]">
               <div>
-                <span className="block text-white/60">Entries</span>
+                <span className="block text-white/60">Purchases</span>
                 <span className="tnum mt-0.5 block text-[15px] font-bold">{month.entries}</span>
               </div>
               <div>
-                <span className="block text-white/60">Avg / day</span>
+                <span className="block text-white/60">Daily average</span>
                 <span className="tnum mt-0.5 block text-[15px] font-bold">{inr(Math.round(month.avgPerDay))}</span>
               </div>
               <div>
@@ -93,23 +93,23 @@ function ReportsPage() {
           </section>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-[22px] border border-border bg-white p-4">
-              <p className="micro text-muted-foreground">Total shopping</p>
+            <div className="rounded-[20px] border border-border bg-white p-3.5">
+              <p className="micro text-muted-foreground">Total spent</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.total || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {lifetime?.entries || 0} {(lifetime?.entries || 0) === 1 ? "record" : "records"}, all time
+                {lifetime?.entries || 0} {(lifetime?.entries || 0) === 1 ? "purchase" : "purchases"}, all time
               </p>
             </div>
             <div className="rounded-[22px] border border-border bg-white p-4">
-              <p className="micro text-muted-foreground">Highest shopping</p>
+              <p className="micro text-muted-foreground">Biggest purchase</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.highest || 0)}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Single biggest bill</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Largest purchase</p>
             </div>
           </div>
 
-          <section className="mt-4 rounded-[24px] border border-border bg-white p-5">
+          <section className="mt-4 rounded-[20px] border border-border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[13px] font-bold tracking-wide">Daily spending</h2>
+              <h2 className="text-[13px] font-bold tracking-wide">Daily totals</h2>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
                 <TrendingUp className="h-3.5 w-3.5" /> {spendingDays.length}{" "}
                 {spendingDays.length === 1 ? "day" : "days"}
@@ -118,7 +118,7 @@ function ReportsPage() {
 
             {spendingDays.length === 0 ? (
               <p className="py-6 text-center text-[13px] text-muted-foreground">
-                No shopping recorded in {monthLabel}.
+                No purchases yet in {monthLabel}.
               </p>
             ) : (
               <ul className="space-y-2.5">
@@ -149,7 +149,7 @@ function ReportsPage() {
                   exportRecordsCSV(month.records, `shopping-hisab-${monthKey}`);
                   toast.success("CSV exported");
                 }}
-                className="flex items-center justify-center gap-2 rounded-full border border-border bg-white py-3 text-[13px] font-bold"
+                className="flex items-center justify-center gap-2 rounded-full border border-border bg-white py-3.5 text-[13px] font-bold"
               >
                 <FileSpreadsheet className="h-4 w-4" /> Export CSV
               </button>
@@ -169,13 +169,13 @@ function ReportsPage() {
               type="button"
               onClick={backup}
               disabled={backingUp}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-[13px] font-bold text-secondary-foreground disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3.5 text-[13px] font-bold text-secondary-foreground disabled:opacity-60"
             >
               {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {backingUp ? "Preparing backup…" : "Backup all records (CSV)"}
+              {backingUp ? "Preparing backup…" : "Backup my shopping (CSV)"}
             </button>
             <p className="px-2 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-              Your records stay in your account and survive refreshes. The backup file is your own copy.
+              Your export includes shopping totals, item details and receipt information. Receipt files remain in your private Google Drive.
             </p>
           </section>
         </>

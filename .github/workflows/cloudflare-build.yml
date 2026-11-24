@@ -2,7 +2,7 @@ name: Verify Shopping Hisab Cloudflare build
 
 on:
   push:
-    branches: [main]
+    branches: [main, cloudflare-native-migration]
     paths:
       - "app-source/**"
       - ".github/workflows/cloudflare-build.yml"
@@ -30,9 +30,39 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Build for Cloudflare Workers
-        run: npm run build
+        run: |
+          if [ "$GITHUB_REF_NAME" = "cloudflare-native-migration" ] || [ "$GITHUB_BASE_REF" = "cloudflare-native-migration" ]; then
+            npm run build:native
+          else
+            npm run build
+          fi
       - name: Verify Android TWA files are included
         run: |
           test -s dist/client/.well-known/assetlinks.json
           test -s dist/client/manifest.json
           test -s dist/client/manifest.webmanifest
+      - name: Bundle and validate isolated native Worker (no deployment)
+        if: github.ref_name == 'cloudflare-native-migration' || github.base_ref == 'cloudflare-native-migration'
+        run: |
+          echo "Inspecting complete Cloudflare build output:"
+          find dist .wrangler -maxdepth 6 -type f -size +0c -printf '%p (%s bytes)\n' 2>/dev/null | sort
+          test -s .wrangler/deploy/config.json
+          echo "Validating the generated native Worker configuration without deployment:"
+          npx wrangler deploy --dry-run
+          rm -rf .native-worker-bundle
+          mkdir -p .native-worker-bundle
+          cp -R dist/. .native-worker-bundle/
+          mkdir -p .native-worker-bundle/.wrangler/deploy
+          cp .wrangler/deploy/config.json .native-worker-bundle/.wrangler/deploy/config.json
+          echo "Validated Worker and client build files:"
+          find .native-worker-bundle -maxdepth 6 -type f -size +0c -printf '%p (%s bytes)\n' | sort
+      - name: Upload native Worker bundle
+        if: github.ref_name == 'cloudflare-native-migration'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopping-hisab-native-worker
+          path: |
+            app-source/.native-worker-bundle/**
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true

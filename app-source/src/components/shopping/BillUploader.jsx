@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Camera, FileText, ImageUp, Loader2, ShieldCheck } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { base44 } from "@/api/cloudflareClient";
 import { readShoppingBill } from "@/lib/server-fns";
 import { BILL_MAX_BYTES, isAcceptedBill, prepareBillFile } from "@/lib/billFile";
 
@@ -12,59 +12,155 @@ export function BillUploader({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
+  const [recoveryFileUri, setRecoveryFileUri] = useState("");
+  const uploadLockRef = useRef(false);
+  const uploadKeyRef = useRef({ fingerprint: "", key: "" });
+  const selectedFileRef = useRef(null);
 
   const handleFile = async (picked) => {
-    if (!picked) return;
+    if (!picked || uploadLockRef.current) return;
     setError("");
     if (!isAcceptedBill(picked)) {
+      selectedFileRef.current = null;
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
     }
     if (!picked.size) {
+      selectedFileRef.current = null;
       setError("The selected file is empty. Please take another photo or choose another file.");
       return;
     }
 
+    selectedFileRef.current = picked;
     setFileName(picked.name);
+    const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
+    if (uploadKeyRef.current.fingerprint !== fingerprint) {
+      uploadKeyRef.current = { fingerprint, key: crypto.randomUUID() };
+    }
+    const uploadKey = uploadKeyRef.current.key;
+    uploadLockRef.current = true;
     setBusy(true);
 
     let file;
     try {
       file = await prepareBillFile(picked);
-    } catch {
-      file = picked;
+    } catch (cause) {
+      selectedFileRef.current = null;
+      setError(cause?.message || "This image could not be prepared. Please choose a JPG, PNG or WEBP photo.");
+      uploadLockRef.current = false;
+      setBusy(false);
+      return;
     }
 
     if (file.size > BILL_MAX_BYTES) {
+      selectedFileRef.current = null;
       setError("That file is too large. Please use a photo or PDF under 10 MB.");
+      uploadLockRef.current = false;
       setBusy(false);
       return;
     }
 
-    let fileUri = "";
-    try {
-      const uploaded = await base44.integrations.Core.UploadPrivateFile({ file });
-      fileUri = uploaded?.file_uri || "";
-      if (!fileUri) throw new Error("no file uri");
-    } catch {
-      setError("The bill could not be uploaded. Check your internet connection and try again.");
-      setBusy(false);
-      return;
-    }
+    // Only replace the previous saved-receipt recovery target once preparation succeeds.
+    setRecoveryFileUri("");
 
     try {
-      const result = await readShoppingBill({ data: { fileUri, purpose } });
-      if (result?.draft) {
-        onExtracted(result.draft, fileUri);
+      const directImage = ["image/jpeg", "image/png", "image/webp"].includes(
+        String(file.type || "").toLowerCase(),
+      );
+      if (directImage) {
+        // Send the photo straight to the vision model while saving the original to Drive.
+        const form = new FormData();
+        form.append("file", file, file.name || "shopping-list.jpg");
+        form.append("purpose", purpose);
+        // This endpoint uploads the original image to Drive as well as running OCR.
+        // It is a non-idempotent POST, so automatic retries can create duplicate Drive files
+        // if the server completed the upload but the client lost the response.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+        let response;
+        let result = {};
+        try {
+          response = await fetch("/api/ai/read-bill", { method: "POST", body: form, credentials: "include", signal: controller.signal, headers: { "Idempotency-Key": uploadKey } });
+        } finally { clearTimeout(timeout); }
+        result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error || `Bill reading failed (${response.status}).`);
+        }
+        if (result?.recoverable && result?.file_uri) {
+          setRecoveryFileUri(result.file_uri);
+          // The original upload completed; retry reading the saved Drive receipt only.
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
+          setError(result.error || "Receipt saved, but reading failed. You can retry.");
+          return;
+        }
+        if (!result?.draft || !result?.file_uri) {
+          throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
+        }
+        uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
+        onExtracted(result.draft, result.file_uri);
       } else {
-        setError(
-          result?.error ||
-            "We could not read this bill. Try a clearer, straight photo, or enter the items manually.",
-        );
+        // Keep the existing PDF/other supported-file route unchanged.
+        const uploaded = await base44.integrations.Core.UploadPrivateFile({ file, idempotencyKey: uploadKey });
+        const fileUri = uploaded?.file_uri || "";
+        if (!fileUri) throw new Error("The bill could not be uploaded.");
+        let result;
+        try {
+          result = await readShoppingBill({ data: { fileUri, purpose } });
+        } catch (readError) {
+          // The upload succeeded; keep the saved receipt available if reading throws.
+          setRecoveryFileUri(fileUri);
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
+          throw new Error(readError?.message || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
+        }
+        if (!result?.draft) {
+          setRecoveryFileUri(fileUri);
+          // Upload is complete; only retry reading the saved receipt, not uploading again.
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
+          throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
+        }
+        uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
+        onExtracted(result.draft, fileUri);
       }
-    } catch {
-      setError("We could not read this bill. Please try again or enter the items manually.");
+    } catch (cause) {
+      setError(cause?.name === "AbortError"
+        ? "The request timed out after 90 seconds, so we cannot confirm whether your bill was saved. Retry this same file to safely continue with the same upload key and reduce the chance of a duplicate. Avoid choosing a different bill until this retry finishes."
+        : cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
+      uploadLockRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  const retrySelectedFile = () => {
+    const selected = selectedFileRef.current;
+    if (selected && !uploadLockRef.current) handleFile(selected);
+  };
+
+  const retrySavedReceipt = async () => {
+    if (!recoveryFileUri || uploadLockRef.current) return;
+    uploadLockRef.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await readShoppingBill({ data: { fileUri: recoveryFileUri, purpose } });
+      if (!result?.draft || !Array.isArray(result.draft.items) ||
+          (!result.draft.items.length && purpose !== "priced_list")) {
+        throw new Error(result?.error || "AI still could not read this receipt. You can enter items manually.");
+      }
+      const savedUri = recoveryFileUri;
+      setRecoveryFileUri("");
+      selectedFileRef.current = null;
+      uploadKeyRef.current = { fingerprint: "", key: "" };
+      onExtracted(result.draft, savedUri);
+    } catch (cause) {
+      setError(cause?.message || "Retry failed. Your receipt is still saved in Drive.");
+    } finally {
+      uploadLockRef.current = false;
       setBusy(false);
     }
   };
@@ -88,7 +184,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Take a photo"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[12.5px] font-bold text-primary-foreground">
+      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[13px] font-bold text-primary-foreground">
         <Camera className="h-4 w-4" /> Take photo
       </span>
     </label>
@@ -104,7 +200,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Choose photo or PDF"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground">
+      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[13px] font-bold text-foreground">
         <ImageUp className="h-4 w-4" /> Gallery / PDF
       </span>
     </label>
@@ -112,13 +208,13 @@ export function BillUploader({
 
   if (compact) {
     return (
-      <div className="space-y-3 rounded-[20px] border border-border bg-white p-3">
+      <div className="space-y-3 rounded-[22px] border border-border bg-white p-3.5">
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div>
-            <p className="text-[12.5px] font-extrabold">Upload the list with shop prices</p>
+            <p className="text-[12.5px] font-extrabold">{purpose === "priced_list" ? "Scan your priced list or final bill" : "Scan a shopping list photo"}</p>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-              Take a photo of the same list after writing the actual shop prices, or upload the final bill. We will match the item names and update the rates.
+              {purpose === "priced_list" ? "Photo or PDF of your list with actual prices, or the final shop bill. We match item names and update rates for your review." : "Take a photo or choose a saved image/PDF. We extract item names and quantities, then you review before adding them."}
             </p>
           </div>
         </div>
@@ -128,7 +224,7 @@ export function BillUploader({
         </div>
         {busy ? (
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
-            <Loader2 className="h-4 w-4 animate-spin" /> Reading actual prices from {fileName || "your list"}…
+            <Loader2 className="h-4 w-4 animate-spin" /> Reading {purpose === "priced_list" ? "actual prices from" : "item names and quantities from"} {fileName || "your list"}…
           </div>
         ) : null}
         {error ? (
@@ -136,14 +232,24 @@ export function BillUploader({
             {error}
           </p>
         ) : null}
+        {recoveryFileUri ? (
+          <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-[12px] font-bold text-foreground disabled:opacity-50">
+            {busy ? "Retrying…" : "Retry reading saved receipt"}
+          </button>
+        ) : null}
+        {error && selectedFileRef.current && !recoveryFileUri ? (
+          <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-xl bg-primary px-3 py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-50">
+            {busy ? "Retrying upload and reading…" : "Retry this file"}
+          </button>
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[28px] border border-border bg-secondary/40 px-6 py-8 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
+      <div className="rounded-[24px] border border-border bg-secondary/40 px-5 py-6 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
           {busy ? <Loader2 className="h-7 w-7 animate-spin" /> : <FileText className="h-7 w-7" />}
         </div>
         <h2 className="mt-4 text-[17px] font-extrabold">
@@ -162,13 +268,13 @@ export function BillUploader({
           {" "}JPG, PNG, WEBP, HEIC and PDF supported.
         </p>
 
-        <div className="mt-5 grid gap-2.5">
+        <div className="mt-4 grid gap-2.5">
           {cameraInput}
           {galleryInput}
         </div>
 
         <p className="mt-4 inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" /> Nothing is saved until you confirm the details
+          <ShieldCheck className="h-3.5 w-3.5" /> Uploaded receipt is saved to Drive; nothing is added until you confirm
         </p>
       </div>
 
@@ -182,6 +288,16 @@ export function BillUploader({
         <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[13px] font-semibold leading-relaxed text-destructive">
           {error}
         </p>
+      ) : null}
+      {recoveryFileUri ? (
+        <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground disabled:opacity-50">
+          {busy ? "Retrying saved receipt…" : "Retry reading saved receipt"}
+        </button>
+      ) : null}
+      {error && selectedFileRef.current && !recoveryFileUri ? (
+        <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-full bg-primary px-4 py-3 text-[12.5px] font-bold text-primary-foreground disabled:opacity-50">
+          {busy ? "Retrying upload and reading…" : "Retry this file"}
+        </button>
       ) : null}
     </div>
   );

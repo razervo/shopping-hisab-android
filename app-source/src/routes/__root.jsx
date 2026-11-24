@@ -11,11 +11,11 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=5" },
-      { title: "Shopping Hisab — Your Daily Shopping Account" },
+      { title: "Shopping Hisab — Your Shopping Companion" },
       {
         name: "description",
         content:
-          "Record every shopping expense by photo or by hand. Shopping Hisab keeps your daily shopping account accurate.",
+          "Plan shopping lists, estimate costs, capture receipts and keep your shopping trips organised with Shopping Hisab.",
       },
       { name: "theme-color", content: "#ffffff" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
