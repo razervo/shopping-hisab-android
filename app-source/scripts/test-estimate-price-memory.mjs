@@ -1,3 +1,4 @@
+import console from "node:console";
 import assert from "node:assert/strict";
 import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "../src/lib/estimate-price-memory.js";
 
