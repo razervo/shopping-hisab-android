@@ -1,0 +1,20 @@
+import console from "node:console";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { URL } from "node:url";
+
+const engine = await readFile(new URL("../src/lib/shopping-engine.server.js", import.meta.url), "utf8");
+const ui = await readFile(new URL("../src/routes/_authed/sessions/$sessionId.jsx", import.meta.url), "utf8");
+const routeStart = engine.indexOf('if (subpath === "estimates" && method === "POST")');
+const routeEnd = engine.indexOf("const estimateMatch=", routeStart);
+assert.notEqual(routeStart, -1, "estimate creation endpoint exists");
+const route = engine.slice(routeStart, routeEnd);
+assert.match(route, /An Idempotency-Key is required for estimate creation/, "estimate endpoint requires retry keys");
+assert.match(route, /estimate_create:\$\{sessionId\}/, "estimate retries use session-scoped operation identity");
+assert.match(route, /SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys/, "existing estimate retries are returned");
+assert.match(route, /INSERT INTO shopping_idempotency_keys/, "successful estimates persist retry markers");
+assert.match(route, /request_hash!==requestHash/, "reusing a key with a different payload is rejected");
+assert.match(ui, /estimateRequestKeyRef = useRef\(null\)/, "client keeps an estimate retry key ref");
+assert.match(ui, /headers: \{ "Idempotency-Key": estimateRequestKeyRef\.current\.key \}/, "estimate requests send their retry key");
+assert.match(ui, /estimateRequestKeyRef\.current\.payload !== estimatePayloadText/, "changed payloads receive a fresh key");
+console.log("PASS: estimate creation retries are idempotent and conflicting payload reuse is rejected.");

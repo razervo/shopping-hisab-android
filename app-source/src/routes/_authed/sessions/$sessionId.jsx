@@ -4,6 +4,8 @@ import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Spar
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
+import { reviewEstimateItems } from "@/lib/estimate-review";
+import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -47,6 +49,7 @@ function SessionDetailPage() {
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
+  const estimateRequestKeyRef = useRef(null);
   const billLineRequestKeysRef = useRef({});
   const uploadedBillCreateKeyRef = useRef(null);
   const uploadedBillLinesKeyRef = useRef(null);
@@ -61,11 +64,16 @@ function SessionDetailPage() {
   const manualBillSaveLockRef = useRef(false);
   const uploadedBillSaveLockRef = useRef(false);
   const billLineSaveLockRefs = useRef({});
+  const billDeleteKeysRef = useRef({});
+  const billLineDeleteKeysRef = useRef({});
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
   const [estimatePrices, setEstimatePrices] = useState({});
   const [estimateSources, setEstimateSources] = useState({});
+  const [rememberedEstimateKeys, setRememberedEstimateKeys] = useState({});
+  const [estimateReviewWarnings, setEstimateReviewWarnings] = useState([]);
+  const [estimateReviewOpen, setEstimateReviewOpen] = useState(false);
   const [estimateSaving, setEstimateSaving] = useState(false);
   const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
   const [scannedDraft, setScannedDraft] = useState(null);
@@ -104,6 +112,55 @@ function SessionDetailPage() {
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
+  useEffect(() => {
+    if (!session) return;
+    const validIds = new Set((session.items || []).map((item) => item.id));
+    const pruneRemovedItems = (current) => {
+      const entries = Object.entries(current).filter(([itemId]) => validIds.has(itemId));
+      return entries.length === Object.keys(current).length ? current : Object.fromEntries(entries);
+    };
+    setEstimatePrices(pruneRemovedItems);
+    setEstimateSources(pruneRemovedItems);
+    setRememberedEstimateKeys(pruneRemovedItems);
+  }, [session?.id, session?.items]);
+
+  useEffect(() => {
+    if (!session?.items?.length || typeof window === "undefined") return;
+    const remembered = findRememberedEstimatePrices(session.items);
+    const currentKeys = Object.fromEntries(session.items.map((item) => [item.id, estimatePriceMemoryKey(item)]));
+    setEstimatePrices((current) => {
+      const next = { ...current };
+      const inserted = [];
+      const staleRemembered = [];
+      for (const itemId of Object.keys(next)) {
+        if (estimateSources[itemId] === "remembered" && rememberedEstimateKeys[itemId] && rememberedEstimateKeys[itemId] !== currentKeys[itemId]) {
+          delete next[itemId];
+          staleRemembered.push(itemId);
+        }
+      }
+      for (const [itemId, price] of Object.entries(remembered)) {
+        if (next[itemId] == null || String(next[itemId]).trim() === "") {
+          next[itemId] = price;
+          inserted.push(itemId);
+        }
+      }
+      if (inserted.length || staleRemembered.length) {
+        setEstimateSources((sources) => {
+          const updated = { ...sources };
+          for (const itemId of inserted) if (!updated[itemId]) updated[itemId] = "remembered";
+          for (const itemId of staleRemembered) delete updated[itemId];
+          return updated;
+        });
+        setRememberedEstimateKeys((keys) => {
+          const updated = { ...keys };
+          for (const itemId of inserted) updated[itemId] = currentKeys[itemId];
+          for (const itemId of staleRemembered) delete updated[itemId];
+          return updated;
+        });
+      }
+      return next;
+    });
+  }, [session?.id, session?.items]);
 
   useEffect(() => {
     if (!session) return;
@@ -161,6 +218,13 @@ function SessionDetailPage() {
     if (!currentItems.length) return toast.error("Add items to your list before estimating.");
     const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
     if (missing.length) return toast.error("Add a price for each item before saving your estimate.");
+    const warnings = reviewEstimateItems(currentItems);
+    if (warnings.length && !estimateReviewOpen) {
+      setEstimateReviewWarnings(warnings);
+      setEstimateReviewOpen(true);
+      toast.warning("Review the quantity and pack-size warnings before saving.");
+      return;
+    }
     const lines = [];
     for (const item of currentItems) {
       const rupees = Number(estimatePrices[item.id]);
@@ -181,11 +245,21 @@ function SessionDetailPage() {
     try {
       const sources = new Set(lines.map((line) => line.price_source));
       const calculationSource = sources.size > 1 ? "mixed" : (sources.values().next().value || "manual");
-      await api(`/api/shopping/sessions/${sessionId}/estimates`, {
+      const estimatePayload = { calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines };
+      const estimatePayloadText = JSON.stringify(estimatePayload);
+      if (!estimateRequestKeyRef.current || estimateRequestKeyRef.current.payload !== estimatePayloadText) {
+        estimateRequestKeyRef.current = { payload: estimatePayloadText, key: crypto.randomUUID() };
+      }
+      await api("/api/shopping/sessions/" + sessionId + "/estimates", {
         method: "POST",
-        body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
+        headers: { "Idempotency-Key": estimateRequestKeyRef.current.key },
+        body: estimatePayloadText,
       });
+      estimateRequestKeyRef.current = null;
+      rememberEstimatePrices(currentItems, estimatePrices);
       toast.success("Your estimate is saved.");
+      setEstimateReviewOpen(false);
+      setEstimateReviewWarnings([]);
       await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not save this estimate.");
@@ -227,6 +301,11 @@ function SessionDetailPage() {
       }
       setEstimatePrices((current) => ({ ...current, ...updates }));
       setEstimateSources((current) => ({ ...current, ...sources }));
+      setRememberedEstimateKeys((current) => {
+        const next = { ...current };
+        for (const itemId of Object.keys(updates)) delete next[itemId];
+        return next;
+      });
       const missingCount = currentItems.length - Object.keys(updates).length;
       toast.success(`AI estimated ${Object.keys(updates).length} of ${currentItems.length} items. Review the prices${missingCount ? `; enter the remaining ${missingCount} manually` : ""} before saving.`);
     } catch (cause) {
@@ -499,8 +578,9 @@ function SessionDetailPage() {
     if (Number(session?.bills_amount_pending || 0) > 0) {
       return toast.error("Resolve every bill with a pending amount before completing this session.");
     }
-    const includedBillCount = (session?.bills || []).filter((bill) => Number(bill.included_in_actual) === 1 && !["duplicate", "void"].includes(bill.bill_status)).length;
-    if (!includedBillCount && Math.round(rupees * 100) === 0 && !window.confirm("No included bills are recorded. Finish this trip with ₹0.00 paid?")) return;
+    if (Math.round(rupees * 100) <= 0) {
+      return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
+    }
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
       const difference = rupees - calculatedRupees;
@@ -559,11 +639,13 @@ function SessionDetailPage() {
 
   const deleteBill = async (billId) => {
     if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
+    const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
         method: "DELETE",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": requestKey },
       });
+      delete billDeleteKeysRef.current[billId];
       setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
       await loadSession();
       toast.success("Bill deleted. Trip totals recalculated.");
@@ -575,8 +657,13 @@ function SessionDetailPage() {
 
   const deleteBillLine = async (billId, lineId) => {
     if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    const requestKey = billLineDeleteKeysRef.current[lineId] || (billLineDeleteKeysRef.current[lineId] = crypto.randomUUID());
     try {
-      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE" });
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": requestKey },
+      });
+      delete billLineDeleteKeysRef.current[lineId];
       setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
       await loadSession();
       toast.success("Bill item deleted and reconciliation updated.");
@@ -1030,9 +1117,12 @@ function SessionDetailPage() {
               <div className="w-28 shrink-0">
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={estimatePrices[item.id] ?? ""}
-                  onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); }}
+                  onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); setRememberedEstimateKeys((current) => { if (!(item.id in current)) return current; const next = { ...current }; delete next[item.id]; return next; }); }}
                   placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+                {estimateSources[item.id] === "remembered" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Saved price · exact pack match</p>
+                  : estimateSources[item.id] === "ai_estimate" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">AI estimate · review price</p>
+                  : estimateSources[item.id] === "manual" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Manual price</p> : null}
               </div>
             </div>
           )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
@@ -1048,15 +1138,32 @@ function SessionDetailPage() {
                 : " · Partial total — add prices for the remaining items"}
             </p>
           </div>
+          {estimateReviewOpen ? (
+            <div role="alert" className="mb-3 rounded-[18px] border border-amber-300 bg-amber-50 p-3 text-amber-950">
+              <p className="text-[12.5px] font-extrabold">Smart estimate review</p>
+              <p className="mt-1 text-[11px] leading-relaxed">Please check these suggestions. Nothing is automatically changed.</p>
+              <ul className="mt-2 space-y-1.5">
+                {estimateReviewWarnings.map((warning, index) => (
+                  <li key={index} className="rounded-lg bg-white/70 px-2.5 py-2 text-[11px]">
+                    <span className="font-bold">{warning.itemName}:</span> {warning.message}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => { setEstimateReviewOpen(false); setEstimateReviewWarnings([]); }} className="flex-1 rounded-full border border-amber-700/30 py-2 text-[11px] font-bold">Back to edit</button>
+                <button type="submit" disabled={estimateSaving} className="flex-1 rounded-full bg-amber-900 py-2 text-[11px] font-bold text-white disabled:opacity-60">{estimateSaving ? "Saving…" : "Save anyway"}</button>
+              </div>
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={generateAiEstimate} disabled={aiEstimateSaving || estimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/30 bg-accent py-3 text-[13px] font-bold text-primary disabled:opacity-60">
               {aiEstimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {aiEstimateSaving ? "Estimating…" : "Estimate with AI"}
             </button>
-            <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+            {!estimateReviewOpen ? <button type="submit" disabled={estimateSaving || aiEstimateSaving || !items.length} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
               {estimateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               {estimateSaving ? "Saving estimate…" : "Save my estimate"}
-            </button>
+            </button> : null}
           </div>
         </form>
       ) : null}
@@ -1092,7 +1199,7 @@ function SessionDetailPage() {
         </div>
       </details>
 
-      <details id="trip-step-3" open={!completed && (Boolean(latestEstimate) || (session.bills || []).length > 0)} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      <details id="trip-step-3" open={!completed} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">

@@ -216,7 +216,8 @@ export async function handleShoppingEngine(request, env) {
   }
   const session = await ownedSession(db,userId,sessionId);
   if (!session) return fail("Shopping session not found.",404);
-  if (session.status === "completed" && method !== "GET" && subpath !== "confirm") return fail("This shopping session is completed and read-only.",409);
+  const completedDeleteAllowed = method === "DELETE" && (/^bills\/[a-f0-9-]{36}$/i.test(subpath) || /^bills\/[a-f0-9-]{36}\/lines\/[a-f0-9-]{36}$/i.test(subpath));
+  if (session.status === "completed" && method !== "GET" && subpath !== "confirm" && !completedDeleteAllowed) return fail("This shopping session is completed and read-only. Bills and bill items may still be deleted with confirmation.",409);
   if (subpath === "confirm" && method === "POST" && session.status === "completed") {
     const key=text(request.headers.get("Idempotency-Key"),160);
     if(key){const replay=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,"session_confirm:"+sessionId,key).first();if(replay){const incoming=Number(body.confirmed_total_paise);const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:incoming}))))).map(b=>b.toString(16).padStart(2,"0")).join("");return replay.request_hash===hash?new Response(replay.response_json,{status:replay.response_status,headers}):fail("Idempotency key reused with different confirmation total.",409);}}
@@ -450,15 +451,24 @@ export async function handleShoppingEngine(request, env) {
 
 
   if (subpath === "estimates" && method === "POST") {
+    const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!idempotencyKey)return fail("An Idempotency-Key is required for estimate creation.",400);
+    const operation=`estimate_create:${sessionId}`;
+    const requestHash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join(""));
+    const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+    if(prior){if(prior.request_hash!==requestHash)return fail("This idempotency key was already used for a different estimate request.",409);return json(safeJson(prior.response_json,{}),Number(prior.response_status)||200);}
     const lines = Array.isArray(body.lines) ? body.lines : [];
     if (!lines.length || lines.length > 500) return fail("Add between 1 and 500 estimate lines.");
     const calculationSource = text(body.calculation_source || "mixed",30);
     if (!["previous_purchase","market_data","manual","ai_estimate","mixed"].includes(calculationSource)) return fail("Invalid estimate calculation source.");
     const prepared = [];
+    const seenEstimateItemIds = new Set();
     let totalPaise = 0;
     for (let index=0; index<lines.length; index++) {
       const line=lines[index] || {};
       const itemId=text(line.shopping_item_id,80);
+      if (seenEstimateItemIds.has(itemId)) return fail("Estimate line " + (index+1) + " duplicates a shopping item.");
+      seenEstimateItemIds.add(itemId);
       const item=await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first();
       if (!item) return fail(`Estimate line ${index+1} references an item outside this session.`,404);
       const quantity=Number(line.quantity);
@@ -490,9 +500,11 @@ export async function handleShoppingEngine(request, env) {
       (id,user_id,session_id,estimate_id,shopping_item_id,quantity,unit,estimated_unit_price_paise,estimated_line_total_paise,price_source,source_reference,source_observed_at,confidence,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,estimateId,line.itemId,line.quantity,line.unit,line.unitPrice,line.lineTotal,line.priceSource,line.reference,line.observed,line.confidence,timestamp));
     statements.push(db.prepare("UPDATE shopping_sessions SET latest_estimate_id=?,updated_at=? WHERE id=? AND user_id=?").bind(estimateId,timestamp,sessionId,userId));
-    await db.batch(statements);
+    const responseBody={id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared};
+    statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(statements);}catch(cause){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();if(winner){if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different estimate request.",409);return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);}throw cause;}
     await audit(db,userId,sessionId,"estimate",estimateId,"estimate_version_created",{version_number:version,estimated_total_paise:totalPaise,line_count:prepared.length});
-    return json({id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared},201);
+    return json(responseBody,201);
   }
 
   const estimateMatch=/^estimates\/([a-f0-9-]{36})$/.exec(subpath);
@@ -651,6 +663,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   if(purchaseLinesMatch && method==="POST"){
     const billId=purchaseLinesMatch[1];
     const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!idempotencyKey)return fail("An Idempotency-Key is required for bill-line creation.",400);
     const operation=`bill_lines_create:${sessionId}:${billId}`;
     const requestHash=idempotencyKey?await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")):null;
     if(idempotencyKey){
@@ -713,7 +726,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
 
-  const purchaseLineMatch=/^bills\/[a-f0-9-]{36}\/lines\/([a-f0-9-]{36})$/.exec(subpath);
+  const purchaseLineMatch=/^bills\/([a-f0-9-]{36})\/lines\/([a-f0-9-]{36})$/i.exec(subpath);
   if(purchaseLineMatch && method==="PATCH"){
     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
@@ -756,38 +769,50 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
   if(purchaseLineMatch && method==="DELETE"){
-    const lineId=purchaseLineMatch[1];
-    const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
-    if(!line)return fail("Bill line not found.",404);
-    const timestamp=now();
-    const statements=[
-      db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
-      db.prepare(`UPDATE shopping_actual_bills SET
-        line_total_paise=CASE
-          WHEN (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-            = (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-          THEN COALESCE((SELECT SUM(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?),0)
-          ELSE NULL END,
-        reconciliation_difference_paise=CASE
-          WHEN bill_total_paise IS NULL OR
-            (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-            <> (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-          THEN NULL
-          ELSE bill_total_paise-(SELECT COALESCE(SUM(line_amount_paise),0) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-        END,updated_at=? WHERE id=? AND user_id=? AND session_id=?`).bind(
-        line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
-        line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
-        timestamp,line.bill_id,userId,sessionId),
-      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"purchase_line",lineId,"bill_line_deleted",JSON.stringify(line),JSON.stringify({bill_id:line.bill_id}),timestamp),
-    ];
-    await db.batch(statements);
-    const updatedBill=await db.prepare("SELECT line_total_paise,reconciliation_difference_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
-    return json({success:true,bill_id:line.bill_id,line_total_paise:updatedBill?.line_total_paise??null,reconciliation_difference_paise:updatedBill?.reconciliation_difference_paise??null});
-  }
+     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
+     const requestKey=text(request.headers.get("Idempotency-Key"),160);
+     if(!requestKey)return fail("An Idempotency-Key is required for bill-line deletion.",400);
+     const operation=`bill_line_delete:${sessionId}:${lineId}`;
+     const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(lineId)))).map(b=>b.toString(16).padStart(2,"0")).join("");
+     const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+     if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
+     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
+     if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
+     const timestamp=now();
+     const responseBody={success:true,bill_id:line.bill_id,line_id:lineId};
+     const statements=[
+       db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
+       db.prepare(`UPDATE shopping_actual_bills SET
+         line_total_paise=CASE
+           WHEN (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+             = (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+           THEN COALESCE((SELECT SUM(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?),0)
+           ELSE NULL END,
+         reconciliation_difference_paise=CASE
+           WHEN bill_total_paise IS NULL OR
+             (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+             <> (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+           THEN NULL
+           ELSE bill_total_paise-(SELECT COALESCE(SUM(line_amount_paise),0) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+         END,updated_at=? WHERE id=? AND user_id=? AND session_id=?`).bind(
+         line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
+         line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
+         timestamp,line.bill_id,userId,sessionId),
+       db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"purchase_line",lineId,"bill_line_deleted",JSON.stringify(line),JSON.stringify(responseBody),timestamp),
+       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp),
+     ];
+     try{await db.batch(statements);}catch(cause){
+       const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+       if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
+       throw cause;
+     }
+     const updatedBill=await db.prepare("SELECT line_total_paise,reconciliation_difference_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
+     return json({...responseBody,line_total_paise:updatedBill?.line_total_paise??null,reconciliation_difference_paise:updatedBill?.reconciliation_difference_paise??null});
+   }
 
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
-    if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
+    if(!Number.isSafeInteger(confirmed)||confirmed<=0)return fail("A shopping trip cannot be completed with ₹0.00. Enter a positive final expense in paise.");
     const requestKey=text(request.headers.get("Idempotency-Key"),160);
     const operation="session_confirm:"+sessionId;
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:confirmed}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;

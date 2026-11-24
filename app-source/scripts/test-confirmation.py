@@ -52,6 +52,8 @@ assert "INSERT INTO shopping_expense_confirmations" in handler
 assert "AND EXISTS (SELECT 1 FROM shopping_expense_confirmations WHERE id=?" in handler
 assert "INSERT INTO shopping_audit_events" in handler
 assert "INSERT INTO shopping_idempotency_keys" in handler
+assert "confirmed<=0" in handler
+assert "A shopping trip cannot be completed with ₹0.00" in handler
 assert "WHERE EXISTS (" in handler[handler.index("INSERT INTO shopping_audit_events"):]
 assert "WHERE EXISTS (" in handler[handler.index("INSERT INTO shopping_idempotency_keys"):]
 

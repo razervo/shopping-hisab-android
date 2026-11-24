@@ -2,7 +2,7 @@ name: Shopping Hisab hardening verification
 
 on:
   push:
-    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration]
+    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration, ux-recovery-voice-zero-trip-fixes]
     paths:
       - "app-source/**"
       - ".github/workflows/shopping-hardening-verify.yml"
@@ -52,13 +52,29 @@ jobs:
         run: python3 scripts/test-confirmation.py
       - name: Test safe populated-trip deletion
         run: python3 scripts/test-session-deletion.py
+      - name: Test bill and bill-line deletion safety
+        run: python3 scripts/test-bill-deletion.py
+      - name: Test bill-line creation retry safety
+        run: node scripts/test-bill-line-idempotency.mjs
+      - name: Test bill-to-item reconciliation integrity
+        run: python3 scripts/test-reconciliation-integrity.py
       - name: Test receipt-only manual total fallback
         run: node scripts/test-receipt-manual-fallback.mjs
       - name: Test estimate total integrity
         run: node scripts/test-estimate-line-integrity.mjs
+      - name: Test estimate creation retry safety
+        run: node scripts/test-estimate-idempotency.mjs
+      - name: Test smart estimate review warnings
+        run: node scripts/test-estimate-review.mjs
+      - name: Test pack-size price memory key integrity
+        run: node scripts/test-estimate-price-memory.mjs
+      - name: Test pack-size-specific estimate price memory
+        run: node scripts/test-estimate-price-memory.mjs
       - name: Test receipt file validation and preparation
         run: node scripts/test-bill-file.mjs
       - name: Test Google Drive upload and metadata recovery ledger
         run: python3 scripts/test-drive-recovery.py
       - name: Test Base44 migration idempotency and attachment mapping
         run: python3 scripts/test-migration.py
+      - name: Test preview deployment isolation
+        run: node scripts/test-preview-deployment-safety.mjs

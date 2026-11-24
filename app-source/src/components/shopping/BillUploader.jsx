@@ -15,20 +15,23 @@ export function BillUploader({
   const [recoveryFileUri, setRecoveryFileUri] = useState("");
   const uploadLockRef = useRef(false);
   const uploadKeyRef = useRef({ fingerprint: "", key: "" });
+  const selectedFileRef = useRef(null);
 
   const handleFile = async (picked) => {
     if (!picked || uploadLockRef.current) return;
     setError("");
-    setRecoveryFileUri("");
     if (!isAcceptedBill(picked)) {
+      selectedFileRef.current = null;
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
     }
     if (!picked.size) {
+      selectedFileRef.current = null;
       setError("The selected file is empty. Please take another photo or choose another file.");
       return;
     }
 
+    selectedFileRef.current = picked;
     setFileName(picked.name);
     const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
     if (uploadKeyRef.current.fingerprint !== fingerprint) {
@@ -42,6 +45,7 @@ export function BillUploader({
     try {
       file = await prepareBillFile(picked);
     } catch (cause) {
+      selectedFileRef.current = null;
       setError(cause?.message || "This image could not be prepared. Please choose a JPG, PNG or WEBP photo.");
       uploadLockRef.current = false;
       setBusy(false);
@@ -49,11 +53,15 @@ export function BillUploader({
     }
 
     if (file.size > BILL_MAX_BYTES) {
+      selectedFileRef.current = null;
       setError("That file is too large. Please use a photo or PDF under 10 MB.");
       uploadLockRef.current = false;
       setBusy(false);
       return;
     }
+
+    // Only replace the previous saved-receipt recovery target once preparation succeeds.
+    setRecoveryFileUri("");
 
     try {
       const directImage = ["image/jpeg", "image/png", "image/webp"].includes(
@@ -80,6 +88,9 @@ export function BillUploader({
         }
         if (result?.recoverable && result?.file_uri) {
           setRecoveryFileUri(result.file_uri);
+          // The original upload completed; retry reading the saved Drive receipt only.
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
           setError(result.error || "Receipt saved, but reading failed. You can retry.");
           return;
         }
@@ -87,25 +98,47 @@ export function BillUploader({
           throw new Error(result?.error || "We could not read this bill. Try a clearer, straight photo.");
         }
         uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
         onExtracted(result.draft, result.file_uri);
       } else {
         // Keep the existing PDF/other supported-file route unchanged.
         const uploaded = await base44.integrations.Core.UploadPrivateFile({ file, idempotencyKey: uploadKey });
         const fileUri = uploaded?.file_uri || "";
         if (!fileUri) throw new Error("The bill could not be uploaded.");
-        const result = await readShoppingBill({ data: { fileUri, purpose } });
+        let result;
+        try {
+          result = await readShoppingBill({ data: { fileUri, purpose } });
+        } catch (readError) {
+          // The upload succeeded; keep the saved receipt available if reading throws.
+          setRecoveryFileUri(fileUri);
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
+          throw new Error(readError?.message || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
+        }
         if (!result?.draft) {
           setRecoveryFileUri(fileUri);
+          // Upload is complete; only retry reading the saved receipt, not uploading again.
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
           throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
         }
+        uploadKeyRef.current = { fingerprint: "", key: "" };
+        selectedFileRef.current = null;
         onExtracted(result.draft, fileUri);
       }
     } catch (cause) {
-      setError(cause?.message || "We could not read this bill. Please try again or enter the items manually.");
+      setError(cause?.name === "AbortError"
+        ? "The request timed out after 90 seconds, so we cannot confirm whether your bill was saved. Retry this same file to safely continue with the same upload key and reduce the chance of a duplicate. Avoid choosing a different bill until this retry finishes."
+        : cause?.message || "We could not read this bill. Please try again or enter the items manually.");
     } finally {
       uploadLockRef.current = false;
       setBusy(false);
     }
+  };
+
+  const retrySelectedFile = () => {
+    const selected = selectedFileRef.current;
+    if (selected && !uploadLockRef.current) handleFile(selected);
   };
 
   const retrySavedReceipt = async () => {
@@ -121,6 +154,8 @@ export function BillUploader({
       }
       const savedUri = recoveryFileUri;
       setRecoveryFileUri("");
+      selectedFileRef.current = null;
+      uploadKeyRef.current = { fingerprint: "", key: "" };
       onExtracted(result.draft, savedUri);
     } catch (cause) {
       setError(cause?.message || "Retry failed. Your receipt is still saved in Drive.");
@@ -177,9 +212,9 @@ export function BillUploader({
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div>
-            <p className="text-[12.5px] font-extrabold">{purpose === "priced_list" ? "Upload the list with shop prices" : "Add another receipt to this list"}</p>
+            <p className="text-[12.5px] font-extrabold">{purpose === "priced_list" ? "Scan your priced list or final bill" : "Scan a shopping list photo"}</p>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-              {purpose === "priced_list" ? "Take a photo of the same list after writing the actual shop prices, or upload the final bill. We will match the item names and update the rates." : "Scan another shop receipt. Its items will be added to your current shopping list; possible duplicates will be shown for confirmation."}
+              {purpose === "priced_list" ? "Photo or PDF of your list with actual prices, or the final shop bill. We match item names and update rates for your review." : "Take a photo or choose a saved image/PDF. We extract item names and quantities, then you review before adding them."}
             </p>
           </div>
         </div>
@@ -189,7 +224,7 @@ export function BillUploader({
         </div>
         {busy ? (
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
-            <Loader2 className="h-4 w-4 animate-spin" /> Reading actual prices from {fileName || "your list"}…
+            <Loader2 className="h-4 w-4 animate-spin" /> Reading {purpose === "priced_list" ? "actual prices from" : "item names and quantities from"} {fileName || "your list"}…
           </div>
         ) : null}
         {error ? (
@@ -200,6 +235,11 @@ export function BillUploader({
         {recoveryFileUri ? (
           <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-[12px] font-bold text-foreground disabled:opacity-50">
             {busy ? "Retrying…" : "Retry reading saved receipt"}
+          </button>
+        ) : null}
+        {error && selectedFileRef.current && !recoveryFileUri ? (
+          <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-xl bg-primary px-3 py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-50">
+            {busy ? "Retrying upload and reading…" : "Retry this file"}
           </button>
         ) : null}
       </div>
@@ -234,7 +274,7 @@ export function BillUploader({
         </div>
 
         <p className="mt-4 inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" /> Receipt file is saved to Drive; nothing is added until you confirm
+          <ShieldCheck className="h-3.5 w-3.5" /> Uploaded receipt is saved to Drive; nothing is added until you confirm
         </p>
       </div>
 
@@ -252,6 +292,11 @@ export function BillUploader({
       {recoveryFileUri ? (
         <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground disabled:opacity-50">
           {busy ? "Retrying saved receipt…" : "Retry reading saved receipt"}
+        </button>
+      ) : null}
+      {error && selectedFileRef.current && !recoveryFileUri ? (
+        <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-full bg-primary px-4 py-3 text-[12.5px] font-bold text-primary-foreground disabled:opacity-50">
+          {busy ? "Retrying upload and reading…" : "Retry this file"}
         </button>
       ) : null}
     </div>

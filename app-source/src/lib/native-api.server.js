@@ -682,21 +682,26 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  const readPromise = readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
-  // Upload to Drive at the same time as AI reads the original image.
+  // Save the original receipt first. Do not spend AI inference on a file that
+  // cannot be persisted (for example, when Drive is disconnected or unavailable).
+  // The upload operation is idempotent, so a retry after a lost response recovers
+  // the existing Drive file instead of creating another copy.
   const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
-  const uploadPromise = uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
-  const [readResult, uploadResult] = await Promise.allSettled([readPromise, uploadPromise]);
-  if (uploadResult.status === "rejected") throw new Error(`Receipt could not be saved to Google Drive: ${uploadResult.reason?.message || "Please reconnect Drive and retry."}`);
-  const uploaded = uploadResult.value;
-  // Persist the Drive file before OCR finishes so a failed read remains recoverable.
+  let uploaded;
+  try {
+    uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
+  } catch (cause) {
+    throw new Error(`Receipt could not be saved to Google Drive: ${cause?.message || "Please reconnect Drive and retry."}`);
+  }
   const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
   const fileUri = `cf-file:${id}`;
-  if (readResult.status === "rejected") {
-    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${readResult.reason?.message || "Try again."}` });
+
+  let parsed;
+  try {
+    parsed = await readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
+  } catch (cause) {
+    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${cause?.message || "Try again."}` });
   }
-  // callVisionModel already parses the model's answer into the draft object.
-  const parsed = readResult.value;
   if (!parsed?.draft || !Array.isArray(parsed.draft.items) || (!parsed.draft.items.length && purpose !== "priced_list")) {
     return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
   }

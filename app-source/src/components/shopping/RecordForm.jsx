@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ListPlus, Plus } from "lucide-react";
+import { ListPlus, Plus, Mic } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
@@ -36,6 +36,7 @@ export function RecordForm({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
   const [receiptCount, setReceiptCount] = useState(() => Math.max(1, Array.isArray(initial?.receipts) ? initial.receipts.length : 0));
   const [receiptMessage, setReceiptMessage] = useState("");
   const [receipts, setReceipts] = useState(() => Array.isArray(initial?.receipts) ? initial.receipts : (billFileUri ? [{ id: "receipt-1", file_uri: billFileUri, kind: "shopping_list", status: "attached", amount: 0 }] : []));
@@ -86,6 +87,32 @@ export function RecordForm({
     }
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
+  const startVoiceEntry = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice entry is not supported in this browser. Use Paste multiple or Add item.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = (event) => {
+      setVoiceListening(false);
+      toast.error(event.error === "not-allowed" ? "Microphone permission denied. Allow microphone access and retry." : "Could not capture voice. Please try again or type your items.");
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map((result) => result[0]?.transcript || "").join(" ").trim();
+      if (!transcript) return;
+      setBulkText((previous) => [previous.trim(), transcript].filter(Boolean).join("\\n"));
+      setBulkOpen(true);
+      setBulkError("");
+      toast.success("Voice captured. Review the words before adding items.");
+    };
+    try { recognition.start(); } catch { setVoiceListening(false); toast.error("Voice capture is already running. Try again in a moment."); }
+  };
   const addBulkItems = () => {
     const parsed = String(bulkText || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
       const cells = line.includes("\t") ? line.split("\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
