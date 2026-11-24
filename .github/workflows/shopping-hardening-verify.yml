@@ -62,6 +62,8 @@ jobs:
         run: node scripts/test-receipt-manual-fallback.mjs
       - name: Test estimate total integrity
         run: node scripts/test-estimate-line-integrity.mjs
+      - name: Test estimate creation retry safety
+        run: node scripts/test-estimate-idempotency.mjs
       - name: Test smart estimate review warnings
         run: node scripts/test-estimate-review.mjs
       - name: Test pack-size price memory key integrity
