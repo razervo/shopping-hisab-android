@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
+import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, filterShoppingListItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
 test("infers common grocery categories and falls back safely", () => {
   assert.equal(inferShoppingCategory("Fresh tomatoes"), "Produce");
@@ -24,4 +24,16 @@ test("groups items by resolved category in stable category order", () => {
   assert.deepEqual(groups.map(([category]) => category), ["Produce", "Dairy & Eggs", "Pantry"]);
   assert.equal(groups.reduce((n, [, rows]) => n + rows.length, 0), items.length);
   assert.deepEqual(SHOPPING_CATEGORIES.at(-1), "Other");
+});
+
+test("smart list search and filters exclude cancelled items from active views", () => {
+  const items = [
+    { id: "1", product_name: "Milk", planned_quantity: 2, remaining_quantity: 1 },
+    { id: "2", product_name: "Rice", planned_quantity: 1, remaining_quantity: 0 },
+    { id: "3", product_name: "Cancelled tea", planned_quantity: 1, remaining_quantity: 1, item_status: "cancelled" },
+  ];
+  assert.deepEqual(filterShoppingListItems(items, "MILK", "remaining").map((item) => item.id), ["1"]);
+  assert.deepEqual(filterShoppingListItems(items, "", "remaining").map((item) => item.id), ["1"]);
+  assert.deepEqual(filterShoppingListItems(items, "", "purchased").map((item) => item.id), ["2"]);
+  assert.deepEqual(filterShoppingListItems(items, "", "all").map((item) => item.id), ["1", "2", "3"]);
 });
