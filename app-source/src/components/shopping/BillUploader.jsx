@@ -100,7 +100,16 @@ export function BillUploader({
         const uploaded = await base44.integrations.Core.UploadPrivateFile({ file, idempotencyKey: uploadKey });
         const fileUri = uploaded?.file_uri || "";
         if (!fileUri) throw new Error("The bill could not be uploaded.");
-        const result = await readShoppingBill({ data: { fileUri, purpose } });
+        let result;
+        try {
+          result = await readShoppingBill({ data: { fileUri, purpose } });
+        } catch (readError) {
+          // The upload succeeded; keep the saved receipt available if reading throws.
+          setRecoveryFileUri(fileUri);
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
+          throw new Error(readError?.message || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
+        }
         if (!result?.draft) {
           setRecoveryFileUri(fileUri);
           // Upload is complete; only retry reading the saved receipt, not uploading again.
