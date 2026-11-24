@@ -38,7 +38,7 @@ export default defineConfig({
   },
   plugins: [
 // No inspector: a restarted dev server would race the old one for port 9229 and crash.
-    cloudflare({ configPath: "wrangler.native.jsonc", viteEnvironment: { name: "ssr" }, inspectorPort: false }),
+    cloudflare({ configPath: process.env.CF_WRANGLER_CONFIG || "wrangler.native.jsonc", viteEnvironment: { name: "ssr" }, inspectorPort: false }),
     tanstackStart({ srcDirectory: "src" }),
     react(),
   ],
