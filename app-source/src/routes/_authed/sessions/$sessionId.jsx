@@ -49,6 +49,7 @@ function SessionDetailPage() {
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
+  const estimateRequestKeyRef = useRef(null);
   const billLineRequestKeysRef = useRef({});
   const uploadedBillCreateKeyRef = useRef(null);
   const uploadedBillLinesKeyRef = useRef(null);
@@ -244,10 +245,17 @@ function SessionDetailPage() {
     try {
       const sources = new Set(lines.map((line) => line.price_source));
       const calculationSource = sources.size > 1 ? "mixed" : (sources.values().next().value || "manual");
-      await api(`/api/shopping/sessions/${sessionId}/estimates`, {
+      const estimatePayload = { calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines };
+      const estimatePayloadText = JSON.stringify(estimatePayload);
+      if (!estimateRequestKeyRef.current || estimateRequestKeyRef.current.payload !== estimatePayloadText) {
+        estimateRequestKeyRef.current = { payload: estimatePayloadText, key: crypto.randomUUID() };
+      }
+      await api("/api/shopping/sessions/" + sessionId + "/estimates", {
         method: "POST",
-        body: JSON.stringify({ calculation_source: calculationSource, notes: calculationSource === "manual" ? "Manually entered by user" : "AI market estimates reviewed by user; manual entries retained where applicable", lines }),
+        headers: { "Idempotency-Key": estimateRequestKeyRef.current.key },
+        body: estimatePayloadText,
       });
+      estimateRequestKeyRef.current = null;
       rememberEstimatePrices(currentItems, estimatePrices);
       toast.success("Your estimate is saved.");
       setEstimateReviewOpen(false);
