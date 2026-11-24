@@ -1,12 +1,12 @@
 const CATEGORY_RULES = [
-  ["Produce", /\\b(apple|banana|orange|mango|tomato|potato|onion|garlic|ginger|spinach|cabbage|carrot|cucumber|lemon|chilli|pepper|vegetable|fruit|okra|brinjal|cauliflower|broccoli|peas|beans)\\b/i],
-  ["Dairy & Eggs", /\\b(milk|curd|yogurt|paneer|cheese|butter|ghee|cream|egg|eggs)\\b/i],
-  ["Bakery", /\\b(bread|bun|cake|biscuit|cookie|rusk|toast|bakery|pav)\\b/i],
-  ["Meat & Seafood", /\\b(chicken|fish|mutton|beef|pork|meat|prawn|shrimp|crab)\\b/i],
-  ["Beverages", /\\b(tea|coffee|juice|water|soft drink|soda|cola|drink|milkshake)\\b/i],
-  ["Personal Care", /\\b(soap|shampoo|toothpaste|toothbrush|sanitary|cream|lotion|deodorant|hair oil|face wash)\\b/i],
-  ["Household", /\\b(detergent|washing powder|dishwash|cleaner|tissue|toilet paper|broom|mop|bucket|sponge|garbage bag|candle|battery)\\b/i],
-  ["Pantry", /\\b(rice|dal|lentil|flour|atta|sugar|salt|oil|masala|spice|noodle|pasta|pulse|cereal|cornflakes|snack|chips|biscuits|pickle|sauce)\\b/i],
+  ["Produce", /\b(apple|banana|orange|mango|tomato|potato|onion|garlic|ginger|spinach|cabbage|carrot|cucumber|lemon|chilli|pepper|vegetable|fruit|okra|brinjal|cauliflower|broccoli|peas|beans)\b/i],
+  ["Dairy & Eggs", /\b(milk|curd|yogurt|paneer|cheese|butter|ghee|cream|egg|eggs)\b/i],
+  ["Bakery", /\b(bread|bun|cake|biscuit|cookie|rusk|toast|bakery|pav)\b/i],
+  ["Meat & Seafood", /\b(chicken|fish|mutton|beef|pork|meat|prawn|shrimp|crab)\b/i],
+  ["Beverages", /\b(tea|coffee|juice|water|soft drink|soda|cola|drink|milkshake)\b/i],
+  ["Personal Care", /\b(soap|shampoo|toothpaste|toothbrush|sanitary|cream|lotion|deodorant|hair oil|face wash)\b/i],
+  ["Household", /\b(detergent|washing powder|dishwash|cleaner|tissue|toilet paper|broom|mop|bucket|sponge|garbage bag|candle|battery)\b/i],
+  ["Pantry", /\b(rice|dal|lentil|flour|atta|sugar|salt|oil|masala|spice|noodle|pasta|pulse|cereal|cornflakes|snack|chips|biscuits|pickle|sauce)\b/i],
 ];
 export const SHOPPING_CATEGORIES = ["Produce", "Dairy & Eggs", "Bakery", "Meat & Seafood", "Beverages", "Personal Care", "Household", "Pantry", "Other"];
 
