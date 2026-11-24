@@ -31,7 +31,6 @@ export function BillUploader({
       return;
     }
 
-    setRecoveryFileUri("");
     selectedFileRef.current = picked;
     setFileName(picked.name);
     const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
@@ -60,6 +59,9 @@ export function BillUploader({
       setBusy(false);
       return;
     }
+
+    // Only replace the previous saved-receipt recovery target once preparation succeeds.
+    setRecoveryFileUri("");
 
     try {
       const directImage = ["image/jpeg", "image/png", "image/webp"].includes(
