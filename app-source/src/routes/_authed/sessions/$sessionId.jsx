@@ -46,6 +46,10 @@ function SessionDetailPage() {
   const [error, setError] = useState("");
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
+  const [addMethodOpen, setAddMethodOpen] = useState(false);
+  const [addMethod, setAddMethod] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
@@ -109,6 +113,44 @@ function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+
+  useEffect(() => {
+    setVoiceSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
+  }, []);
+
+  const startVoiceCapture = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice input is not supported in this browser. Please use Manual or Camera.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onerror = (event) => {
+      setVoiceListening(false);
+      toast.error(event.error === "not-allowed" ? "Microphone permission is blocked." : "Voice capture failed. Please try again.");
+    };
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onresult = (event) => {
+      const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim();
+      if (!transcript) {
+        toast.error("No items were recognized. Try again or type them manually.");
+        return;
+      }
+      const parsed = transcript.split(/[,;\\n]|\\band\\b/gi).map((name) => name.trim()).filter(Boolean);
+      if (!parsed.length) return toast.error("No item names were recognized.");
+      setRows((current) => {
+        const existing = current.filter((row) => row.name.trim());
+        return [...existing, ...parsed.map((name) => ({ ...blankRow(), name })), blankRow()];
+      });
+      setAddMethod("voice");
+      toast.success(`Recognized ${parsed.length} item(s). Review before saving.`);
+    };
+    try { recognition.start(); } catch { toast.error("Microphone is already active. Please wait."); }
+  };
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
@@ -942,13 +984,58 @@ function SessionDetailPage() {
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <>
-        <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
-          <div>
-            <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
+        <button type="button" onClick={() => setAddMethodOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13.5px] font-bold text-primary-foreground">
+          <Plus className="h-4 w-4" /> Add items · Choose input method
+        </button>
+        {addMethodOpen ? (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="add-method-title">
+            <div className="w-full max-w-md rounded-[28px] border border-border bg-background p-4 shadow-2xl">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div><p id="add-method-title" className="text-[17px] font-extrabold">How would you like to add items?</p><p className="mt-1 text-[12px] text-muted-foreground">Choose an input method for this list.</p></div>
+                <button type="button" onClick={() => setAddMethodOpen(false)} aria-label="Close input method choices" className="rounded-full px-3 py-1 text-muted-foreground">✕</button>
+              </div>
+              <div className="space-y-2">
+                <button type="button" onClick={() => { setAddMethod("manual"); setAddMethodOpen(false); }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-white p-3 text-left hover:border-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold">⌨</span>
+                  <span><span className="block text-[13px] font-extrabold">Manual entry</span><span className="block text-[11.5px] text-muted-foreground">Type and edit item details</span></span>
+                </button>
+                <button type="button" onClick={() => { setAddMethod("voice"); setAddMethodOpen(false); }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-white p-3 text-left hover:border-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold">🎙</span>
+                  <span><span className="block text-[13px] font-extrabold">Voice input</span><span className="block text-[11.5px] text-muted-foreground">Speak items, then review the transcript</span></span>
+                </button>
+                <button type="button" onClick={() => { setAddMethod("camera"); setAddMethodOpen(false); }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-white p-3 text-left hover:border-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold">📷</span>
+                  <span><span className="block text-[13px] font-extrabold">Camera / photo</span><span className="block text-[11.5px] text-muted-foreground">Scan handwritten or printed lists</span></span>
+                </button>
+              </div>
+            </div>
           </div>
-          <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
-        </section>
+        ) : null}
+        {addMethod === "camera" ? (
+          <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
+            <div>
+              <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
+            </div>
+            <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
+          </section>
+        ) : null}
+        {addMethod === "voice" ? (
+          <section className="rounded-[20px] border border-primary/20 bg-white p-3">
+            <p className="text-[14px] font-extrabold">Voice shopping list</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Speak item names, separated by pauses, commas or “and”. Recognized text is added for review, never saved automatically.</p>
+            <button type="button" onClick={startVoiceCapture} disabled={voiceListening}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+              {voiceListening ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>🎙</span>}
+              {voiceListening ? "Listening…" : "Start voice input"}
+            </button>
+            {!voiceSupported ? <p className="mt-2 text-[11px] text-amber-700">Voice recognition may not be available in this browser. Manual entry remains available.</p> : null}
+          </section>
+        ) : null}
         {scannedDraft ? (
           <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
             <div>
@@ -969,6 +1056,7 @@ function SessionDetailPage() {
             </button>
           </form>
         ) : null}
+        {addMethod === "manual" || addMethod === "voice" ? (
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
@@ -1017,6 +1105,7 @@ function SessionDetailPage() {
             {saving ? "Saving list…" : "Save shopping list"}
           </button>
         </form>
+        ) : null}
         </>
       ) : null}
 
@@ -1081,10 +1170,13 @@ function SessionDetailPage() {
           </div>
           </>
         ) : (
-          <div className="rounded-[22px] border border-dashed border-border px-5 py-7 text-center">
-            <ShoppingBasket className="mx-auto h-6 w-6 text-muted-foreground" />
-            <p className="mt-2 text-[13px] font-bold">Your list is empty</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
+          <div className="rounded-[22px] border border-dashed border-primary/30 bg-secondary/20 px-5 py-7 text-center">
+            <ShoppingBasket className="mx-auto h-7 w-7 text-primary" />
+            <p className="mt-2 text-[14px] font-extrabold">Your list starts here</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Add items manually, speak your list or scan a photo. We'll organize your shopping as you go.</p>
+            <button type="button" onClick={() => setAddMethodOpen(true)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground">
+              <Plus className="h-4 w-4" /> Add your first items
+            </button>
           </div>
         )}
       </section>
