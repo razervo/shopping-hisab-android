@@ -10,13 +10,13 @@ function AddChoice() {
   return (
     <div className="pb-2">
       <p className="micro text-primary">SHOPPING HISAB</p>
-      <h1 className="mt-2 text-[26px] font-extrabold leading-tight tracking-tight">Add shopping</h1>
+      <h1 className="mt-2 text-[24px] font-extrabold leading-tight tracking-tight">Add shopping</h1>
       <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">
         Planning a new trip? Keep your list, cost estimate and shop bills together in one place.
       </p>
       <Link
         to="/sessions"
-        className="mt-5 flex items-center gap-4 rounded-[26px] bg-primary p-5 text-primary-foreground shadow-[0_18px_36px_-24px_rgba(11,60,40,0.9)]"
+        className="mt-5 flex items-center gap-4 rounded-[24px] bg-primary p-4.5 text-primary-foreground shadow-[0_18px_36px_-24px_rgba(11,60,40,0.9)]"
       >
         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
           <ShoppingBag className="h-7 w-7" strokeWidth={2.2} />
@@ -34,7 +34,7 @@ function AddChoice() {
       <div className="mt-3 space-y-3.5">
         <Link
           to="/add/bill"
-          className="group flex items-center gap-4 rounded-[26px] border border-border bg-white p-5 transition-colors hover:bg-secondary/50"
+          className="group flex items-center gap-4 rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/50"
         >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
             <ScanLine className="h-7 w-7" strokeWidth={2.2} />
@@ -65,7 +65,7 @@ function AddChoice() {
         </Link>
       </div>
 
-      <div className="mt-6 rounded-[22px] bg-secondary/50 px-5 py-4">
+      <div className="mt-6 rounded-[20px] bg-secondary/45 px-4 py-3.5">
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">
           <span className="font-bold text-foreground">Tip:</span> For clearer list scanning, use good light and keep the whole page inside the frame.
         </p>

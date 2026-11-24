@@ -390,7 +390,7 @@ export function RecordForm({
 
   return (
     <form onSubmit={submit} className="space-y-4 pb-28">
-      <div className="rounded-[24px] border border-border bg-white p-4">
+      <div className="rounded-[20px] border border-border bg-white p-3.5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="shop" className="micro mb-1.5 block text-muted-foreground">
@@ -422,7 +422,7 @@ export function RecordForm({
       <div className="space-y-3">
         {estimateReferenceCount > 0 ? (
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-2xl border border-border bg-white px-3 py-3">
+            <div className="rounded-[18px] border border-border bg-white px-3 py-3">
               <p className="micro text-muted-foreground">Original market estimate</p>
               <p className="tnum mt-1 text-[17px] font-extrabold">{inr(estimateReferenceTotal)}</p>
               <p className="mt-0.5 text-[10.5px] text-muted-foreground">
@@ -462,7 +462,7 @@ export function RecordForm({
           </div>
         </div>
         {bulkOpen ? (
-          <div className="space-y-2 rounded-2xl border border-border bg-white p-3">
+          <div className="space-y-2 rounded-[18px] border border-border bg-white p-3">
             <p className="text-[12px] font-bold">Paste multiple items</p>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               One item per line. Use <span className="font-semibold">Rice 5 kg</span> or columns:
@@ -506,7 +506,7 @@ export function RecordForm({
         ) : null}
 
         {allowEstimate ? (
-          <div className="space-y-2 rounded-2xl border border-dashed border-border bg-white p-3">
+          <div className="space-y-2 rounded-[18px] border border-dashed border-border bg-white p-3">
             <div>
               <p className="text-[12.5px] font-bold">Shopping lists added: {receiptCount}</p>
               <p className="text-[11px] text-muted-foreground">Scan another receipt to add its items to this same shopping list.</p>
@@ -561,7 +561,7 @@ export function RecordForm({
         <p className="rounded-xl bg-destructive/10 px-4 py-3 text-[13px] font-semibold text-destructive">{error}</p>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-4 py-3 backdrop-blur-md">
+      <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center gap-4">
           <div className="min-w-0 flex-1">
             <p className="micro text-muted-foreground">
@@ -580,7 +580,7 @@ export function RecordForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-full bg-primary px-6 py-3 text-[14px] font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+            className="rounded-full bg-primary px-5 py-3.5 text-[14px] font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
           >
             {saving ? "Saving…" : submitLabel}
           </button>

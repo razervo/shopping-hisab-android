@@ -149,7 +149,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Take a photo"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[12.5px] font-bold text-primary-foreground">
+      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[13px] font-bold text-primary-foreground">
         <Camera className="h-4 w-4" /> Take photo
       </span>
     </label>
@@ -165,7 +165,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Choose photo or PDF"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[12.5px] font-bold text-foreground">
+      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[13px] font-bold text-foreground">
         <ImageUp className="h-4 w-4" /> Gallery / PDF
       </span>
     </label>
@@ -173,7 +173,7 @@ export function BillUploader({
 
   if (compact) {
     return (
-      <div className="space-y-3 rounded-[20px] border border-border bg-white p-3">
+      <div className="space-y-3 rounded-[22px] border border-border bg-white p-3.5">
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div>
@@ -208,8 +208,8 @@ export function BillUploader({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[28px] border border-border bg-secondary/40 px-6 py-8 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
+      <div className="rounded-[24px] border border-border bg-secondary/40 px-5 py-6 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
           {busy ? <Loader2 className="h-7 w-7 animate-spin" /> : <FileText className="h-7 w-7" />}
         </div>
         <h2 className="mt-4 text-[17px] font-extrabold">
@@ -228,7 +228,7 @@ export function BillUploader({
           {" "}JPG, PNG, WEBP, HEIC and PDF supported.
         </p>
 
-        <div className="mt-5 grid gap-2.5">
+        <div className="mt-4 grid gap-2.5">
           {cameraInput}
           {galleryInput}
         </div>
