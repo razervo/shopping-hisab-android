@@ -1,5 +1,5 @@
 const CATEGORY_RULES = [
-  ["Produce", /\b(apple|banana|orange|mango|tomatoes?|potatoes?|onions?|garlic|ginger|spinach|cabbage|carrot|cucumber|lemon|chilli|pepper|vegetables?|fruits?|okra|brinjal|cauliflower|broccoli|peas|beans)\b/i],
+  ["Produce", /\b(apple|banana|orange|mango|tomato(?:es)?|potato(?:es)?|onions?|garlic|ginger|spinach|cabbage|carrot|cucumber|lemon|chilli|pepper|vegetables?|fruits?|okra|brinjal|cauliflower|broccoli|peas|beans)\b/i],
   ["Dairy & Eggs", /\b(milk|curd|yogurt|paneer|cheese|butter|ghee|cream|egg|eggs)\b/i],
   ["Bakery", /\b(bread|bun|cake|biscuit|cookie|rusk|toast|bakery|pav)\b/i],
   ["Meat & Seafood", /\b(chicken|fish|mutton|beef|pork|meat|prawn|shrimp|crab)\b/i],
