@@ -1102,7 +1102,7 @@ function SessionDetailPage() {
         </div>
       </details>
 
-      <details id="trip-step-3" open={!completed && (Boolean(latestEstimate) || (session.bills || []).length > 0)} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      <details id="trip-step-3" open={!completed} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">
