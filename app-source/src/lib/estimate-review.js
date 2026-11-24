@@ -1,6 +1,6 @@
-const LIQUID_ITEM_RE = /\\b(milk|oil|juice|water|soda|shampoo|detergent|liquid)\\b/i;
-const WEIGHT_ITEM_RE = /\\b(rice|sugar|flour|atta|dal|lentil|potato|onion|tomato|wheat|salt|spice|masala)\\b/i;
-const PACKED_ITEM_RE = /\\b(pack|packet|pouch|bottle|carton|tin|jar|sachet|box|bag)\\b/i;
+const LIQUID_ITEM_RE = /\b(milk|oil|juice|water|soda|shampoo|detergent|liquid)\b/i;
+const WEIGHT_ITEM_RE = /\b(rice|sugar|flour|atta|dal|lentil|potato|onion|tomato|wheat|salt|spice|masala)\b/i;
+const PACKED_ITEM_RE = /\b(pack|packet|pouch|bottle|carton|tin|jar|sachet|box|bag)\b/i;
 const MASS_UNITS = new Set(["g", "gram", "grams", "kg", "kilogram", "kilograms"]);
 const VOLUME_UNITS = new Set(["ml", "milliliter", "milliliters", "l", "liter", "litre", "liters", "litres"]);
 
@@ -32,5 +32,5 @@ export function reviewEstimateItems(items = []) {
 }
 
 function normalizedName(value) {
-  return String(value || "").toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+  return String(value || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
