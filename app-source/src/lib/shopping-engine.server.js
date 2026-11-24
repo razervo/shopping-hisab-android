@@ -787,7 +787,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
 
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
-    if(!Number.isSafeInteger(confirmed)||confirmed<0)return fail("Enter the final confirmed expense as a non-negative integer in paise.");
+    if(!Number.isSafeInteger(confirmed)||confirmed<=0)return fail("A shopping trip cannot be completed with ₹0.00. Enter a positive final expense in paise.");
     const requestKey=text(request.headers.get("Idempotency-Key"),160);
     const operation="session_confirm:"+sessionId;
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({confirmed_total_paise:confirmed}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
