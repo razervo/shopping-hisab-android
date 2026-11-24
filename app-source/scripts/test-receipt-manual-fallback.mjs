@@ -27,6 +27,13 @@ const directRead = nativeApi.slice(directStart, directEnd);
 assert.match(directRead, /purpose === "priced_list"\)/, "priced receipt route opts into empty item rows");
 assert.match(directRead, /!parsed\.draft\.items\.length && purpose !== "priced_list"/, "shopping lists still require detected rows");
 assert.match(directRead, /Set totals\.grandTotal only when a clearly labelled final\/net\/payable amount is visible/, "receipt prompt asks for a printed payable total, not a calculated one");
+const uploadFirst = directRead.indexOf("uploaded = await uploadGoogleDriveFile");
+const metadataBeforeOcr = directRead.indexOf("ensureDriveUploadMetadata", uploadFirst);
+const ocrAfterUpload = directRead.indexOf("parsed = await readBillWithFallback", metadataBeforeOcr);
+assert.ok(uploadFirst >= 0 && metadataBeforeOcr > uploadFirst && ocrAfterUpload > metadataBeforeOcr,
+  "receipt persistence must succeed before AI inference starts, avoiding wasted inference when Drive is unavailable");
+assert.doesNotMatch(directRead, /Promise\.allSettled\(\[readPromise, uploadPromise\]\)/,
+  "AI inference must not run concurrently with a potentially failing Drive upload");
 
 assert.match(uploader, /!result\.draft\.items\.length && purpose !== "priced_list"/, "retry allows a receipt-only review but not an empty shopping list");
 
