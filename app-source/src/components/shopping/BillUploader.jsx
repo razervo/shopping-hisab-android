@@ -86,6 +86,7 @@ export function BillUploader({
           setRecoveryFileUri(result.file_uri);
           // The original upload completed; retry reading the saved Drive receipt only.
           selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
           setError(result.error || "Receipt saved, but reading failed. You can retry.");
           return;
         }
