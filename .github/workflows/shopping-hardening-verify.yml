@@ -76,3 +76,5 @@ jobs:
         run: python3 scripts/test-drive-recovery.py
       - name: Test Base44 migration idempotency and attachment mapping
         run: python3 scripts/test-migration.py
+      - name: Test preview deployment isolation
+        run: node scripts/test-preview-deployment-safety.mjs
