@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
 import { reviewEstimateItems } from "@/lib/estimate-review";
-import { findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
+import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -70,6 +70,7 @@ function SessionDetailPage() {
   const [billLineDetails, setBillLineDetails] = useState({});
   const [estimatePrices, setEstimatePrices] = useState({});
   const [estimateSources, setEstimateSources] = useState({});
+  const [rememberedEstimateKeys, setRememberedEstimateKeys] = useState({});
   const [estimateReviewWarnings, setEstimateReviewWarnings] = useState([]);
   const [estimateReviewOpen, setEstimateReviewOpen] = useState(false);
   const [estimateSaving, setEstimateSaving] = useState(false);
@@ -113,19 +114,34 @@ function SessionDetailPage() {
   useEffect(() => {
     if (!session?.items?.length || typeof window === "undefined") return;
     const remembered = findRememberedEstimatePrices(session.items);
+    const currentKeys = Object.fromEntries(session.items.map((item) => [item.id, estimatePriceMemoryKey(item)]));
     setEstimatePrices((current) => {
       const next = { ...current };
       const inserted = [];
+      const staleRemembered = [];
+      for (const itemId of Object.keys(next)) {
+        if (estimateSources[itemId] === "remembered" && rememberedEstimateKeys[itemId] && rememberedEstimateKeys[itemId] !== currentKeys[itemId]) {
+          delete next[itemId];
+          staleRemembered.push(itemId);
+        }
+      }
       for (const [itemId, price] of Object.entries(remembered)) {
         if (next[itemId] == null || String(next[itemId]).trim() === "") {
           next[itemId] = price;
           inserted.push(itemId);
         }
       }
-      if (inserted.length) {
+      if (inserted.length || staleRemembered.length) {
         setEstimateSources((sources) => {
           const updated = { ...sources };
           for (const itemId of inserted) if (!updated[itemId]) updated[itemId] = "remembered";
+          for (const itemId of staleRemembered) delete updated[itemId];
+          return updated;
+        });
+        setRememberedEstimateKeys((keys) => {
+          const updated = { ...keys };
+          for (const itemId of inserted) updated[itemId] = currentKeys[itemId];
+          for (const itemId of staleRemembered) delete updated[itemId];
           return updated;
         });
       }
