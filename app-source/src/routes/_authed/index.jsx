@@ -45,21 +45,21 @@ function HomePage() {
 
   return (
     <div className="pb-4">
-      <section className="mb-4">
-        <p className="micro text-primary">YOUR SHOPPING COMPANION</p>
-        <h1 className="mt-2 max-w-[19ch] text-[26px] font-extrabold leading-[1.15] tracking-tight">
-          What are we shopping for today?
+      <section className="mb-5 px-1">
+        <p className="micro text-primary">SHOPPING HISAB</p>
+        <h1 className="mt-2 text-[25px] font-extrabold leading-tight tracking-tight">
+          Ready for your next shop?
         </h1>
-        <p className="mt-2 max-w-[34ch] text-[13px] leading-[1.65] text-muted-foreground">
-          Make a list, get an idea of the cost, and keep everything together while you shop.
+        <p className="mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-muted-foreground">
+          Plan your list, keep track as you shop, and check every bill.
         </p>
       </section>
 
       {activeTrips.length > 0 ? (
         <section className="mb-5">
           <div className="mb-2 px-1">
-            <h2 className="text-[14px] font-extrabold">Pick up where you left off</h2>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished shopping trips are ready.</p>
+            <h2 className="text-[14px] font-extrabold">Continue shopping</h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished trip is saved.</p>
           </div>
           <div className="space-y-2">
             {activeTrips.map((trip) => (
@@ -82,7 +82,7 @@ function HomePage() {
                 </span>
                 <span className="shrink-0 text-right">
                   <span className="block text-[12px] font-extrabold tabular-nums">{formatPaise(trip.actual_total_paise)}</span>
-                  <span className="mt-1 block text-[10px] font-bold text-primary">Continue →</span>
+                  <span className="mt-1 block text-[10px] font-bold text-primary">Resume →</span>
                 </span>
               </Link>
             ))}
@@ -91,19 +91,17 @@ function HomePage() {
       ) : null}
 
       <section className="animate-fade-up overflow-hidden rounded-[26px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
-          <Sparkles className="h-5 w-5" />
+        <div className="flex items-center gap-2 text-white/70">
+          <Sparkles className="h-4 w-4" />
+          <p className="micro">NEW SHOPPING TRIP</p>
         </div>
-        <p className="micro mt-5 text-white/65">LET'S GET READY</p>
-        <h2 className="mt-2 text-[21px] font-extrabold leading-tight">
-          Plan your next shopping trip
-        </h2>
-        <p className="mt-2 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
-          Add everything you need. Your assistant will help organise the list and estimate the cost before you go.
+        <h2 className="mt-3 text-[21px] font-extrabold leading-tight">Build your shopping list</h2>
+        <p className="mt-1.5 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
+          Start with a list, estimate your cost, and carry it with you in shopping mode.
         </p>
         <Link
           to="/sessions"
-          className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-[14px] font-extrabold text-primary transition-transform active:scale-[0.99]"
+          className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-[14px] font-extrabold text-primary transition-transform active:scale-[0.99]"
         >
           <ShoppingBag className="h-[18px] w-[18px]" />
           Start a shopping trip
@@ -113,32 +111,32 @@ function HomePage() {
 
       <section className="mt-5">
         <div className="mb-2 px-1">
-          <h2 className="text-[14px] font-extrabold">Your shopping tools</h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">Open past trips or quickly record a purchase.</p>
+          <h2 className="text-[14px] font-extrabold">Quick actions</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Jump straight to what you need.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
-            to="/history"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-3.5 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              <History className="h-5 w-5" />
-            </span>
-            <span>
-              <span className="block text-[13px] font-extrabold">My shopping</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">See your past trips and purchases</span>
-            </span>
-          </Link>
-          <Link
             to="/add/manual"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[116px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-3.5 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <ClipboardList className="h-5 w-5" />
             </span>
             <span>
               <span className="block text-[13px] font-extrabold">Add a purchase</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record something you already bought</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Enter a purchase manually</span>
+            </span>
+          </Link>
+          <Link
+            to="/history"
+            className="flex min-h-[116px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-3.5 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <History className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-[13px] font-extrabold">Shopping history</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Browse past trips and bills</span>
             </span>
           </Link>
         </div>
@@ -147,17 +145,19 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[20px] border border-border bg-white px-3.5 py-3.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
-            <ReceiptText className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-muted-foreground">Your shopping this month</p>
-            <p className="tnum mt-0.5 text-[20px] font-extrabold">{inr(overview.monthTotal)}</p>
+        <section className="mt-5 rounded-[22px] border border-border bg-white px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+              <ReceiptText className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-muted-foreground">Spent this month</p>
+              <p className="tnum mt-0.5 text-[22px] font-extrabold">{inr(overview.monthTotal)}</p>
+            </div>
+            <Link to="/history" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
+              Details <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
-          <Link to="/history" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
-            See all <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
         </section>
       ) : null}
 
