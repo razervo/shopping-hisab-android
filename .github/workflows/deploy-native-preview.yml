@@ -31,6 +31,9 @@ jobs:
       - name: Build native app
         run: npm run build:native
 
+      - name: Refuse production-targeted preview deployment
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const c=JSON.parse(fs.readFileSync("dist/server/wrangler.json","utf8")); const dbs=c.d1_databases||[]; const prodDb="4392cac4-98c2-46b1-9a54-de811873c5a8"; if(c.name!=="shopping-hisab-preview") throw new Error("Preview deploy blocked: Worker name is not shopping-hisab-preview"); if(!dbs.length||dbs.some(x=>!x.database_id||x.database_id===prodDb)) throw new Error("Preview deploy blocked: D1 database is missing or points to production"); console.log("Preview Worker and D1 target verified as isolated");'
       - name: Deploy isolated native Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
