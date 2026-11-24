@@ -9,7 +9,7 @@ const deployIndex = workflow.indexOf("Deploy isolated native Worker");
 assert.notEqual(guardIndex, -1, "preview workflow contains a fail-closed isolation guard");
 assert.notEqual(deployIndex, -1, "preview deploy step exists");
 assert.ok(guardIndex < deployIndex, "isolation guard runs before deployment");
-assert.match(workflow, /c\.name!==\"shopping-hisab-preview\"/, "preview must use its own Worker name");
+assert.match(workflow, /c\.name!=="shopping-hisab-preview"/, "preview must use its own Worker name");
 assert.match(workflow, /dbs\.some\(x=>!x\.database_id\|\|x\.database_id===prodDb\)/, "preview must reject missing or production D1 IDs");
 assert.match(workflow, /4392cac4-98c2-46b1-9a54-de811873c5a8/, "guard recognizes the production D1 ID");
 console.log("PASS: preview deployment is blocked unless Worker and D1 targets are isolated from production.");
