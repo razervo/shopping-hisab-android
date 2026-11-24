@@ -103,6 +103,9 @@ export function BillUploader({
         const result = await readShoppingBill({ data: { fileUri, purpose } });
         if (!result?.draft) {
           setRecoveryFileUri(fileUri);
+          // Upload is complete; only retry reading the saved receipt, not uploading again.
+          selectedFileRef.current = null;
+          uploadKeyRef.current = { fingerprint: "", key: "" };
           throw new Error(result?.error || "The receipt was saved, but reading failed. Retry reading the saved receipt.");
         }
         uploadKeyRef.current = { fingerprint: "", key: "" };
