@@ -21,7 +21,6 @@ export function BillUploader({
     if (!picked || uploadLockRef.current) return;
     setError("");
     setRecoveryFileUri("");
-    selectedFileRef.current = picked;
     if (!isAcceptedBill(picked)) {
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
@@ -31,6 +30,7 @@ export function BillUploader({
       return;
     }
 
+    selectedFileRef.current = picked;
     setFileName(picked.name);
     const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
     if (uploadKeyRef.current.fingerprint !== fingerprint) {
@@ -210,6 +210,11 @@ export function BillUploader({
         {recoveryFileUri ? (
           <button type="button" onClick={retrySavedReceipt} disabled={busy} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-[12px] font-bold text-foreground disabled:opacity-50">
             {busy ? "Retrying…" : "Retry reading saved receipt"}
+          </button>
+        ) : null}
+        {error && selectedFileRef.current && !recoveryFileUri ? (
+          <button type="button" onClick={retrySelectedFile} disabled={busy} className="w-full rounded-xl bg-primary px-3 py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-50">
+            {busy ? "Retrying upload and reading…" : "Retry this file"}
           </button>
         ) : null}
       </div>
