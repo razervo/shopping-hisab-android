@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
 test("infers common grocery categories and falls back safely", () => {
-  assert.equal(inferShoppingCategory("Fresh tomatoes"), "Produce");
+  assert.equal(inferShoppingCategory("Fresh tomatoes"), "Produce");\n  assert.equal(inferShoppingCategory("Potatoes"), "Produce");
   assert.equal(inferShoppingCategory("Amul milk 1L"), "Dairy & Eggs");
   assert.equal(inferShoppingCategory("Chicken"), "Meat & Seafood");
   assert.equal(inferShoppingCategory("Dishwash liquid"), "Household");
