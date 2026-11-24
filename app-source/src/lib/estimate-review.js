@@ -24,7 +24,7 @@ export function reviewEstimateItems(items = []) {
     if (WEIGHT_ITEM_RE.test(itemName) && VOLUME_UNITS.has(unit)) add("This is usually measured by weight (g/kg). Check the unit.");
     if (PACKED_ITEM_RE.test(itemName) && !packSize) add("Packaged item detected, but pack size is missing. Add a pack size if price depends on it.");
     const duplicates = normalizedNames.get(normalizedName(itemName)) || [];
-    if (duplicates.length > 1 && duplicates.some((candidate) => candidate?.id !== id) {
+    if (duplicates.length > 1 && duplicates.some((candidate) => candidate?.id !== id)) {
       add("Another list item has the same name. Check whether these should be merged or kept separate.");
     }
   }
