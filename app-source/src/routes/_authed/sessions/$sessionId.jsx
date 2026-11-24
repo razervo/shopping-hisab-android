@@ -61,6 +61,8 @@ function SessionDetailPage() {
   const manualBillSaveLockRef = useRef(false);
   const uploadedBillSaveLockRef = useRef(false);
   const billLineSaveLockRefs = useRef({});
+  const billDeleteKeysRef = useRef({});
+  const billLineDeleteKeysRef = useRef({});
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
@@ -560,11 +562,13 @@ function SessionDetailPage() {
 
   const deleteBill = async (billId) => {
     if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
+    const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
         method: "DELETE",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": requestKey },
       });
+      delete billDeleteKeysRef.current[billId];
       setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
       await loadSession();
       toast.success("Bill deleted. Trip totals recalculated.");
@@ -576,8 +580,13 @@ function SessionDetailPage() {
 
   const deleteBillLine = async (billId, lineId) => {
     if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    const requestKey = billLineDeleteKeysRef.current[lineId] || (billLineDeleteKeysRef.current[lineId] = crypto.randomUUID());
     try {
-      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE" });
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": requestKey },
+      });
+      delete billLineDeleteKeysRef.current[lineId];
       setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
       await loadSession();
       toast.success("Bill item deleted and reconciliation updated.");
