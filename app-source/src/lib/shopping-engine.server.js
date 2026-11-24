@@ -451,6 +451,12 @@ export async function handleShoppingEngine(request, env) {
 
 
   if (subpath === "estimates" && method === "POST") {
+    const idempotencyKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!idempotencyKey)return fail("An Idempotency-Key is required for estimate creation.",400);
+    const operation=`estimate_create:${sessionId}`;
+    const requestHash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body))).then(bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join(""));
+    const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();
+    if(prior){if(prior.request_hash!==requestHash)return fail("This idempotency key was already used for a different estimate request.",409);return json(safeJson(prior.response_json,{}),Number(prior.response_status)||200);}
     const lines = Array.isArray(body.lines) ? body.lines : [];
     if (!lines.length || lines.length > 500) return fail("Add between 1 and 500 estimate lines.");
     const calculationSource = text(body.calculation_source || "mixed",30);
@@ -494,9 +500,11 @@ export async function handleShoppingEngine(request, env) {
       (id,user_id,session_id,estimate_id,shopping_item_id,quantity,unit,estimated_unit_price_paise,estimated_line_total_paise,price_source,source_reference,source_observed_at,confidence,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(line.id,userId,sessionId,estimateId,line.itemId,line.quantity,line.unit,line.unitPrice,line.lineTotal,line.priceSource,line.reference,line.observed,line.confidence,timestamp));
     statements.push(db.prepare("UPDATE shopping_sessions SET latest_estimate_id=?,updated_at=? WHERE id=? AND user_id=?").bind(estimateId,timestamp,sessionId,userId));
-    await db.batch(statements);
+    const responseBody={id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared};
+    statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    try{await db.batch(statements);}catch(cause){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();if(winner){if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different estimate request.",409);return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);}throw cause;}
     await audit(db,userId,sessionId,"estimate",estimateId,"estimate_version_created",{version_number:version,estimated_total_paise:totalPaise,line_count:prepared.length});
-    return json({id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared},201);
+    return json(responseBody,201);
   }
 
   const estimateMatch=/^estimates\/([a-f0-9-]{36})$/.exec(subpath);
