@@ -84,6 +84,8 @@ export function BillUploader({
         }
         if (result?.recoverable && result?.file_uri) {
           setRecoveryFileUri(result.file_uri);
+          // The original upload completed; retry reading the saved Drive receipt only.
+          selectedFileRef.current = null;
           setError(result.error || "Receipt saved, but reading failed. You can retry.");
           return;
         }
