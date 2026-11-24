@@ -20,16 +20,18 @@ export function BillUploader({
   const handleFile = async (picked) => {
     if (!picked || uploadLockRef.current) return;
     setError("");
-    setRecoveryFileUri("");
     if (!isAcceptedBill(picked)) {
+      selectedFileRef.current = null;
       setError("Please choose a valid JPG, PNG, WEBP, HEIC photo or PDF bill.");
       return;
     }
     if (!picked.size) {
+      selectedFileRef.current = null;
       setError("The selected file is empty. Please take another photo or choose another file.");
       return;
     }
 
+    setRecoveryFileUri("");
     selectedFileRef.current = picked;
     setFileName(picked.name);
     const fingerprint = [picked.name, picked.size, picked.lastModified].join(":");
