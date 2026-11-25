@@ -32,7 +32,7 @@ jobs:
       - name: Run calendar date validation regression tests
         working-directory: app-source
         run: npm run test:date-validation
-      - name: Lint
+      - name: Run HTML escaping security regression tests\n        working-directory: app-source\n        run: npm run test:html-escape\n      - name: Lint
         working-directory: app-source
         run: npm run lint
       - name: Build application (no deployment)
