@@ -186,4 +186,20 @@ assert 'const purchaseLineMatch=/^bills\\/([a-f0-9-]{36})\\/lines\\/([a-f0-9-]{3
 assert 'const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];' in engine
 assert 'if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);' in engine
 
+# Bill-line deletion must use retry-safe keys in the API and retain the key in
+# the UI until a successful response, so a lost response can be replayed.
+delete_start = engine.index('if(purchaseLineMatch && method==="DELETE"){')
+delete_end = engine.index('if(subpath==="confirm" && method==="POST"){', delete_start)
+delete_handler = engine[delete_start:delete_end]
+for required in ["Idempotency-Key", "bill_line_delete:", "shopping_idempotency_keys",
+                "INSERT INTO shopping_idempotency_keys", "db.batch(statements)"]:
+    assert required in delete_handler, f"Missing bill-line deletion retry safeguard: {required}"
+session_ui = (ROOT / "src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
+delete_ui_start = session_ui.index("const deleteBillLine = async")
+delete_ui_end = session_ui.index("const handleScannedList", delete_ui_start)
+delete_ui_handler = session_ui[delete_ui_start:delete_ui_end]
+assert "billLineDeleteRequestKeysRef.current[lineId]" in delete_ui_handler
+assert 'headers: { "Idempotency-Key": requestKey }' in delete_ui_handler
+assert "delete billLineDeleteRequestKeysRef.current[lineId]" in delete_ui_handler
+
 print("PASS: bill deletion, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
