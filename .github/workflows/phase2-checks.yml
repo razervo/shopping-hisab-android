@@ -29,6 +29,9 @@ jobs:
       - name: Run Phase 2 regression tests
         working-directory: app-source
         run: npm run test:shopping-categories
+      - name: Run calendar date validation regression tests
+        working-directory: app-source
+        run: npm run test:date-validation
       - name: Lint
         working-directory: app-source
         run: npm run lint
