@@ -1146,7 +1146,8 @@ function SessionDetailPage() {
                       <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
                         {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
                       </span>
-                      {!completed ? (\n                        <>
+                      {!completed ? (
+                        <>
                         <button type="button" disabled={smartListSort !== "manual" || index === 0} onClick={() => moveListItem(categoryItems, item, -1)} aria-label={`Move ${item.product_name} up`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↑</span></button>
                         <button type="button" disabled={smartListSort !== "manual" || index === categoryItems.length - 1} onClick={() => moveListItem(categoryItems, item, 1)} aria-label={`Move ${item.product_name} down`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↓</span></button>
                         <button type="button" onClick={() => beginItemEdit(item)} aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
