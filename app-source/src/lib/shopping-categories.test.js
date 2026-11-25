@@ -7,6 +7,8 @@ test("infers common grocery categories and falls back safely", () => {
   assert.equal(inferShoppingCategory("Fresh tomatoes"), "Produce");
   assert.equal(inferShoppingCategory("Potatoes"), "Produce");
   assert.equal(inferShoppingCategory("Amul milk 1L"), "Dairy & Eggs");
+  assert.equal(inferShoppingCategory("Face cream"), "Personal Care");
+  assert.equal(inferShoppingCategory("Body cream"), "Personal Care");
   assert.equal(inferShoppingCategory("Chicken"), "Meat & Seafood");
   assert.equal(inferShoppingCategory("Dishwash liquid"), "Household");
   assert.equal(inferShoppingCategory("Unknown product"), "Other");
