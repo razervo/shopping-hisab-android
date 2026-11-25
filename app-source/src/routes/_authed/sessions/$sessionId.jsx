@@ -83,6 +83,8 @@ function SessionDetailPage() {
   const [itemEditDraft, setItemEditDraft] = useState({ product_name: "", planned_quantity: "", unit: "pcs", brand: "", pack_size: "", notes: "" });
   const [itemEditSaving, setItemEditSaving] = useState(false);
   const [undoItem, setUndoItem] = useState(null);
+  const [undoSaving, setUndoSaving] = useState(false);
+  const undoRestoreLockRef = useRef(false);
   const undoTimerRef = useRef(null);
   const [categoryOverrides, setCategoryOverrides] = useState(() => {
     if (typeof window === "undefined") return {};
@@ -629,7 +631,9 @@ function SessionDetailPage() {
   };
 
   const undoPlannedItem = async () => {
-    if (!undoItem) return;
+    if (!undoItem || undoRestoreLockRef.current) return;
+    undoRestoreLockRef.current = true;
+    setUndoSaving(true);
     try {
       await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -637,6 +641,7 @@ function SessionDetailPage() {
       toast.success("Item restored.");
       await loadSession();
     } catch (cause) { toast.error(cause.message || "Could not restore item."); }
+    finally { undoRestoreLockRef.current = false; setUndoSaving(false); }
   };
   const loadBillLines = async (billId) => {
     try {
@@ -1091,7 +1096,7 @@ function SessionDetailPage() {
               <div className="flex gap-2"><button type="submit" disabled={itemEditSaving} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">{itemEditSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingItemId("")} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button></div>
             </form>
           ) : null}
-          {undoItem ? <div role="status" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/50 p-3 text-sm"><span>Removed {undoItem.product_name}</span><button type="button" onClick={undoPlannedItem} className="rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground">Undo</button></div> : null}
+          {undoItem ? <div role="status" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/50 p-3 text-sm"><span>Removed {undoItem.product_name}</span><button type="button" onClick={undoPlannedItem} disabled={undoSaving} className="rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground disabled:opacity-50">{undoSaving ? "Restoring…" : "Undo"}</button></div> : null}
           <div className="space-y-3">
             {smartListGroups.length ? smartListGroups.map(([category, categoryItems]) => (
               <section key={category} className="overflow-hidden rounded-[22px] border border-border bg-white">
