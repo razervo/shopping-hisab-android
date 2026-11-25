@@ -1,5 +1,5 @@
 import test from "node:test";
-import { parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems } from "./shopping-categories.js";
+import { parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "./shopping-categories.js";
 import assert from "node:assert/strict";
 import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, filterShoppingListItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
@@ -59,4 +59,9 @@ test("smart sort modes order items without mutating original list", () => {
   assert.deepEqual(sortShoppingListItems(items, "remaining").map((item) => item.product_name), ["Rice", "Apples"]);
   assert.deepEqual(sortShoppingListItems(items, "planned").map((item) => item.product_name), ["Rice", "Apples"]);
   assert.deepEqual(items.map((item) => item.product_name), ["Rice", "Apples"]);
+});
+
+test("manual item order is stable and puts newly added items at the end", () => {
+  const items = [{ id: "a", product_name: "A" }, { id: "b", product_name: "B" }, { id: "c", product_name: "C" }];
+  assert.deepEqual(applyManualShoppingOrder(items, ["c", "a"]).map((item) => item.id), ["c", "a", "b"]);
 });
