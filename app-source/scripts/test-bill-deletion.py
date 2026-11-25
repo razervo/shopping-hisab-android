@@ -42,13 +42,13 @@ def delete_bill(bill_id, key):
     with db:
         db.execute("""INSERT INTO shopping_audit_events
           (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
-          VALUES (?,?,?,?,?,?,?,?,?)""",("audit-b1","u1","s1","actual_bill","b1","bill_deleted",snapshot,json.dumps(response),"t1"))
+          VALUES (?,?,?,?,?,?,?,?,?)""",("audit-"+bill_id,"u1","s1","actual_bill",bill_id,"bill_deleted",snapshot,json.dumps(response),"t1"))
         db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("""INSERT INTO shopping_idempotency_keys
           (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at)
-          VALUES (?,?,?,?,?,?,?,?,?)""",("idem-b1","u1","s1",operation,key,request_hash,json.dumps(response),200,"t1"))
+          VALUES (?,?,?,?,?,?,?,?,?)""",("idem-"+bill_id,"u1","s1",operation,key,request_hash,json.dumps(response),200,"t1"))
     return json.dumps(response),200
 
 # Delete succeeds; lines and bill are removed, while audit snapshot is retained.
