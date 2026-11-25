@@ -146,4 +146,29 @@ assert "if (body.name !== undefined) { patch.name = text(body.name,120); if(!pat
 assert "if(!shopName)return fail(\"A shop name is required.\");" in engine
 assert "if(body.shop_name!==undefined&&!patch.shop_name)return fail(\"A shop name is required.\);" in engine
 
-print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry, duplicate-reference cleanup and file-preservation checks.")
+
+# Item merge source-line links: duplicate source references must be removed from
+# the cancelled source item, while non-duplicate references transfer to target.
+for item_id in ["merge-source","merge-target"]:
+    db.execute("INSERT INTO shopping_items (id,user_id,session_id,product_name,normalized_name,planned_quantity,unit,item_status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+               (item_id,"u1","s1",item_id,item_id,1,"pcs","planned","t0","t0"))
+for source_id in ["merge-line-duplicate","merge-line-transfer"]:
+    db.execute("INSERT INTO shopping_source_lines (id,user_id,session_id,source_list_id,line_number,original_name,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+               (source_id,"u1","s1","sl1",1,source_id,"t0","t0"))
+db.execute("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,created_at) VALUES (?,?,?,?,?,?)",
+           ("merge-link-source-dup","u1","s1","merge-source","merge-line-duplicate","t0"))
+db.execute("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,created_at) VALUES (?,?,?,?,?,?)",
+           ("merge-link-target-dup","u1","s1","merge-target","merge-line-duplicate","t0"))
+db.execute("INSERT INTO shopping_item_sources (id,user_id,session_id,shopping_item_id,source_line_id,created_at) VALUES (?,?,?,?,?,?)",
+           ("merge-link-source-transfer","u1","s1","merge-source","merge-line-transfer","t0"))
+db.execute("DELETE FROM shopping_item_sources WHERE shopping_item_id=? AND source_line_id IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?) AND user_id=? AND session_id=?",
+           ("merge-source","merge-target","u1","s1"))
+db.execute("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND user_id=? AND session_id=?",
+           ("merge-target","merge-source","u1","s1"))
+assert db.execute("SELECT COUNT(*) FROM shopping_item_sources WHERE shopping_item_id='merge-source'").fetchone()[0]==0
+assert db.execute("SELECT COUNT(*) FROM shopping_item_sources WHERE shopping_item_id='merge-target'").fetchone()[0]==2
+assert db.execute("SELECT COUNT(*) FROM shopping_item_sources WHERE shopping_item_id='merge-target' AND source_line_id='merge-line-duplicate'").fetchone()[0]==1
+assert "DELETE FROM shopping_item_sources WHERE shopping_item_id=? AND source_line_id IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?)" in engine
+assert "UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=?" in engine
+
+print("PASS: bill deletion, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
