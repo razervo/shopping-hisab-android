@@ -1068,6 +1068,7 @@ function SessionDetailPage() {
               <div className="flex gap-2"><button type="submit" disabled={itemEditSaving} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">{itemEditSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingItemId("")} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button></div>
             </form>
           ) : null}
+          {undoItem ? <div role="status" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/50 p-3 text-sm"><span>Removed {undoItem.product_name}</span><button type="button" onClick={undoPlannedItem} className="rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground">Undo</button></div> : null}
           <div className="space-y-3">
             {smartListGroups.length ? smartListGroups.map(([category, categoryItems]) => (
               <section key={category} className="overflow-hidden rounded-[22px] border border-border bg-white">
