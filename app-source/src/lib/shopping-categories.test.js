@@ -1,5 +1,5 @@
 import test from "node:test";
-import { parseVoiceShoppingItems, findDuplicateShoppingNames } from "./shopping-categories.js";
+import { parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems } from "./shopping-categories.js";
 import assert from "node:assert/strict";
 import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, filterShoppingListItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
@@ -51,4 +51,12 @@ test("detects duplicates against the trip and within a pasted/manual batch", () 
   assert.deepEqual(findDuplicateShoppingNames(existing, ["milk 1l", "Eggs", "Eggs", "RICE"]), ["milk 1l", "Eggs", "RICE"]);
   assert.deepEqual(findDuplicateShoppingNames(existing, ["Sugar", "Salt"]), []);
   assert.deepEqual(findDuplicateShoppingNames([...existing, { product_name: "Tea", item_status: "cancelled" }], ["Tea"]), []);
+});
+
+test("smart sort modes order items without mutating original list", () => {
+  const items = [{ product_name: "Rice", planned_quantity: 4, remaining_quantity: 2 }, { product_name: "Apples", planned_quantity: 1, remaining_quantity: 1 }];
+  assert.deepEqual(sortShoppingListItems(items, "name").map((item) => item.product_name), ["Apples", "Rice"]);
+  assert.deepEqual(sortShoppingListItems(items, "remaining").map((item) => item.product_name), ["Rice", "Apples"]);
+  assert.deepEqual(sortShoppingListItems(items, "planned").map((item) => item.product_name), ["Rice", "Apples"]);
+  assert.deepEqual(items.map((item) => item.product_name), ["Rice", "Apples"]);
 });
