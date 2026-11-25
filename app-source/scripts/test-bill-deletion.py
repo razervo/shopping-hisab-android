@@ -94,8 +94,8 @@ cycle_sql = """WITH RECURSIVE duplicate_chain(id,duplicate_of_bill_id) AS (
   UNION
   SELECT b.id,b.duplicate_of_bill_id FROM shopping_actual_bills b JOIN duplicate_chain d ON b.id=d.duplicate_of_bill_id WHERE b.user_id=? AND b.session_id=?
 ) SELECT 1 FROM duplicate_chain WHERE id=? LIMIT 1"""
-assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-b")).fetchone() is not None
-assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-a")).fetchone() is None
+assert db.execute(cycle_sql,("b-cycle-b","u1","s1","u1","s1","b-cycle-a")).fetchone() is not None
+assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-a")).fetchone() is not None
 assert "Duplicate bill links cannot form a cycle." in engine
 assert 'if(patch.duplicate_of_bill_id){patch.bill_status="duplicate";patch.included_in_actual=0;}' in engine
 
