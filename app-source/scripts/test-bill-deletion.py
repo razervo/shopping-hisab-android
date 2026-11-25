@@ -42,6 +42,7 @@ def delete_bill(bill_id, key):
         db.execute("""INSERT INTO shopping_audit_events
           (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
           VALUES (?,?,?,?,?,?,?,?,?)""",("audit-b1","u1","s1","actual_bill","b1","bill_deleted",snapshot,json.dumps(response),"t1"))
+        db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1"))
         db.execute("""INSERT INTO shopping_idempotency_keys
@@ -71,4 +72,17 @@ for required in ["Idempotency-Key","shopping_idempotency_keys","shopping_audit_e
                 "DELETE FROM shopping_purchase_lines","DELETE FROM shopping_actual_bills","db.batch(statements)"]:
     assert required in handler, f"Missing bill deletion safeguard: {required}"
 assert "DELETE FROM uploaded_files" not in handler
+assert "dependent_duplicate_links" in handler or "dependent_duplicate_links" in engine
+assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
 print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry and file-preservation checks.")
+
+# Deleting a bill that another bill marks as its duplicate must not fail the
+# FK restriction; dependent links are detached and recorded in the deletion audit.
+db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-primary','u1','s1','Primary',10000,'verified',1,'t0','t0')")
+db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id,uploaded_at,updated_at) VALUES('b-dependent','u1','s1','Duplicate',10000,'duplicate',0,'b-primary','t0','t0')")
+body,status=delete_bill("b-primary","delete-primary-key")
+assert status==200 and json.loads(body)["deleted"]
+assert db.execute("SELECT duplicate_of_bill_id FROM shopping_actual_bills WHERE id='b-dependent'").fetchone()[0] is None
+linked_audit=db.execute("SELECT before_json FROM shopping_audit_events WHERE event_type='bill_deleted' AND entity_id='b-primary'").fetchone()
+assert linked_audit and json.loads(linked_audit[0])["dependent_duplicate_links"][0]["id"]=="b-dependent"
+assert not db.execute("PRAGMA foreign_key_check").fetchall()
