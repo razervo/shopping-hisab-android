@@ -100,6 +100,13 @@ assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-b")).fetch
 assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-a")).fetchone() is None
 assert "Duplicate bill links cannot form a cycle." in engine
 
+# Bill-line classification must stay consistent: extras are unmatched and matched
+# lines cannot carry the extra method. Verify the route enforces both directions.
+assert 'Extra bill lines cannot be linked to a planned item.' in engine
+assert 'Unmatched bill lines must be marked as extra.' in engine
+assert 'Matched bill lines cannot use the extra match method.' in engine
+assert 'if(effectiveIsExtra&&effectiveItemId)' in engine
+
 
 # Deleting a bill that another bill marks as its duplicate must not fail the
 # FK restriction; dependent links are detached and recorded in the deletion audit.
