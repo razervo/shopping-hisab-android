@@ -12,7 +12,8 @@
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
     "deploy:native": "npm run build:native && wrangler deploy --config dist/server/wrangler.json",
-    "build:native": "node scripts/build-native.mjs"
+    "build:native": "node scripts/build-native.mjs",
+    "test:shopping-categories": "node --test src/lib/shopping-categories.test.js"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
