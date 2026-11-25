@@ -1147,7 +1147,7 @@ function SessionDetailPage() {
                       {!completed ? (
                         <button type="button" disabled={smartListSort !== "manual" || index === 0} onClick={() => moveListItem(categoryItems, item, -1)} aria-label={`Move ${item.product_name} up`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↑</span></button>
                         <button type="button" disabled={smartListSort !== "manual" || index === categoryItems.length - 1} onClick={() => moveListItem(categoryItems, item, 1)} aria-label={`Move ${item.product_name} down`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↓</span></button>
-                        <button type="button" onClick={() => beginItemEdit(item) aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
+                        <button type="button" onClick={() => beginItemEdit(item)} aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
                         <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
                           className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
