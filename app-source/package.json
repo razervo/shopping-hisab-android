@@ -14,7 +14,8 @@
     "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
     "deploy:native": "npm run build:native && wrangler deploy --config dist/server/wrangler.json",
     "build:native": "node scripts/build-native.mjs",
-    "test:date-validation": "node --test src/lib/date-validation.test.js",\n    "test:public-profile": "node --test src/lib/public-profile.test.js",
+    "test:date-validation": "node --test src/lib/date-validation.test.js",
+    "test:public-profile": "node --test src/lib/public-profile.test.js",
     "test:html-escape": "node --test src/lib/html-escape.test.js"
   },
   "dependencies": {
@@ -104,4 +105,4 @@
     "@tanstack/start-plugin-core": "1.171.56",
     "@tanstack/query-core": "5.107.1"
   }
-}\n
+}
