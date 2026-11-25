@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { escapeHtml } from "@/lib/html-escape.js";
 import { validateAppBaseURL } from "@/lib/app-base-url.js";
+import { nativeAuthSecurityConfig } from "@/lib/native-auth-security-config.js";
 
 async function sendPasswordReset(env, { user, url }) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) {
@@ -46,6 +47,7 @@ export function createNativeAuth(env) {
   }
 
   return betterAuth({
+    ...nativeAuthSecurityConfig(),
     appName: "Shopping Hisab",
     baseURL,
     secret: env.BETTER_AUTH_SECRET,
