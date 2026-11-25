@@ -142,7 +142,7 @@ assert "normalizedLineNumbers[index]" in engine
 assert "if(!name)return fail(\"A shopping session name is required.\");" in engine
 assert "if (body.name !== undefined) { patch.name = text(body.name,120); if(!patch.name)return fail(\"A shopping session name is required.\"); }" in engine
 assert "if(!shopName)return fail(\"A shop name is required.\");" in engine
-assert "if(body.shop_name!==undefined&&!patch.shop_name)return fail(\"A shop name is required.\);" in engine
+assert "if(body.shop_name!==undefined&&!patch.shop_name)return fail(\"A shop name is required.\");" in engine
 
 
 # Item merge source-line links: duplicate source references must be removed from
