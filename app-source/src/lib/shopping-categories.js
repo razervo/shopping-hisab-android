@@ -1,3 +1,12 @@
+export function applyManualShoppingOrder(items = [], orderedIds = []) {
+  const positions = new Map(orderedIds.map((id, index) => [String(id), index]));
+  return [...items].sort((a, b) => {
+    const pa = positions.has(String(a.id)) ? positions.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+    const pb = positions.has(String(b.id)) ? positions.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+    return pa - pb;
+  });
+}
+
 export function sortShoppingListItems(items = [], sortMode = "category") {
   const copy = [...items];
   if (sortMode === "name") return copy.sort((a, b) => String(a.product_name || "").localeCompare(String(b.product_name || ""), undefined, { sensitivity: "base" }));
