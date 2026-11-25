@@ -705,6 +705,8 @@ function SessionDetailPage() {
     const validRows = scannedRows.map((row) => ({ ...row, name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit.trim() || "pcs" }));
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
+    const scannedDuplicates = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
+    if (scannedDuplicates.length && !window.confirm(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
     if (scannedListSaveLockRef.current) return;
     scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
