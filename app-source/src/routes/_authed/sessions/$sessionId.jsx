@@ -1200,7 +1200,6 @@ function SessionDetailPage() {
               </div>
             )}
           </div>
-          </section>
           </>
         ) : (
           <div className="rounded-[22px] border border-dashed border-border px-5 py-7 text-center">
