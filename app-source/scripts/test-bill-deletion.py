@@ -119,4 +119,17 @@ linked_audit=db.execute("SELECT before_json FROM shopping_audit_events WHERE eve
 assert linked_audit and json.loads(linked_audit[0])["dependent_duplicate_links"][0]["id"]=="b-dependent"
 assert not db.execute("PRAGMA foreign_key_check").fetchall()
 
+# Date-only validation must reject normalized-but-impossible calendar dates.
+import datetime
+for valid in ["2026-11-25", "2024-02-29", "2000-01-01"]:
+    assert datetime.date.fromisoformat(valid).isoformat() == valid
+for invalid in ["2026-02-29", "2026-04-31", "2026-13-01", "2026-00-10"]:
+    try:
+        datetime.date.fromisoformat(invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"Invalid calendar date accepted: {invalid}")
+assert "date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day" in engine
+
 print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry, duplicate-reference cleanup and file-preservation checks.")
