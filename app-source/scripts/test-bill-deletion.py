@@ -75,6 +75,19 @@ for required in ["Idempotency-Key","shopping_idempotency_keys","shopping_audit_e
 assert "DELETE FROM uploaded_files" not in handler
 assert "dependent_duplicate_links" in handler or "dependent_duplicate_links" in engine
 assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
+
+# Self-referential duplicate bill links are rejected by the API. SQLite's FK
+# alone permits a row to reference itself, so verify the handler guard explicitly.
+db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-self','u1','s1','Self',10000,'verified',1,'t0','t0')")
+try:
+    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id='b-self' WHERE id='b-self'
+    ")
+    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE id='b-self'
+    ")
+except sqlite3.Error:
+    raise AssertionError("SQLite fixture should demonstrate that self-reference is otherwise permitted")
+assert "A bill cannot be marked as a duplicate of itself." in handler or "A bill cannot be marked as a duplicate of itself." in engine
+
 # Deleting a bill that another bill marks as its duplicate must not fail the
 # FK restriction; dependent links are detached and recorded in the deletion audit.
 db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-primary','u1','s1','Primary',10000,'verified',1,'t0','t0')")
