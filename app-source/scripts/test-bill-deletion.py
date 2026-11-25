@@ -129,7 +129,8 @@ for invalid in ["2026-02-29", "2026-04-31", "2026-13-01", "2026-00-10"]:
         pass
     else:
         raise AssertionError(f"Invalid calendar date accepted: {invalid}")
-assert "date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day" in engine
+date_validator=(ROOT/"src/lib/date-validation.js").read_text(encoding="utf-8")
+assert "date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day" in date_validator
 
 # Source line numbering must be positive, unique, and avoid collisions when
 # auto-numbering lines that arrive without explicit OCR line numbers.
