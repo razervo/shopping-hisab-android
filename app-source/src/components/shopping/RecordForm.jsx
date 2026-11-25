@@ -10,6 +10,7 @@ import { EstimateBar } from "@/components/shopping/EstimateBar";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { estimateMarketRates } from "@/lib/server-fns";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
+import { parseVoiceShoppingItems } from "@/lib/shopping-categories";
 
 export function RecordForm({
   initial,
