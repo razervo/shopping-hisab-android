@@ -79,6 +79,11 @@ function SessionDetailPage() {
   const [confirmationSaving, setConfirmationSaving] = useState(false);
   const [adjustFinalTotal, setAdjustFinalTotal] = useState(false);
   const [mergeTargets, setMergeTargets] = useState({});
+  const [editingItemId, setEditingItemId] = useState("");
+  const [itemEditDraft, setItemEditDraft] = useState({ product_name: "", planned_quantity: "", unit: "pcs", brand: "", pack_size: "", notes: "" });
+  const [itemEditSaving, setItemEditSaving] = useState(false);
+  const [undoItem, setUndoItem] = useState(null);
+  const undoTimerRef = useRef(null);
   const [categoryOverrides, setCategoryOverrides] = useState(() => {
     if (typeof window === "undefined") return {};
     try { return JSON.parse(window.localStorage.getItem(`shopping-hisab-categories-${sessionId}`) || "{}"); }
@@ -111,6 +116,8 @@ function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+  useEffect(() => { if (!undoItem) return; undoTimerRef.current = setTimeout(() => setUndoItem(null), 10000); return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem]);
   useEffect(() => {
     try { window.localStorage.setItem(`shopping-hisab-categories-${sessionId}`, JSON.stringify(categoryOverrides)); }
     catch { /* category preferences are optional local-only enhancements */ }
@@ -564,6 +571,24 @@ function SessionDetailPage() {
     }
   };
 
+  const beginItemEdit = (item) => {
+    setEditingItemId(item.id);
+    setItemEditDraft({ product_name: item.product_name || "", planned_quantity: String(item.planned_quantity ?? ""), unit: item.unit || "pcs", brand: item.brand || "", pack_size: item.pack_size || "", notes: item.notes || "" });
+  };
+  const saveItemEdit = async (event) => {
+    event.preventDefault();
+    const quantity = Number(itemEditDraft.planned_quantity);
+    if (!itemEditDraft.product_name.trim()) return toast.error("Enter an item name.");
+    if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid quantity.");
+    setItemEditSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items/${editingItemId}`, { method: "PATCH", body: JSON.stringify({ product_name: itemEditDraft.product_name.trim(), planned_quantity: quantity, unit: itemEditDraft.unit.trim() || "pcs", brand: itemEditDraft.brand.trim(), pack_size: itemEditDraft.pack_size.trim(), notes: itemEditDraft.notes.trim() }) });
+      setEditingItemId("");
+      toast.success("Item updated.");
+      await loadSession();
+    } catch (cause) { toast.error(cause.message || "Could not update item."); }
+    finally { setItemEditSaving(false); }
+  };
   const deletePlannedItem = async (item) => {
     if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
     try {
@@ -579,12 +604,24 @@ function SessionDetailPage() {
         return next;
       });
       await loadSession();
-      toast.success("Planned item removed.");
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoItem({ ...item });
+      toast.success("Planned item removed. Undo is available for 10 seconds.");
     } catch (cause) {
       toast.error(cause.message || "Could not remove this planned item.");
     }
   };
 
+  const undoPlannedItem = async () => {
+    if (!undoItem) return;
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoItem(null);
+      toast.success("Item restored.");
+      await loadSession();
+    } catch (cause) { toast.error(cause.message || "Could not restore item."); }
+  };
   const loadBillLines = async (billId) => {
     try {
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
