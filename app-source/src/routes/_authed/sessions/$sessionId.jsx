@@ -1166,6 +1166,12 @@ function SessionDetailPage() {
           <div className="rounded-[22px] border border-dashed border-border px-5 py-7 text-center">
             <ShoppingBasket className="mx-auto h-6 w-6 text-muted-foreground" />
             <p className="mt-2 text-[13px] font-bold">Your list is empty</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Start with a few essentials, or add your own items above.</p>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {["Milk", "Eggs", "Rice", "Vegetables", "Bread"].map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => { setRows((current) => [...current.filter((row) => row.name.trim()), { ...blankRow(), name: suggestion }]); toast.info(`${suggestion} added to your entry form above.`); }} className="rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-semibold">{suggestion} +</button>
+              ))}
+            </div>
             <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
           </div>
         )}
