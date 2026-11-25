@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isValidCalendarDate } from "../src/lib/date-validation.js";
+import { isValidCalendarDate } from "./date-validation.js";
 
 test("accepts real calendar dates and leap days", () => {
   for (const date of ["2026-11-25", "2024-02-29", "2000-01-01", "2026-12-31"]) {
