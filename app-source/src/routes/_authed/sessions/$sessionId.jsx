@@ -1054,6 +1054,20 @@ function SessionDetailPage() {
             </div>
             <p className="mt-2 text-[10.5px] text-muted-foreground">Categories are suggested automatically. You can change any item’s category; your choices stay on this device for this trip.</p>
           </div>
+          {editingItemId && !completed ? (
+            <form onSubmit={saveItemEdit} className="mb-3 rounded-xl border border-border bg-white p-3 space-y-2">
+              <p className="text-xs font-bold">Edit shopping item</p>
+              <input value={itemEditDraft.product_name} onChange={(event) => setItemEditDraft((d) => ({ ...d, product_name: event.target.value }))} aria-label="Edit item name" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" min="0" step="any" value={itemEditDraft.planned_quantity} onChange={(event) => setItemEditDraft((d) => ({ ...d, planned_quantity: event.target.value }))} aria-label="Edit planned quantity" className="h-9 rounded-lg border border-border px-2 text-sm" />
+                <input value={itemEditDraft.unit} onChange={(event) => setItemEditDraft((d) => ({ ...d, unit: event.target.value }))} aria-label="Edit unit" className="h-9 rounded-lg border border-border px-2 text-sm" />
+              </div>
+              <input value={itemEditDraft.brand} onChange={(event) => setItemEditDraft((d) => ({ ...d, brand: event.target.value }))} aria-label="Edit brand" placeholder="Brand (optional)" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <input value={itemEditDraft.pack_size} onChange={(event) => setItemEditDraft((d) => ({ ...d, pack_size: event.target.value }))} aria-label="Edit pack size" placeholder="Pack size (optional)" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <textarea value={itemEditDraft.notes} onChange={(event) => setItemEditDraft((d) => ({ ...d, notes: event.target.value }))} aria-label="Edit notes" placeholder="Notes (optional)" className="w-full rounded-lg border border-border p-2 text-sm" />
+              <div className="flex gap-2"><button type="submit" disabled={itemEditSaving} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">{itemEditSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingItemId("")} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button></div>
+            </form>
+          ) : null}
           <div className="space-y-3">
             {smartListGroups.length ? smartListGroups.map(([category, categoryItems]) => (
               <section key={category} className="overflow-hidden rounded-[22px] border border-border bg-white">
@@ -1102,6 +1116,7 @@ function SessionDetailPage() {
                         {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
                       </span>
                       {!completed ? (
+                        <button type="button" onClick={() => beginItemEdit(item)} aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
                         <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
                           className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
