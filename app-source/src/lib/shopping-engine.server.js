@@ -730,6 +730,13 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     if(body.shopping_item_id!==undefined){const itemId=text(body.shopping_item_id,80)||null;if(itemId&&!await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first())return fail("Shopping item not found.",404);patch.shopping_item_id=itemId;}
     if(body.is_extra!==undefined){if(typeof body.is_extra!=="boolean")return fail("is_extra must be true or false.");patch.is_extra=body.is_extra?1:0;}
     if(body.match_method!==undefined){if(!["exact","confirmed","suggested","unmatched","extra"].includes(body.match_method))return fail("Invalid match method.");patch.match_method=body.match_method;}
+    const effectiveItemId=patch.shopping_item_id===undefined?line.shopping_item_id:patch.shopping_item_id;
+    const effectiveIsExtra=patch.is_extra===undefined?Boolean(line.is_extra):Boolean(patch.is_extra);
+    const effectiveMatchMethod=patch.match_method===undefined?line.match_method:patch.match_method;
+    if(effectiveIsExtra&&effectiveItemId)return fail("Extra bill lines cannot be linked to a planned item.",400);
+    if(!effectiveIsExtra&&!effectiveItemId)return fail("Unmatched bill lines must be marked as extra.",400);
+    if(effectiveIsExtra&&effectiveMatchMethod!=="extra")patch.match_method="extra";
+    if(!effectiveIsExtra&&effectiveMatchMethod==="extra")return fail("Matched bill lines cannot use the extra match method.",400);
     if(!Object.keys(patch).length)return fail("No supported bill-line changes were supplied.");
     patch.corrected_values_json=JSON.stringify({...safeJson(line.corrected_values_json,{}),...patch});
     patch.updated_at=now();
