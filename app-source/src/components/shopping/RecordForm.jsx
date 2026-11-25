@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ListPlus, Plus } from "lucide-react";
+import { ListPlus, Mic, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
@@ -36,6 +36,7 @@ export function RecordForm({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
   const [receiptCount, setReceiptCount] = useState(() => Math.max(1, Array.isArray(initial?.receipts) ? initial.receipts.length : 0));
   const [receiptMessage, setReceiptMessage] = useState("");
   const [receipts, setReceipts] = useState(() => Array.isArray(initial?.receipts) ? initial.receipts : (billFileUri ? [{ id: "receipt-1", file_uri: billFileUri, kind: "shopping_list", status: "attached", amount: 0 }] : []));
@@ -86,6 +87,41 @@ export function RecordForm({
     }
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
+  const startVoiceEntry = () => {
+    const SpeechRecognitionApi = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognitionApi) {
+      toast.error("Voice input is not supported in this browser. Try Chrome or enter items manually.");
+      return;
+    }
+    const recognition = new SpeechRecognitionApi();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = (event) => {
+      setVoiceListening(false);
+      toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Please try again or enter items manually.");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      const names = parseVoiceShoppingItems(transcript);
+      if (!names.length) {
+        toast.info("No items recognized. Try saying: milk, eggs, rice.");
+        return;
+      }
+      setItems((prev) => [...prev.filter((item) => String(item.name || "").trim()), ...names.map((name) => ({ ...emptyItem(), name }))]);
+      setEstimateMsg(`Added ${names.length} item(s) from voice. Review names and quantities before saving.`);
+      toast.success(`Added ${names.length} item(s) from voice input.`);
+    };
+    try {
+      recognition.start();
+    } catch {
+      setVoiceListening(false);
+      toast.error("Could not start voice input. Please try again.");
+    }
+  };
   const addBulkItems = () => {
     const parsed = String(bulkText || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
       const cells = line.includes("\t") ? line.split("\t") : line.includes("|") ? line.split("|") : line.includes(",") ? line.split(",") : null;
@@ -447,6 +483,14 @@ export function RecordForm({
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
+              onClick={startVoiceEntry}
+              disabled={voiceListening}
+              aria-label="Add items by voice"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground disabled:opacity-60"
+            >
+              <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Listening…" : "Voice"}
+            </button>
+            <button
               onClick={() => { setBulkOpen((open) => !open); setBulkError(""); }}
               className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground"
             >
