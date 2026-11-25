@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         working-directory: app-source
         run: npm install
+      - name: Run Phase 3 integrity regression checks
+        working-directory: app-source
+        run: python scripts/test-bill-deletion.py
       - name: Run Phase 2 regression tests
         working-directory: app-source
         run: npm run test:shopping-categories
