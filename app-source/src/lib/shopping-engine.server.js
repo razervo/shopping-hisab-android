@@ -601,8 +601,11 @@ export async function handleShoppingEngine(request, env) {
     const snapshot=JSON.stringify({bill:existing,purchase_lines:lines.results||[]});
     const timestamp=now();
     const responseBody={success:true,deleted:true,bill_id:billId};
+    const dependentBills=await db.prepare("SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).all();
+    const snapshotWithDependents=JSON.stringify({bill:existing,purchase_lines:lines.results||[],dependent_duplicate_links:dependentBills.results||[]});
     const statements=[
-      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshot,JSON.stringify(responseBody),timestamp),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshotWithDependents,JSON.stringify(responseBody),timestamp),
+      db.prepare("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL,updated_at=? WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?").bind(timestamp,billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
