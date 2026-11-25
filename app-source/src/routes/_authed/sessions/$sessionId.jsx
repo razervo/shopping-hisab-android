@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays, Loader2, Mic, Plus, RefreshCw, Search, Shoppin
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
-import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems } from "@/lib/shopping-categories";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -718,6 +718,8 @@ function SessionDetailPage() {
       return;
     }
 
+    const duplicateNames = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
+    if (duplicateNames.length && !window.confirm(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
     if (manualListSaveLockRef.current) return;
     manualListSaveLockRef.current = true;
     setSaving(true);
