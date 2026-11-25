@@ -75,8 +75,6 @@ for required in ["Idempotency-Key","shopping_idempotency_keys","shopping_audit_e
 assert "DELETE FROM uploaded_files" not in handler
 assert "dependent_duplicate_links" in handler or "dependent_duplicate_links" in engine
 assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
-print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry and file-preservation checks.")
-
 # Deleting a bill that another bill marks as its duplicate must not fail the
 # FK restriction; dependent links are detached and recorded in the deletion audit.
 db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-primary','u1','s1','Primary',10000,'verified',1,'t0','t0')")
@@ -87,3 +85,5 @@ assert db.execute("SELECT duplicate_of_bill_id FROM shopping_actual_bills WHERE 
 linked_audit=db.execute("SELECT before_json FROM shopping_audit_events WHERE event_type='bill_deleted' AND entity_id='b-primary'").fetchone()
 assert linked_audit and json.loads(linked_audit[0])["dependent_duplicate_links"][0]["id"]=="b-dependent"
 assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
+print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry, duplicate-reference cleanup and file-preservation checks.")
