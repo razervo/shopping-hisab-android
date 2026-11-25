@@ -633,6 +633,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     // Duplicate and void bills must never be counted, even if a client explicitly requests inclusion.
     if(["duplicate","void"].includes(patch.bill_status??existing.bill_status))patch.included_in_actual=0;
     if(body.duplicate_of_bill_id!==undefined){
+      if(body.duplicate_of_bill_id===billId)return fail("A bill cannot be marked as a duplicate of itself.",400);
       if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);}
       patch.duplicate_of_bill_id=body.duplicate_of_bill_id||null;
     }
