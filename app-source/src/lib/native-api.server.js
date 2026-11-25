@@ -1,5 +1,5 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
-import { isValidCalendarDate } from "@/lib/date-validation.js";
+import { isValidCalendarDate } from "@/lib/date-validation.js";\nimport { publicProfile } from "@/lib/public-profile.js";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
