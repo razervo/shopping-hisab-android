@@ -50,6 +50,7 @@ function SessionDetailPage() {
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
   const billLineRequestKeysRef = useRef({});
+  const billLineDeleteRequestKeysRef = useRef({});
   const uploadedBillCreateKeyRef = useRef(null);
   const uploadedBillLinesKeyRef = useRef(null);
   const scannedSourceLinesKeyRef = useRef(null);
@@ -698,8 +699,10 @@ function SessionDetailPage() {
 
   const deleteBillLine = async (billId, lineId) => {
     if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    const requestKey = billLineDeleteRequestKeysRef.current[lineId] || (billLineDeleteRequestKeysRef.current[lineId] = crypto.randomUUID());
     try {
-      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE" });
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE", headers: { "Idempotency-Key": requestKey } });
+      delete billLineDeleteRequestKeysRef.current[lineId];
       setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
       await loadSession();
       toast.success("Bill item deleted and reconciliation updated.");
