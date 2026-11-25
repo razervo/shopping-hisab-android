@@ -145,6 +145,10 @@ assert "if(!shopName)return fail(\"A shop name is required.\");" in engine
 assert "if(body.shop_name!==undefined&&!patch.shop_name)return fail(\"A shop name is required.\");" in engine
 
 
+# Seed the parent source list required by source-line foreign keys.
+db.execute("""INSERT INTO shopping_source_lists (id,user_id,session_id,source_type,ocr_status,created_at)
+              VALUES (?,?,?,?,?,?)""", ("sl1","u1","s1","manual_entry","not_applicable","t0"))
+
 # Item merge source-line links: duplicate source references must be removed from
 # the cancelled source item, while non-duplicate references transfer to target.
 for item_id in ["merge-source","merge-target"]:
