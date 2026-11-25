@@ -94,7 +94,7 @@ function SessionDetailPage() {
   const [smartListSearch, setSmartListSearch] = useState("");
   const [smartListFilter, setSmartListFilter] = useState("all");
   const [smartListSort, setSmartListSort] = useState("category");
-  const [manualItemOrder, setManualItemOrder] = useState(() => { try { return JSON.parse(window.localStorage.getItem(`shopping-hisab-order-${sessionId}`) || "[]"); } catch { return []; } });
+  const [manualItemOrder, setManualItemOrder] = useState(() => { if (typeof window === "undefined") return []; try { const saved = JSON.parse(window.localStorage.getItem(`shopping-hisab-order-${sessionId}`) || "[]"); return Array.isArray(saved) ? saved : []; } catch { return []; } });
 
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
