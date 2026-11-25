@@ -741,7 +741,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
 
-  const purchaseLineMatch=/^bills\/[a-f0-9-]{36}\/lines\/([a-f0-9-]{36})$/.exec(subpath);
+  const purchaseLineMatch=/^bills\/([a-f0-9-]{36})\/lines\/([a-f0-9-]{36})$/.exec(subpath);
   if(purchaseLineMatch && method==="PATCH"){
     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
@@ -795,9 +795,9 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
   if(purchaseLineMatch && method==="DELETE"){
-    const lineId=purchaseLineMatch[1];
+    const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
-    if(!line)return fail("Bill line not found.",404);
+    if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
     const timestamp=now();
     const statements=[
       db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
