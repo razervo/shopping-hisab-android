@@ -1,3 +1,11 @@
+export function sortShoppingListItems(items = [], sortMode = "category") {
+  const copy = [...items];
+  if (sortMode === "name") return copy.sort((a, b) => String(a.product_name || "").localeCompare(String(b.product_name || ""), undefined, { sensitivity: "base" }));
+  if (sortMode === "remaining") return copy.sort((a, b) => Number(b.remaining_quantity ?? b.planned_quantity ?? 0) - Number(a.remaining_quantity ?? a.planned_quantity ?? 0));
+  if (sortMode === "planned") return copy.sort((a, b) => Number(b.planned_quantity || 0) - Number(a.planned_quantity || 0));
+  return copy;
+}
+
 export function findDuplicateShoppingNames(existingItems = [], incomingNames = []) {
   const normalize = (name) => String(name || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").trim();
   const existing = new Set(existingItems.filter((item) => item?.item_status !== "cancelled").map((item) => normalize(item?.product_name)).filter(Boolean));
