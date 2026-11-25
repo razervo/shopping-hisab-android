@@ -171,4 +171,9 @@ assert db.execute("SELECT COUNT(*) FROM shopping_item_sources WHERE shopping_ite
 assert "DELETE FROM shopping_item_sources WHERE shopping_item_id=? AND source_line_id IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?)" in engine
 assert "UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=?" in engine
 
+# Reconciliation must not trust a stale line amount after quantity/unit price edits.
+assert 'if((body.quantity!==undefined||body.unit_price_paise!==undefined)&&body.line_amount_paise===undefined)patch.line_amount_paise=null;' in engine
+# Explicit line amount in the same request is preserved as a deliberate correction.
+assert 'body.line_amount_paise===undefined' in engine and 'patch.line_amount_paise=null' in engine
+
 print("PASS: bill deletion, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
