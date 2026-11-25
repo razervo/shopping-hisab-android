@@ -1,4 +1,4 @@
-import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth";\nimport { escapeHtml } from "@/lib/html-escape.js";
 
 async function sendPasswordReset(env, { user, url }) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) {
@@ -15,7 +15,7 @@ async function sendPasswordReset(env, { user, url }) {
       from: env.MAIL_FROM,
       to: [user.email],
       subject: "Reset your Shopping Hisab password",
-      html: `<p>Hello ${String(user.name || "there").replace(/[<>]/g, "")},</p><p>Use the secure link below to reset your Shopping Hisab password.</p><p><a href="${url}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+      html: `<p>Hello ${escapeHtml(user.name || "there")},</p><p>Use the secure link below to reset your Shopping Hisab password.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
     }),
   });
 
