@@ -1,10 +1,8 @@
-/* global URL */
-
 export function validateAppBaseURL(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   let parsed;
   try {
-    parsed = new URL(value.trim());
+    parsed = new globalThis.URL(value.trim());
   } catch {
     return null;
   }
