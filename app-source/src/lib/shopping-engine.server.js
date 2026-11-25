@@ -642,6 +642,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
       if(body.duplicate_of_bill_id===billId)return fail("A bill cannot be marked as a duplicate of itself.",400);
       if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);const cycle=await db.prepare(`WITH RECURSIVE duplicate_chain(id,duplicate_of_bill_id) AS (SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? UNION SELECT b.id,b.duplicate_of_bill_id FROM shopping_actual_bills b JOIN duplicate_chain d ON b.id=d.duplicate_of_bill_id WHERE b.user_id=? AND b.session_id=?) SELECT 1 FROM duplicate_chain WHERE id=? LIMIT 1`).bind(body.duplicate_of_bill_id,userId,sessionId,userId,sessionId,billId).first();if(cycle)return fail("Duplicate bill links cannot form a cycle.",400);}
       patch.duplicate_of_bill_id=body.duplicate_of_bill_id||null;
+      if(patch.duplicate_of_bill_id){patch.bill_status="duplicate";patch.included_in_actual=0;}
     }
     if(!Object.keys(patch).length)return fail("No supported bill changes were supplied.");
     const effectiveTotal=patch.bill_total_paise===undefined?existing.bill_total_paise:patch.bill_total_paise;
