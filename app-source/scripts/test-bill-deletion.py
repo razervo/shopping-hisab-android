@@ -36,7 +36,8 @@ def delete_bill(bill_id, key):
     if bill is None: return json.dumps({"error":"Bill not found."}),404
     lines=db.execute("""SELECT * FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?""",
                     (bill_id,"u1","s1")).fetchall()
-    snapshot=json.dumps({"bill":bill,"purchase_lines":lines})
+    dependent=db.execute("SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?",(bill_id,"u1","s1")).fetchall()
+    snapshot=json.dumps({"bill":bill,"purchase_lines":lines,"dependent_duplicate_links":dependent})
     response={"success":True,"deleted":True,"bill_id":bill_id}
     with db:
         db.execute("""INSERT INTO shopping_audit_events
