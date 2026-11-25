@@ -1,5 +1,6 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
 import { calculateEstimateLineTotalPaise } from "@/lib/estimate-money";
+import { isValidCalendarDate } from "@/lib/date-validation.js";
 
 const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
@@ -12,13 +13,7 @@ const safeJson = (value, fallback = {}) => {
   if (value == null || value === "") return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
 };
-const validDate = (value) => {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(String(value || ""));
-  if (!match) return false;
-  const [, year, month, day] = match.map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-};
+const validDate = isValidCalendarDate;
 
 async function audit(db, userId, sessionId, entityType, entityId, eventType, after, before = null) {
   await db.prepare(`INSERT INTO shopping_audit_events
