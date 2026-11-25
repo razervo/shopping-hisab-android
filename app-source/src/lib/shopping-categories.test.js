@@ -50,4 +50,5 @@ test("detects duplicates against the trip and within a pasted/manual batch", () 
   const existing = [{ product_name: "Milk 1L" }, { product_name: "Rice" }];
   assert.deepEqual(findDuplicateShoppingNames(existing, ["milk 1l", "Eggs", "Eggs", "RICE"]), ["milk 1l", "Eggs", "RICE"]);
   assert.deepEqual(findDuplicateShoppingNames(existing, ["Sugar", "Salt"]), []);
+  assert.deepEqual(findDuplicateShoppingNames([...existing, { product_name: "Tea", item_status: "cancelled" }], ["Tea"]), []);
 });
