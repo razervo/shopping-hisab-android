@@ -1,3 +1,17 @@
+export function findDuplicateShoppingNames(existingItems = [], incomingNames = []) {
+  const normalize = (name) => String(name || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").trim();
+  const existing = new Set(existingItems.map((item) => normalize(item?.product_name)).filter(Boolean));
+  const seenIncoming = new Set();
+  const duplicates = [];
+  for (const name of incomingNames) {
+    const key = normalize(name);
+    if (!key) continue;
+    if (existing.has(key) || seenIncoming.has(key)) duplicates.push(String(name).trim());
+    seenIncoming.add(key);
+  }
+  return [...new Set(duplicates)];
+}
+
 export function parseVoiceShoppingItems(transcript) {
   return String(transcript || "")
     .replace(/^\s*(add|please add|i need|we need|buy)\s+/i, "")
