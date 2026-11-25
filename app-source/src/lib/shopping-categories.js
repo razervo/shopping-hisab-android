@@ -52,6 +52,8 @@ export const SHOPPING_CATEGORIES = ["Produce", "Dairy & Eggs", "Bakery", "Meat &
 export function inferShoppingCategory(name) {
   const text = String(name || "").trim();
   if (!text) return "Other";
+  // Personal-care creams should not be classified as grocery dairy.
+  if (/\\b(face|body|hand|skin)\\s+cream\\b/i.test(text)) return "Personal Care";
   for (const [category, pattern] of CATEGORY_RULES) {
     if (pattern.test(text)) return category;
   }
