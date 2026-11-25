@@ -2,8 +2,6 @@ name: Phase 2 checks
 
 on:
   pull_request:
-    branches:
-      - phase2-complete-feature-work
   push:
     branches:
       - phase2-complete-feature-work
