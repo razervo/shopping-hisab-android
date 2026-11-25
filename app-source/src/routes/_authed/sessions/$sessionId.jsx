@@ -1154,6 +1154,7 @@ function SessionDetailPage() {
                           className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </button>
+                        </>
                       ) : null}
                     </div>
                   </div>
