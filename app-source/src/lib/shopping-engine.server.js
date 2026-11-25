@@ -751,6 +751,10 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     for(const key of ["brand","pack_size","unit"])if(body[key]!==undefined)patch[key]=text(body[key],100);
     if(body.quantity!==undefined){patch.quantity=Number(body.quantity);if(!Number.isFinite(patch.quantity)||patch.quantity<0||patch.quantity>1000000)return fail("Invalid quantity.");}
     for(const key of ["unit_price_paise","line_amount_paise"]){if(body[key]!==undefined){const n=body[key]==null?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`Invalid ${key}.`);patch[key]=n;}}
+    // Quantity/unit-price edits invalidate a previously stored amount unless the
+    // caller explicitly supplies a replacement amount in the same PATCH. This
+    // prevents stale reconciliation while preserving deliberate manual overrides.
+    if((body.quantity!==undefined||body.unit_price_paise!==undefined)&&body.line_amount_paise===undefined)patch.line_amount_paise=null;
     if(body.shopping_item_id!==undefined){const itemId=text(body.shopping_item_id,80)||null;if(itemId&&!await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first())return fail("Shopping item not found.",404);patch.shopping_item_id=itemId;}
     if(body.is_extra!==undefined){if(typeof body.is_extra!=="boolean")return fail("is_extra must be true or false.");patch.is_extra=body.is_extra?1:0;}
     if(body.match_method!==undefined){if(!["exact","confirmed","suggested","unmatched","extra"].includes(body.match_method))return fail("Invalid match method.");patch.match_method=body.match_method;}
