@@ -66,6 +66,8 @@ function SessionDetailPage() {
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
+  const [billLineEditDrafts, setBillLineEditDrafts] = useState({});
+  const [billLineEditSaving, setBillLineEditSaving] = useState("");
   const [estimatePrices, setEstimatePrices] = useState({});
   const [estimateSources, setEstimateSources] = useState({});
   const [estimateSaving, setEstimateSaving] = useState(false);
@@ -666,6 +668,32 @@ function SessionDetailPage() {
       toast.error(cause.message || "Could not delete this bill.");
       await loadSession();
     }
+  };
+
+  const editBillLine = (billId, line) => setBillLineEditDrafts((current) => ({
+    ...current, [line.id]: { product_name: line.product_name, quantity: String(line.quantity), amount: line.line_amount_paise == null ? "" : (Number(line.line_amount_paise) / 100).toFixed(2) }
+  }));
+
+  const saveBillLineEdit = async (billId, lineId) => {
+    const draft = billLineEditDrafts[lineId];
+    if (!draft) return;
+    const quantity = Number(draft.quantity);
+    const amount = draft.amount.trim() === "" ? null : Number(draft.amount);
+    if (!draft.product_name.trim()) return toast.error("Bill item name is required.");
+    if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid quantity.");
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(Math.round(amount * 100)))) return toast.error("Enter a valid line amount.");
+    setBillLineEditSaving(lineId);
+    try {
+      const updated = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ product_name: draft.product_name.trim(), quantity, line_amount_paise: amount === null ? null : Math.round(amount * 100) }),
+      });
+      setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).map((line) => line.id === lineId ? updated : line) }));
+      setBillLineEditDrafts((current) => { const next = { ...current }; delete next[lineId]; return next; });
+      await loadSession();
+      toast.success("Bill item updated; reconciliation refreshed.");
+    } catch (cause) { toast.error(cause.message || "Could not update bill item."); }
+    finally { setBillLineEditSaving(""); }
   };
 
   const deleteBillLine = async (billId, lineId) => {
@@ -1455,12 +1483,29 @@ function SessionDetailPage() {
               {billLineDetails[bill.id] ? (
                 <div className="mt-2 space-y-1.5">
                   {billLineDetails[bill.id].length ? billLineDetails[bill.id].map((line) => (
-                    <div key={line.id} className="flex justify-between gap-2 rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
-                      <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
-                        <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
-                      </div>
+                    <div key={line.id} className="rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
+                      {billLineEditDrafts[line.id] ? (
+                        <div className="space-y-1.5">
+                          <input value={billLineEditDrafts[line.id].product_name} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], product_name: event.target.value } }))} aria-label="Edit bill item name" className="h-8 w-full rounded border border-border bg-background px-2" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].quantity} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], quantity: event.target.value } }))} aria-label="Edit quantity" className="h-8 rounded border border-border bg-background px-2" />
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].amount} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], amount: event.target.value } }))} aria-label="Edit line amount" placeholder="₹ amount" className="h-8 rounded border border-border bg-background px-2" />
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" disabled={billLineEditSaving === line.id} onClick={() => saveBillLineEdit(bill.id, line.id)} className="text-primary font-bold underline">Save</button>
+                            <button type="button" onClick={() => setBillLineEditDrafts((current) => { const next = { ...current }; delete next[line.id]; return next; })} className="text-muted-foreground underline">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between gap-2">
+                          <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
+                            <button type="button" onClick={() => editBillLine(bill.id, line)} aria-label={`Edit ${line.product_name}`} className="font-bold text-primary underline">Edit</button>
+                            <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )) : <p className="text-[11px] text-muted-foreground">No item details recorded yet.</p>}
                 </div>
