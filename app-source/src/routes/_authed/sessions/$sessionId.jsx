@@ -589,7 +589,7 @@ function SessionDetailPage() {
     const neighborPosition = orderedIds.indexOf(currentIds[nextIndex]);
     if (currentPosition >= 0 && neighborPosition >= 0) [orderedIds[currentPosition], orderedIds[neighborPosition]] = [orderedIds[neighborPosition], orderedIds[currentPosition]];
     setManualItemOrder(orderedIds);
-    try { window.localStorage.setItem(`shopping-hisab-order-${sessionId}`, JSON.stringify(orderedIds)); } catch {}
+    try { window.localStorage.setItem(`shopping-hisab-order-${sessionId}`, JSON.stringify(orderedIds)); } catch { /* Local reorder persistence is best-effort. */ }
     setSmartListSort("manual");
   };
   const beginItemEdit = (item) => {
