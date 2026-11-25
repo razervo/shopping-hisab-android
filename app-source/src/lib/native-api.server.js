@@ -407,7 +407,7 @@ async function handleDriveInitialize(env, user) {
 
 async function handleProfile(request, env, user) {
   if (request.method === "GET") {
-    return json(user);
+    return json(publicProfile(user));
   }
   if (request.method !== "PATCH" && request.method !== "PUT") return error("Method not allowed.", 405);
   const input = await request.json();
