@@ -114,6 +114,7 @@ export async function handleShoppingEngine(request, env) {
     const shoppingDate=text(body.shopping_date,10);
     if(!validDate(shoppingDate))return fail("A valid shopping_date (YYYY-MM-DD) is required.");
     const name=text(body.name,120);
+    if(!name)return fail("A shopping session name is required.");
     const requestKey=text(request.headers.get("Idempotency-Key"),160);
     const operation="session_create";
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({name,shopping_date:shoppingDate}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
@@ -232,7 +233,7 @@ export async function handleShoppingEngine(request, env) {
   if (!subpath && method === "GET") return json(await sessionDetail(db,userId,sessionId));
   if (!subpath && method === "PATCH") {
     const patch = {};
-    if (body.name !== undefined) patch.name = text(body.name,120);
+    if (body.name !== undefined) { patch.name = text(body.name,120); if(!patch.name)return fail("A shopping session name is required."); }
     if (body.shopping_date !== undefined) {
       if (!validDate(body.shopping_date)) return fail("A valid shopping date is required.");
       patch.shopping_date = body.shopping_date;
@@ -534,6 +535,7 @@ export async function handleShoppingEngine(request, env) {
       }
     }
     const shopName=text(body.shop_name,160);
+    if(!shopName)return fail("A shop name is required.");
     const purchaseDate=body.purchase_date==null||body.purchase_date===""?null:text(body.purchase_date,10);
     if (purchaseDate&&!validDate(purchaseDate)) return fail("Invalid bill purchase date.");
     const moneyFields=["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise","line_total_paise"];
@@ -643,6 +645,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     }
     const patch={};
     for(const key of ["shop_name","receipt_number","original_file_uri"]) if(body[key]!==undefined) patch[key]=text(body[key],key==="original_file_uri"?1200:160);
+    if(body.shop_name!==undefined&&!patch.shop_name)return fail("A shop name is required.");
     if(body.purchase_date!==undefined){if(body.purchase_date&&!validDate(body.purchase_date))return fail("Invalid bill purchase date.");patch.purchase_date=body.purchase_date||null;}
     for(const key of ["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise"]){
       if(body[key]!==undefined){const n=body[key]==null||body[key]===""?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`${key} must be a non-negative integer in paise.`);patch[key]=n;}
