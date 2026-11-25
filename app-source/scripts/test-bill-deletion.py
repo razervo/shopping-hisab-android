@@ -80,10 +80,8 @@ assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
 # alone permits a row to reference itself, so verify the handler guard explicitly.
 db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-self','u1','s1','Self',10000,'verified',1,'t0','t0')")
 try:
-    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id='b-self' WHERE id='b-self'
-    ")
-    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE id='b-self'
-    ")
+    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id='b-self' WHERE id='b-self'")
+    db.execute("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL WHERE id='b-self'")
 except sqlite3.Error:
     raise AssertionError("SQLite fixture should demonstrate that self-reference is otherwise permitted")
 assert "A bill cannot be marked as a duplicate of itself." in handler or "A bill cannot be marked as a duplicate of itself." in engine
