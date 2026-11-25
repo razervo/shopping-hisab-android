@@ -44,3 +44,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
         run: npx wrangler deploy --config dist/server/wrangler.json
+
+      - name: Ensure persistent auth secret exists on test Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
+        run: |
+          if ! npx wrangler secret list --config dist/server/wrangler.json | grep -q 'BETTER_AUTH_SECRET'; then
+            openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET --config dist/server/wrangler.json
+          else
+            echo "Persistent test auth secret already exists; leaving it unchanged."
+          fi
