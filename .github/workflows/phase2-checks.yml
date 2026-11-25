@@ -1,0 +1,36 @@
+name: Phase 2 checks
+
+on:
+  pull_request:
+    branches:
+      - phase2-complete-feature-work
+  push:
+    branches:
+      - phase2-complete-feature-work
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: app-source
+        run: npm install
+      - name: Run Phase 2 regression tests
+        working-directory: app-source
+        run: npm run test:shopping-categories
+      - name: Lint
+        working-directory: app-source
+        run: npm run lint
+      - name: Build application (no deployment)
+        working-directory: app-source
+        run: npm run build
