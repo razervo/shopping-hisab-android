@@ -299,6 +299,19 @@ export async function handleShoppingEngine(request, env) {
         .bind(userId,operation,requestKey).first();
       if (prior) return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);
     }
+    const lineNumbers=new Set();
+    for(const line of lines){
+      if(line?.line_number!==undefined){
+        if(!Number.isInteger(line.line_number)||line.line_number<1||line.line_number>200)return fail("Source line numbers must be unique positive integers from 1 to 200.");
+        if(lineNumbers.has(line.line_number))return fail("Source line numbers must be unique.");
+        lineNumbers.add(line.line_number);
+      }
+    }
+    const normalizedLineNumbers=lines.map(line=>{
+      if(Number.isInteger(line?.line_number))return line.line_number;
+      let candidate=1;while(lineNumbers.has(candidate))candidate++;
+      lineNumbers.add(candidate);return candidate;
+    });
     const timestamp=now(), statements=[], createdLineIds=[];
     for (let index=0;index<lines.length;index++) {
       const line=lines[index]||{};
@@ -314,7 +327,7 @@ export async function handleShoppingEngine(request, env) {
       statements.push(db.prepare(`INSERT INTO shopping_source_lines
         (id,user_id,session_id,source_list_id,line_number,original_name,recognized_name,brand,product_type,pack_size,quantity,unit,ocr_confidence,original_ocr_json,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(lineId,userId,sessionId,listId,
-          Number.isInteger(line.line_number)?line.line_number:index+1,originalName,recognizedName,
+          normalizedLineNumbers[index],originalName,recognizedName,
           text(line.brand,100),text(line.product_type||"unsure",40),text(line.pack_size,60),quantity,
           text(line.unit,24),confidence,JSON.stringify(line.original_ocr && typeof line.original_ocr==="object"?line.original_ocr:line),timestamp,timestamp));
     }
