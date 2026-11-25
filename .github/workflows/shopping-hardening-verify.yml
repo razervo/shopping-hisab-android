@@ -2,7 +2,7 @@ name: Shopping Hisab hardening verification
 
 on:
   push:
-    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration, ux-recovery-voice-zero-trip-fixes]
+    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration, ux-recovery-voice-zero-trip-fixes, phase2-complete-feature-work]
     paths:
       - "app-source/**"
       - ".github/workflows/shopping-hardening-verify.yml"
@@ -46,6 +46,8 @@ jobs:
               raise SystemExit(f'Foreign key violations: {violations}')
           print('All native migrations applied to fresh SQLite and FK check passed.')
           PY
+      - name: Test native auth security configuration
+        run: npm run test:native-auth-security
       - name: Test combined legacy and session reporting
         run: python3 scripts/test-reporting.py
       - name: Test final expense confirmation retry safety

@@ -1,4 +1,7 @@
 import { betterAuth } from "better-auth";
+import { escapeHtml } from "@/lib/html-escape.js";
+import { validateAppBaseURL } from "@/lib/app-base-url.js";
+import { nativeAuthSecurityConfig } from "@/lib/native-auth-security-config.js";
 
 async function sendPasswordReset(env, { user, url }) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) {
@@ -15,7 +18,7 @@ async function sendPasswordReset(env, { user, url }) {
       from: env.MAIL_FROM,
       to: [user.email],
       subject: "Reset your Shopping Hisab password",
-      html: `<p>Hello ${String(user.name || "there").replace(/[<>]/g, "")},</p><p>Use the secure link below to reset your Shopping Hisab password.</p><p><a href="${url}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+      html: `<p>Hello ${escapeHtml(user.name || "there")},</p><p>Use the secure link below to reset your Shopping Hisab password.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
     }),
   });
 
@@ -26,12 +29,12 @@ async function sendPasswordReset(env, { user, url }) {
 }
 
 export function createNativeAuth(env) {
-  const baseURL = env.APP_BASE_URL;
+  const baseURL = validateAppBaseURL(env.APP_BASE_URL);
   if (!env.DB) throw new Error("Missing D1 binding DB.");
   if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 32) {
     throw new Error("BETTER_AUTH_SECRET must be configured with at least 32 characters.");
   }
-  if (!baseURL) throw new Error("APP_BASE_URL is not configured.");
+  if (!baseURL) throw new Error("APP_BASE_URL must be a valid HTTPS origin (HTTP is allowed only for localhost development).");
 
   const socialProviders = {};
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -44,6 +47,7 @@ export function createNativeAuth(env) {
   }
 
   return betterAuth({
+    ...nativeAuthSecurityConfig(),
     appName: "Shopping Hisab",
     baseURL,
     secret: env.BETTER_AUTH_SECRET,

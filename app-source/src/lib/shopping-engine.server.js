@@ -1,5 +1,6 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
 import { calculateEstimateLineTotalPaise } from "@/lib/estimate-money";
+import { isValidCalendarDate } from "@/lib/date-validation.js";
 
 const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
@@ -12,7 +13,7 @@ const safeJson = (value, fallback = {}) => {
   if (value == null || value === "") return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
 };
-const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && !Number.isNaN(Date.parse(value));
+const validDate = isValidCalendarDate;
 
 async function audit(db, userId, sessionId, entityType, entityId, eventType, after, before = null) {
   await db.prepare(`INSERT INTO shopping_audit_events
@@ -108,6 +109,7 @@ export async function handleShoppingEngine(request, env) {
     const shoppingDate=text(body.shopping_date,10);
     if(!validDate(shoppingDate))return fail("A valid shopping_date (YYYY-MM-DD) is required.");
     const name=text(body.name,120);
+    if(!name)return fail("A shopping session name is required.");
     const requestKey=text(request.headers.get("Idempotency-Key"),160);
     const operation="session_create";
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({name,shopping_date:shoppingDate}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;
@@ -227,7 +229,7 @@ export async function handleShoppingEngine(request, env) {
   if (!subpath && method === "GET") return json(await sessionDetail(db,userId,sessionId));
   if (!subpath && method === "PATCH") {
     const patch = {};
-    if (body.name !== undefined) patch.name = text(body.name,120);
+    if (body.name !== undefined) { patch.name = text(body.name,120); if(!patch.name)return fail("A shopping session name is required."); }
     if (body.shopping_date !== undefined) {
       if (!validDate(body.shopping_date)) return fail("A valid shopping date is required.");
       patch.shopping_date = body.shopping_date;
@@ -294,6 +296,19 @@ export async function handleShoppingEngine(request, env) {
         .bind(userId,operation,requestKey).first();
       if (prior) return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused with different request data.",409);
     }
+    const lineNumbers=new Set();
+    for(const line of lines){
+      if(line?.line_number!==undefined){
+        if(!Number.isInteger(line.line_number)||line.line_number<1||line.line_number>200)return fail("Source line numbers must be unique positive integers from 1 to 200.");
+        if(lineNumbers.has(line.line_number))return fail("Source line numbers must be unique.");
+        lineNumbers.add(line.line_number);
+      }
+    }
+    const normalizedLineNumbers=lines.map(line=>{
+      if(Number.isInteger(line?.line_number))return line.line_number;
+      let candidate=1;while(lineNumbers.has(candidate))candidate++;
+      lineNumbers.add(candidate);return candidate;
+    });
     const timestamp=now(), statements=[], createdLineIds=[];
     for (let index=0;index<lines.length;index++) {
       const line=lines[index]||{};
@@ -309,7 +324,7 @@ export async function handleShoppingEngine(request, env) {
       statements.push(db.prepare(`INSERT INTO shopping_source_lines
         (id,user_id,session_id,source_list_id,line_number,original_name,recognized_name,brand,product_type,pack_size,quantity,unit,ocr_confidence,original_ocr_json,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(lineId,userId,sessionId,listId,
-          Number.isInteger(line.line_number)?line.line_number:index+1,originalName,recognizedName,
+          normalizedLineNumbers[index],originalName,recognizedName,
           text(line.brand,100),text(line.product_type||"unsure",40),text(line.pack_size,60),quantity,
           text(line.unit,24),confidence,JSON.stringify(line.original_ocr && typeof line.original_ocr==="object"?line.original_ocr:line),timestamp,timestamp));
     }
@@ -382,7 +397,8 @@ export async function handleShoppingEngine(request, env) {
     const mergedNote=text([target.notes,source.notes].filter(Boolean).join(" · "),1000);
     const statements=[
       db.prepare("UPDATE shopping_items SET planned_quantity=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(combinedQuantity,mergedNote,timestamp,targetId,userId,sessionId),
-      db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND source_line_id NOT IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?) AND user_id=? AND session_id=?").bind(targetId,sourceId,targetId,userId,sessionId),
+      db.prepare("DELETE FROM shopping_item_sources WHERE shopping_item_id=? AND source_line_id IN (SELECT source_line_id FROM shopping_item_sources WHERE shopping_item_id=?) AND user_id=? AND session_id=?").bind(sourceId,targetId,userId,sessionId),
+      db.prepare("UPDATE shopping_item_sources SET shopping_item_id=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,sourceId,userId,sessionId),
       db.prepare("UPDATE shopping_purchase_lines SET shopping_item_id=?,is_extra=0,match_method='confirmed',updated_at=? WHERE shopping_item_id=? AND user_id=? AND session_id=?").bind(targetId,timestamp,sourceId,userId,sessionId),
       db.prepare("UPDATE shopping_items SET item_status='cancelled',merged_into_item_id=?,notes=?,updated_at=? WHERE id=? AND user_id=? AND session_id=?").bind(targetId,text(`Merged into ${target.product_name} (${targetId})`,1000),timestamp,sourceId,userId,sessionId),
       db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"shopping_item",targetId,"items_merged",JSON.stringify({target_quantity:Number(target.planned_quantity||0)}),JSON.stringify({source_item_id:sourceId,added_quantity:Number(source.planned_quantity||0),combined_quantity:combinedQuantity}),timestamp),
@@ -527,6 +543,7 @@ export async function handleShoppingEngine(request, env) {
       }
     }
     const shopName=text(body.shop_name,160);
+    if(!shopName)return fail("A shop name is required.");
     const purchaseDate=body.purchase_date==null||body.purchase_date===""?null:text(body.purchase_date,10);
     if (purchaseDate&&!validDate(purchaseDate)) return fail("Invalid bill purchase date.");
     const moneyFields=["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise","line_total_paise"];
@@ -613,8 +630,11 @@ export async function handleShoppingEngine(request, env) {
     const snapshot=JSON.stringify({bill:existing,purchase_lines:lines.results||[]});
     const timestamp=now();
     const responseBody={success:true,deleted:true,bill_id:billId};
+    const dependentBills=await db.prepare("SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId).all();
+    const snapshotWithDependents=JSON.stringify({bill:existing,purchase_lines:lines.results||[],dependent_duplicate_links:dependentBills.results||[]});
     const statements=[
-      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshot,JSON.stringify(responseBody),timestamp),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"actual_bill",billId,"bill_deleted",snapshotWithDependents,JSON.stringify(responseBody),timestamp),
+      db.prepare("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL,updated_at=? WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?").bind(timestamp,billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
@@ -633,6 +653,7 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     }
     const patch={};
     for(const key of ["shop_name","receipt_number","original_file_uri"]) if(body[key]!==undefined) patch[key]=text(body[key],key==="original_file_uri"?1200:160);
+    if(body.shop_name!==undefined&&!patch.shop_name)return fail("A shop name is required.");
     if(body.purchase_date!==undefined){if(body.purchase_date&&!validDate(body.purchase_date))return fail("Invalid bill purchase date.");patch.purchase_date=body.purchase_date||null;}
     for(const key of ["subtotal_paise","tax_paise","discount_paise","other_charges_paise","bill_total_paise"]){
       if(body[key]!==undefined){const n=body[key]==null||body[key]===""?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`${key} must be a non-negative integer in paise.`);patch[key]=n;}
@@ -642,8 +663,10 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     // Duplicate and void bills must never be counted, even if a client explicitly requests inclusion.
     if(["duplicate","void"].includes(patch.bill_status??existing.bill_status))patch.included_in_actual=0;
     if(body.duplicate_of_bill_id!==undefined){
-      if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);}
+      if(body.duplicate_of_bill_id===billId)return fail("A bill cannot be marked as a duplicate of itself.",400);
+      if(body.duplicate_of_bill_id){const other=await db.prepare("SELECT id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? AND id<>?").bind(body.duplicate_of_bill_id,userId,sessionId,billId).first();if(!other)return fail("Referenced duplicate bill was not found.",404);const cycle=await db.prepare(`WITH RECURSIVE duplicate_chain(id,duplicate_of_bill_id) AS (SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=? UNION SELECT b.id,b.duplicate_of_bill_id FROM shopping_actual_bills b JOIN duplicate_chain d ON b.id=d.duplicate_of_bill_id WHERE b.user_id=? AND b.session_id=?) SELECT 1 FROM duplicate_chain WHERE id=? LIMIT 1`).bind(body.duplicate_of_bill_id,userId,sessionId,userId,sessionId,billId).first();if(cycle)return fail("Duplicate bill links cannot form a cycle.",400);}
       patch.duplicate_of_bill_id=body.duplicate_of_bill_id||null;
+      if(patch.duplicate_of_bill_id){patch.bill_status="duplicate";patch.included_in_actual=0;}
     }
     if(!Object.keys(patch).length)return fail("No supported bill changes were supplied.");
     const effectiveTotal=patch.bill_total_paise===undefined?existing.bill_total_paise:patch.bill_total_paise;
@@ -736,9 +759,20 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
     for(const key of ["brand","pack_size","unit"])if(body[key]!==undefined)patch[key]=text(body[key],100);
     if(body.quantity!==undefined){patch.quantity=Number(body.quantity);if(!Number.isFinite(patch.quantity)||patch.quantity<0||patch.quantity>1000000)return fail("Invalid quantity.");}
     for(const key of ["unit_price_paise","line_amount_paise"]){if(body[key]!==undefined){const n=body[key]==null?null:Number(body[key]);if(n!==null&&(!Number.isSafeInteger(n)||n<0))return fail(`Invalid ${key}.`);patch[key]=n;}}
+    // Quantity/unit-price edits invalidate a previously stored amount unless the
+    // caller explicitly supplies a replacement amount in the same PATCH. This
+    // prevents stale reconciliation while preserving deliberate manual overrides.
+    if((body.quantity!==undefined||body.unit_price_paise!==undefined)&&body.line_amount_paise===undefined)patch.line_amount_paise=null;
     if(body.shopping_item_id!==undefined){const itemId=text(body.shopping_item_id,80)||null;if(itemId&&!await db.prepare("SELECT id FROM shopping_items WHERE id=? AND user_id=? AND session_id=?").bind(itemId,userId,sessionId).first())return fail("Shopping item not found.",404);patch.shopping_item_id=itemId;}
     if(body.is_extra!==undefined){if(typeof body.is_extra!=="boolean")return fail("is_extra must be true or false.");patch.is_extra=body.is_extra?1:0;}
     if(body.match_method!==undefined){if(!["exact","confirmed","suggested","unmatched","extra"].includes(body.match_method))return fail("Invalid match method.");patch.match_method=body.match_method;}
+    const effectiveItemId=patch.shopping_item_id===undefined?line.shopping_item_id:patch.shopping_item_id;
+    const effectiveIsExtra=patch.is_extra===undefined?Boolean(line.is_extra):Boolean(patch.is_extra);
+    const effectiveMatchMethod=patch.match_method===undefined?line.match_method:patch.match_method;
+    if(effectiveIsExtra&&effectiveItemId)return fail("Extra bill lines cannot be linked to a planned item.",400);
+    if(!effectiveIsExtra&&!effectiveItemId)return fail("Unmatched bill lines must be marked as extra.",400);
+    if(effectiveIsExtra&&effectiveMatchMethod!=="extra")patch.match_method="extra";
+    if(!effectiveIsExtra&&effectiveMatchMethod==="extra")return fail("Matched bill lines cannot use the extra match method.",400);
     if(!Object.keys(patch).length)return fail("No supported bill-line changes were supplied.");
     patch.corrected_values_json=JSON.stringify({...safeJson(line.corrected_values_json,{}),...patch});
     patch.updated_at=now();
@@ -769,46 +803,49 @@ if (billMatch && ["GET","PATCH"].includes(method)) {
   }
 
   if(purchaseLineMatch && method==="DELETE"){
-     const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
-     const requestKey=text(request.headers.get("Idempotency-Key"),160);
-     if(!requestKey)return fail("An Idempotency-Key is required for bill-line deletion.",400);
-     const operation=`bill_line_delete:${sessionId}:${lineId}`;
-     const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(lineId)))).map(b=>b.toString(16).padStart(2,"0")).join("");
-     const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
-     if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
-     const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
-     if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
-     const timestamp=now();
-     const responseBody={success:true,bill_id:line.bill_id,line_id:lineId};
-     const statements=[
-       db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
-       db.prepare(`UPDATE shopping_actual_bills SET
-         line_total_paise=CASE
-           WHEN (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-             = (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-           THEN COALESCE((SELECT SUM(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?),0)
-           ELSE NULL END,
-         reconciliation_difference_paise=CASE
-           WHEN bill_total_paise IS NULL OR
-             (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-             <> (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-           THEN NULL
-           ELSE bill_total_paise-(SELECT COALESCE(SUM(line_amount_paise),0) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
-         END,updated_at=? WHERE id=? AND user_id=? AND session_id=?`).bind(
-         line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
-         line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
-         timestamp,line.bill_id,userId,sessionId),
-       db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"purchase_line",lineId,"bill_line_deleted",JSON.stringify(line),JSON.stringify(responseBody),timestamp),
-       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp),
-     ];
-     try{await db.batch(statements);}catch(cause){
-       const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
-       if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
-       throw cause;
-     }
-     const updatedBill=await db.prepare("SELECT line_total_paise,reconciliation_difference_paise FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(line.bill_id,userId,sessionId).first();
-     return json({...responseBody,line_total_paise:updatedBill?.line_total_paise??null,reconciliation_difference_paise:updatedBill?.reconciliation_difference_paise??null});
-   }
+    const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];
+    const requestKey=text(request.headers.get("Idempotency-Key"),160);
+    if(!requestKey)return fail("An Idempotency-Key is required for bill-line deletion.",400);
+    const operation=`bill_line_delete:${sessionId}:${routeBillId}:${lineId}`;
+    const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({bill_id:routeBillId,line_id:lineId}))))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    if(requestKey){
+      const prior=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+      if(prior)return prior.request_hash===requestHash?new Response(prior.response_json,{status:prior.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
+    }
+    const line=await db.prepare("SELECT * FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId).first();
+    if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);
+    const timestamp=now();
+    const responseBody={success:true,bill_id:routeBillId,line_id:lineId};
+    const statements=[
+      db.prepare("DELETE FROM shopping_purchase_lines WHERE id=? AND user_id=? AND session_id=?").bind(lineId,userId,sessionId),
+      db.prepare(`UPDATE shopping_actual_bills SET
+        line_total_paise=CASE
+          WHEN (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+            = (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+          THEN COALESCE((SELECT SUM(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?),0)
+          ELSE NULL END,
+        reconciliation_difference_paise=CASE
+          WHEN bill_total_paise IS NULL OR
+            (SELECT COUNT(*) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+            <> (SELECT COUNT(line_amount_paise) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+          THEN NULL
+          ELSE bill_total_paise-(SELECT COALESCE(SUM(line_amount_paise),0) FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?)
+        END,updated_at=? WHERE id=? AND user_id=? AND session_id=?`).bind(
+        line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
+        line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,line.bill_id,userId,sessionId,
+        timestamp,line.bill_id,userId,sessionId),
+      db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"purchase_line",lineId,"bill_line_deleted",JSON.stringify(line),JSON.stringify({bill_id:routeBillId}),timestamp),
+    ];
+    if(requestKey)statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp));
+    try{await db.batch(statements);}catch(cause){
+      if(requestKey){
+        const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+        if(winner)return winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers}):fail("Idempotency key reused for a different bill-line deletion.",409);
+      }
+      throw cause;
+    }
+    return json(responseBody);
+  }
 
   if(subpath==="confirm" && method==="POST"){
     const confirmed=Number(body.confirmed_total_paise);
