@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, Search, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, Mic, Plus, RefreshCw, Search, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
-import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems } from "@/lib/shopping-categories";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -45,6 +45,7 @@ function SessionDetailPage() {
   const [error, setError] = useState("");
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
+  const [voiceListening, setVoiceListening] = useState(false);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
@@ -166,6 +167,28 @@ function SessionDetailPage() {
   };
 
   const addRow = () => setRows((current) => [...current, blankRow()]);
+  const startVoiceEntry = () => {
+    const SpeechRecognitionApi = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognitionApi) return toast.error("Voice input is not supported in this browser. Try Chrome or enter items manually.");
+    const recognition = new SpeechRecognitionApi();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = (event) => {
+      setVoiceListening(false);
+      toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Try again or enter items manually.");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      const names = parseVoiceShoppingItems(transcript);
+      if (!names.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
+      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...names.map((name) => ({ ...blankRow(), name }))]);
+      toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
+    };
+    try { recognition.start(); } catch { setVoiceListening(false); toast.error("Could not start voice input. Please try again."); }
+  };
   const removeRow = (index) => setRows((current) => current.length === 1
     ? [blankRow()] : current.filter((_, i) => i !== index));
 
@@ -939,6 +962,9 @@ function SessionDetailPage() {
               </div>
             </div>
           ))}
+          <button type="button" onClick={startVoiceEntry} disabled={voiceListening} className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-border py-2.5 text-[12.5px] font-bold disabled:opacity-60">
+            <Mic className="h-4 w-4" /> {voiceListening ? "Listening…" : "Add items by voice"}
+          </button>
           <button type="button" onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-border py-2.5 text-[12.5px] font-bold">
             <Plus className="h-4 w-4" /> Add another item
           </button>
