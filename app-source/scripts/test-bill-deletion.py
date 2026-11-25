@@ -99,6 +99,7 @@ cycle_sql = """WITH RECURSIVE duplicate_chain(id,duplicate_of_bill_id) AS (
 assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-b")).fetchone() is not None
 assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-a")).fetchone() is None
 assert "Duplicate bill links cannot form a cycle." in engine
+assert 'if(patch.duplicate_of_bill_id){patch.bill_status="duplicate";patch.included_in_actual=0;}' in engine
 
 # Bill-line classification must stay consistent: extras are unmatched and matched
 # lines cannot carry the extra method. Verify the route enforces both directions.
