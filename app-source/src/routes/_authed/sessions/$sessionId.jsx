@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays, Loader2, Mic, Plus, RefreshCw, Search, Shoppin
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
-import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems } from "@/lib/shopping-categories";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -92,6 +92,7 @@ function SessionDetailPage() {
   const [smartListSearch, setSmartListSearch] = useState("");
   const [smartListFilter, setSmartListFilter] = useState("all");
   const [smartListSort, setSmartListSort] = useState("category");
+  const [manualItemOrder, setManualItemOrder] = useState(() => { try { return JSON.parse(window.localStorage.getItem(`shopping-hisab-order-${sessionId}`) || "[]"); } catch { return []; } });
 
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
@@ -572,6 +573,20 @@ function SessionDetailPage() {
     }
   };
 
+  const moveListItem = (categoryItems, item, direction) => {
+    const currentIds = categoryItems.map((entry) => entry.id);
+    const currentIndex = currentIds.indexOf(item.id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentIds.length) return;
+    const orderedIds = [...manualItemOrder];
+    categoryItems.forEach((entry) => { if (!orderedIds.includes(entry.id)) orderedIds.push(entry.id); });
+    const currentPosition = orderedIds.indexOf(item.id);
+    const neighborPosition = orderedIds.indexOf(currentIds[nextIndex]);
+    if (currentPosition >= 0 && neighborPosition >= 0) [orderedIds[currentPosition], orderedIds[neighborPosition]] = [orderedIds[neighborPosition], orderedIds[currentPosition]];
+    setManualItemOrder(orderedIds);
+    try { window.localStorage.setItem(`shopping-hisab-order-${sessionId}`, JSON.stringify(orderedIds)); } catch {}
+    setSmartListSort("manual");
+  };
   const beginItemEdit = (item) => {
     setEditingItemId(item.id);
     setItemEditDraft({ product_name: item.product_name || "", planned_quantity: String(item.planned_quantity ?? ""), unit: item.unit || "pcs", brand: item.brand || "", pack_size: item.pack_size || "", notes: item.notes || "" });
@@ -829,7 +844,8 @@ function SessionDetailPage() {
 
   const items = session.items || [];
   const smartListItems = filterShoppingListItems(items, smartListSearch, smartListFilter);
-  const smartListGroups = groupShoppingItems(sortShoppingListItems(smartListItems, smartListSort), categoryOverrides);
+  const smartSortedItems = smartListSort === "manual" ? applyManualShoppingOrder(smartListItems, manualItemOrder) : sortShoppingListItems(smartListItems, smartListSort);
+  const smartListGroups = groupShoppingItems(smartSortedItems, categoryOverrides);
 
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
@@ -1056,7 +1072,7 @@ function SessionDetailPage() {
             <div className="mt-2 flex items-center gap-2">
               <label htmlFor="smart-list-sort" className="text-[10.5px] font-semibold text-muted-foreground">Sort:</label>
               <select id="smart-list-sort" value={smartListSort} onChange={(event) => setSmartListSort(event.target.value)} className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
-                <option value="category">Category</option><option value="name">Name A–Z</option><option value="remaining">Most remaining</option><option value="planned">Largest planned qty</option>
+                <option value="category">Category</option><option value="manual">Manual order</option><option value="name">Name A–Z</option><option value="remaining">Most remaining</option><option value="planned">Largest planned qty</option>
               </select>
             </div>
             <p className="mt-2 text-[10.5px] text-muted-foreground">Categories are suggested automatically. You can change any item’s category; your choices stay on this device for this trip.</p>
@@ -1124,7 +1140,9 @@ function SessionDetailPage() {
                         {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
                       </span>
                       {!completed ? (
-                        <button type="button" onClick={() => beginItemEdit(item)} aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
+                        <button type="button" disabled={smartListSort !== "manual" || index === 0} onClick={() => moveListItem(categoryItems, item, -1)} aria-label={`Move ${item.product_name} up`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↑</span></button>
+                        <button type="button" disabled={smartListSort !== "manual" || index === categoryItems.length - 1} onClick={() => moveListItem(categoryItems, item, 1)} aria-label={`Move ${item.product_name} down`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↓</span></button>
+                        <button type="button" onClick={() => beginItemEdit(item) aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
                         <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
                           className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
