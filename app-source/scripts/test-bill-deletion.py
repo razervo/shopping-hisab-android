@@ -133,4 +133,11 @@ for invalid in ["2026-02-29", "2026-04-31", "2026-13-01", "2026-00-10"]:
         raise AssertionError(f"Invalid calendar date accepted: {invalid}")
 assert "date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day" in engine
 
+# Source line numbering must be positive, unique, and avoid collisions when
+# auto-numbering lines that arrive without explicit OCR line numbers.
+assert "Source line numbers must be unique positive integers from 1 to 200." in engine
+assert "Source line numbers must be unique." in engine
+assert "const normalizedLineNumbers=lines.map(line=>" in engine
+assert "normalizedLineNumbers[index]" in engine
+
 print("PASS: bill deletion, child cleanup, audit snapshot, idempotent retry, duplicate-reference cleanup and file-preservation checks.")
