@@ -1,6 +1,6 @@
 export function findDuplicateShoppingNames(existingItems = [], incomingNames = []) {
   const normalize = (name) => String(name || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").trim();
-  const existing = new Set(existingItems.map((item) => normalize(item?.product_name)).filter(Boolean));
+  const existing = new Set(existingItems.filter((item) => item?.item_status !== "cancelled").map((item) => normalize(item?.product_name)).filter(Boolean));
   const seenIncoming = new Set();
   const duplicates = [];
   for (const name of incomingNames) {
