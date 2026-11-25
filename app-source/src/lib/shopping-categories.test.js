@@ -1,4 +1,5 @@
 import test from "node:test";
+import { parseVoiceShoppingItems } from "./shopping-categories.js";
 import assert from "node:assert/strict";
 import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, filterShoppingListItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
@@ -36,4 +37,11 @@ test("smart list search and filters exclude cancelled items from active views", 
   assert.deepEqual(filterShoppingListItems(items, "", "remaining").map((item) => item.id), ["1"]);
   assert.deepEqual(filterShoppingListItems(items, "", "purchased").map((item) => item.id), ["2"]);
   assert.deepEqual(filterShoppingListItems(items, "", "all").map((item) => item.id), ["1", "2", "3"]);
+});
+
+
+test("voice transcript splits spoken shopping lists without discarding item phrases", () => {
+  assert.deepEqual(parseVoiceShoppingItems("Add milk, eggs and 2 kg rice"), ["milk", "eggs", "2 kg rice"]);
+  assert.deepEqual(parseVoiceShoppingItems("tomatoes; bread"), ["tomatoes", "bread"]);
+  assert.deepEqual(parseVoiceShoppingItems(""), []);
 });
