@@ -1,4 +1,6 @@
-import { betterAuth } from "better-auth";\nimport { escapeHtml } from "@/lib/html-escape.js";
+import { betterAuth } from "better-auth";
+import { escapeHtml } from "@/lib/html-escape.js";
+import { validateAppBaseURL } from "@/lib/app-base-url.js";
 
 async function sendPasswordReset(env, { user, url }) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) {
@@ -26,12 +28,12 @@ async function sendPasswordReset(env, { user, url }) {
 }
 
 export function createNativeAuth(env) {
-  const baseURL = env.APP_BASE_URL;
+  const baseURL = validateAppBaseURL(env.APP_BASE_URL);
   if (!env.DB) throw new Error("Missing D1 binding DB.");
   if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 32) {
     throw new Error("BETTER_AUTH_SECRET must be configured with at least 32 characters.");
   }
-  if (!baseURL) throw new Error("APP_BASE_URL is not configured.");
+  if (!baseURL) throw new Error("APP_BASE_URL must be a valid HTTPS origin (HTTP is allowed only for localhost development).");
 
   const socialProviders = {};
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
