@@ -115,7 +115,7 @@ body,status=delete_bill("b-primary","delete-primary-key")
 assert status==200 and json.loads(body)["deleted"]
 assert db.execute("SELECT duplicate_of_bill_id FROM shopping_actual_bills WHERE id='b-dependent'").fetchone()[0] is None
 linked_audit=db.execute("SELECT before_json FROM shopping_audit_events WHERE event_type='bill_deleted' AND entity_id='b-primary'").fetchone()
-assert linked_audit and json.loads(linked_audit[0])["dependent_duplicate_links"][0]["id"]=="b-dependent"
+assert linked_audit and json.loads(linked_audit[0])["dependent_duplicate_links"][0][0]=="b-dependent"
 assert not db.execute("PRAGMA foreign_key_check").fetchall()
 
 # Date-only validation must reject normalized-but-impossible calendar dates.
