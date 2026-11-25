@@ -88,6 +88,19 @@ except sqlite3.Error:
     raise AssertionError("SQLite fixture should demonstrate that self-reference is otherwise permitted")
 assert "A bill cannot be marked as a duplicate of itself." in handler or "A bill cannot be marked as a duplicate of itself." in engine
 
+# Duplicate bill links must also remain acyclic across multiple records.
+db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-cycle-a','u1','s1','Cycle A',10000,'verified',1,'t0','t0')")
+db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,duplicate_of_bill_id,uploaded_at,updated_at) VALUES('b-cycle-b','u1','s1','Cycle B',10000,'duplicate',0,'b-cycle-a','t0','t0')")
+cycle_sql = """WITH RECURSIVE duplicate_chain(id,duplicate_of_bill_id) AS (
+  SELECT id,duplicate_of_bill_id FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?
+  UNION
+  SELECT b.id,b.duplicate_of_bill_id FROM shopping_actual_bills b JOIN duplicate_chain d ON b.id=d.duplicate_of_bill_id WHERE b.user_id=? AND b.session_id=?
+) SELECT 1 FROM duplicate_chain WHERE id=? LIMIT 1"""
+assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-b")).fetchone() is not None
+assert db.execute(cycle_sql,("b-cycle-a","u1","s1","u1","s1","b-cycle-a")).fetchone() is None
+assert "Duplicate bill links cannot form a cycle." in engine
+
+
 # Deleting a bill that another bill marks as its duplicate must not fail the
 # FK restriction; dependent links are detached and recorded in the deletion audit.
 db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-primary','u1','s1','Primary',10000,'verified',1,'t0','t0')")
