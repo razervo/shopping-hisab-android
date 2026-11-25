@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays, Loader2, Mic, Plus, RefreshCw, Search, Shoppin
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
-import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames } from "@/lib/shopping-categories";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -91,6 +91,7 @@ function SessionDetailPage() {
   });
   const [smartListSearch, setSmartListSearch] = useState("");
   const [smartListFilter, setSmartListFilter] = useState("all");
+  const [smartListSort, setSmartListSort] = useState("category");
 
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
@@ -828,7 +829,7 @@ function SessionDetailPage() {
 
   const items = session.items || [];
   const smartListItems = filterShoppingListItems(items, smartListSearch, smartListFilter);
-  const smartListGroups = groupShoppingItems(smartListItems, categoryOverrides);
+  const smartListGroups = groupShoppingItems(sortShoppingListItems(smartListItems, smartListSort), categoryOverrides);
 
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
@@ -1051,6 +1052,12 @@ function SessionDetailPage() {
                   {label}
                 </button>
               ))}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <label htmlFor="smart-list-sort" className="text-[10.5px] font-semibold text-muted-foreground">Sort:</label>
+              <select id="smart-list-sort" value={smartListSort} onChange={(event) => setSmartListSort(event.target.value)} className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                <option value="category">Category</option><option value="name">Name A–Z</option><option value="remaining">Most remaining</option><option value="planned">Largest planned qty</option>
+              </select>
             </div>
             <p className="mt-2 text-[10.5px] text-muted-foreground">Categories are suggested automatically. You can change any item’s category; your choices stay on this device for this trip.</p>
           </div>
