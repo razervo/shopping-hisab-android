@@ -12,7 +12,13 @@ const safeJson = (value, fallback = {}) => {
   if (value == null || value === "") return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
 };
-const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && !Number.isNaN(Date.parse(value));
+const validDate = (value) => {
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(String(value || ""));
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
 
 async function audit(db, userId, sessionId, entityType, entityId, eventType, after, before = null) {
   await db.prepare(`INSERT INTO shopping_audit_events
