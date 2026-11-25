@@ -1,4 +1,6 @@
 import { createNativeAuth } from "@/lib/native-auth.server";
+import { isValidCalendarDate } from "@/lib/date-validation.js";
+import { publicProfile } from "@/lib/public-profile.js";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -51,7 +53,7 @@ function mapRecord(row) {
 
 function validateRecord(input) {
   const date = String(input?.date || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Please provide a valid shopping date.");
+  if (!isValidCalendarDate(date)) throw new Error("Please provide a valid shopping date.");
   const items = Array.isArray(input?.items) ? input.items : [];
   if (items.length > 500) throw new Error("A shopping record cannot contain more than 500 items.");
   const cleaned = items.map((item) => ({
@@ -406,7 +408,7 @@ async function handleDriveInitialize(env, user) {
 
 async function handleProfile(request, env, user) {
   if (request.method === "GET") {
-    return json(user);
+    return json(publicProfile(user));
   }
   if (request.method !== "PATCH" && request.method !== "PUT") return error("Method not allowed.", 405);
   const input = await request.json();

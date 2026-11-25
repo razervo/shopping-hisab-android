@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarDays, Loader2, Plus, RefreshCw, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, Mic, Plus, RefreshCw, Search, ShoppingBasket, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BillUploader } from "@/components/shopping/BillUploader";
 import { parseReceiptMoney } from "@/lib/receipt-money";
 import { reviewEstimateItems } from "@/lib/estimate-review";
 import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
+import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -46,11 +47,13 @@ function SessionDetailPage() {
   const [error, setError] = useState("");
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
+  const [voiceListening, setVoiceListening] = useState(false);
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
   const estimateRequestKeyRef = useRef(null);
   const billLineRequestKeysRef = useRef({});
+  const billLineDeleteRequestKeysRef = useRef({});
   const uploadedBillCreateKeyRef = useRef(null);
   const uploadedBillLinesKeyRef = useRef(null);
   const scannedSourceLinesKeyRef = useRef(null);
@@ -69,6 +72,8 @@ function SessionDetailPage() {
   const [billLineForms, setBillLineForms] = useState({});
   const [billLineSaving, setBillLineSaving] = useState("");
   const [billLineDetails, setBillLineDetails] = useState({});
+  const [billLineEditDrafts, setBillLineEditDrafts] = useState({});
+  const [billLineEditSaving, setBillLineEditSaving] = useState("");
   const [estimatePrices, setEstimatePrices] = useState({});
   const [estimateSources, setEstimateSources] = useState({});
   const [rememberedEstimateKeys, setRememberedEstimateKeys] = useState({});
@@ -85,6 +90,23 @@ function SessionDetailPage() {
   const [confirmationSaving, setConfirmationSaving] = useState(false);
   const [adjustFinalTotal, setAdjustFinalTotal] = useState(false);
   const [mergeTargets, setMergeTargets] = useState({});
+  const [editingItemId, setEditingItemId] = useState("");
+  const [itemEditDraft, setItemEditDraft] = useState({ product_name: "", planned_quantity: "", unit: "pcs", brand: "", pack_size: "", notes: "" });
+  const [itemEditSaving, setItemEditSaving] = useState(false);
+  const [undoItem, setUndoItem] = useState(null);
+  const [undoSaving, setUndoSaving] = useState(false);
+  const undoRestoreLockRef = useRef(false);
+  const undoTimerRef = useRef(null);
+  const [categoryOverrides, setCategoryOverrides] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem(`shopping-hisab-categories-${sessionId}`) || "{}"); }
+    catch { return {}; }
+  });
+  const [smartListSearch, setSmartListSearch] = useState("");
+  const [smartListFilter, setSmartListFilter] = useState("all");
+  const [smartListSort, setSmartListSort] = useState("category");
+  const [manualItemOrder, setManualItemOrder] = useState(() => { if (typeof window === "undefined") return []; try { const saved = JSON.parse(window.localStorage.getItem(`shopping-hisab-order-${sessionId}`) || "[]"); return Array.isArray(saved) ? saved : []; } catch { return []; } });
+
   const [uploadedBillDraft, setUploadedBillDraft] = useState(null);
   const [uploadedBillFileUri, setUploadedBillFileUri] = useState("");
   const [uploadedBillShop, setUploadedBillShop] = useState("");
@@ -109,6 +131,13 @@ function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+  useEffect(() => { if (!undoItem) return; undoTimerRef.current = setTimeout(() => setUndoItem(null), 10000); return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem]);
+  useEffect(() => {
+    try { window.localStorage.setItem(`shopping-hisab-categories-${sessionId}`, JSON.stringify(categoryOverrides)); }
+    catch { /* category preferences are optional local-only enhancements */ }
+  }, [categoryOverrides, sessionId]);
+
   useEffect(() => {
     if (session) setConfirmationTotal((Number(session.actual_total_paise || 0) / 100).toFixed(2));
   }, [session?.actual_total_paise]);
@@ -209,6 +238,28 @@ function SessionDetailPage() {
   };
 
   const addRow = () => setRows((current) => [...current, blankRow()]);
+  const startVoiceEntry = () => {
+    const SpeechRecognitionApi = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognitionApi) return toast.error("Voice input is not supported in this browser. Try Chrome or enter items manually.");
+    const recognition = new SpeechRecognitionApi();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = (event) => {
+      setVoiceListening(false);
+      toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Try again or enter items manually.");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      const names = parseVoiceShoppingItems(transcript);
+      if (!names.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
+      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...names.map((name) => ({ ...blankRow(), name }))]);
+      toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
+    };
+    try { recognition.start(); } catch { setVoiceListening(false); toast.error("Could not start voice input. Please try again."); }
+  };
   const removeRow = (index) => setRows((current) => current.length === 1
     ? [blankRow()] : current.filter((_, i) => i !== index));
 
@@ -607,6 +658,38 @@ function SessionDetailPage() {
     }
   };
 
+  const moveListItem = (categoryItems, item, direction) => {
+    const currentIds = categoryItems.map((entry) => entry.id);
+    const currentIndex = currentIds.indexOf(item.id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentIds.length) return;
+    const orderedIds = [...manualItemOrder];
+    categoryItems.forEach((entry) => { if (!orderedIds.includes(entry.id)) orderedIds.push(entry.id); });
+    const currentPosition = orderedIds.indexOf(item.id);
+    const neighborPosition = orderedIds.indexOf(currentIds[nextIndex]);
+    if (currentPosition >= 0 && neighborPosition >= 0) [orderedIds[currentPosition], orderedIds[neighborPosition]] = [orderedIds[neighborPosition], orderedIds[currentPosition]];
+    setManualItemOrder(orderedIds);
+    try { window.localStorage.setItem(`shopping-hisab-order-${sessionId}`, JSON.stringify(orderedIds)); } catch { /* Local reorder persistence is best-effort. */ }
+    setSmartListSort("manual");
+  };
+  const beginItemEdit = (item) => {
+    setEditingItemId(item.id);
+    setItemEditDraft({ product_name: item.product_name || "", planned_quantity: String(item.planned_quantity ?? ""), unit: item.unit || "pcs", brand: item.brand || "", pack_size: item.pack_size || "", notes: item.notes || "" });
+  };
+  const saveItemEdit = async (event) => {
+    event.preventDefault();
+    const quantity = Number(itemEditDraft.planned_quantity);
+    if (!itemEditDraft.product_name.trim()) return toast.error("Enter an item name.");
+    if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid quantity.");
+    setItemEditSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items/${editingItemId}`, { method: "PATCH", body: JSON.stringify({ product_name: itemEditDraft.product_name.trim(), planned_quantity: quantity, unit: itemEditDraft.unit.trim() || "pcs", brand: itemEditDraft.brand.trim(), pack_size: itemEditDraft.pack_size.trim(), notes: itemEditDraft.notes.trim() }) });
+      setEditingItemId("");
+      toast.success("Item updated.");
+      await loadSession();
+    } catch (cause) { toast.error(cause.message || "Could not update item."); }
+    finally { setItemEditSaving(false); }
+  };
   const deletePlannedItem = async (item) => {
     if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
     try {
@@ -622,12 +705,27 @@ function SessionDetailPage() {
         return next;
       });
       await loadSession();
-      toast.success("Planned item removed.");
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoItem({ ...item });
+      toast.success("Planned item removed. Undo is available for 10 seconds.");
     } catch (cause) {
       toast.error(cause.message || "Could not remove this planned item.");
     }
   };
 
+  const undoPlannedItem = async () => {
+    if (!undoItem || undoRestoreLockRef.current) return;
+    undoRestoreLockRef.current = true;
+    setUndoSaving(true);
+    try {
+      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoItem(null);
+      toast.success("Item restored.");
+      await loadSession();
+    } catch (cause) { toast.error(cause.message || "Could not restore item."); }
+    finally { undoRestoreLockRef.current = false; setUndoSaving(false); }
+  };
   const loadBillLines = async (billId) => {
     try {
       const details = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`);
@@ -655,15 +753,38 @@ function SessionDetailPage() {
     }
   };
 
+  const editBillLine = (billId, line) => setBillLineEditDrafts((current) => ({
+    ...current, [line.id]: { product_name: line.product_name, quantity: String(line.quantity), amount: line.line_amount_paise == null ? "" : (Number(line.line_amount_paise) / 100).toFixed(2) }
+  }));
+
+  const saveBillLineEdit = async (billId, lineId) => {
+    const draft = billLineEditDrafts[lineId];
+    if (!draft) return;
+    const quantity = Number(draft.quantity);
+    const amount = draft.amount.trim() === "" ? null : Number(draft.amount);
+    if (!draft.product_name.trim()) return toast.error("Bill item name is required.");
+    if (!Number.isFinite(quantity) || quantity < 0) return toast.error("Enter a valid quantity.");
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(Math.round(amount * 100)))) return toast.error("Enter a valid line amount.");
+    setBillLineEditSaving(lineId);
+    try {
+      const updated = await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ product_name: draft.product_name.trim(), quantity, line_amount_paise: amount === null ? null : Math.round(amount * 100) }),
+      });
+      setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).map((line) => line.id === lineId ? updated : line) }));
+      setBillLineEditDrafts((current) => { const next = { ...current }; delete next[lineId]; return next; });
+      await loadSession();
+      toast.success("Bill item updated; reconciliation refreshed.");
+    } catch (cause) { toast.error(cause.message || "Could not update bill item."); }
+    finally { setBillLineEditSaving(""); }
+  };
+
   const deleteBillLine = async (billId, lineId) => {
     if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
-    const requestKey = billLineDeleteKeysRef.current[lineId] || (billLineDeleteKeysRef.current[lineId] = crypto.randomUUID());
+    const requestKey = billLineDeleteRequestKeysRef.current[lineId] || (billLineDeleteRequestKeysRef.current[lineId] = crypto.randomUUID());
     try {
-      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, {
-        method: "DELETE",
-        headers: { "Idempotency-Key": requestKey },
-      });
-      delete billLineDeleteKeysRef.current[lineId];
+      await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE", headers: { "Idempotency-Key": requestKey } });
+      delete billLineDeleteRequestKeysRef.current[lineId];
       setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
       await loadSession();
       toast.success("Bill item deleted and reconciliation updated.");
@@ -697,6 +818,8 @@ function SessionDetailPage() {
     const validRows = scannedRows.map((row) => ({ ...row, name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit.trim() || "pcs" }));
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
+    const scannedDuplicates = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
+    if (scannedDuplicates.length && !window.confirm(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
     if (scannedListSaveLockRef.current) return;
     scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
@@ -768,6 +891,8 @@ function SessionDetailPage() {
       return;
     }
 
+    const duplicateNames = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
+    if (duplicateNames.length && !window.confirm(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
     if (manualListSaveLockRef.current) return;
     manualListSaveLockRef.current = true;
     setSaving(true);
@@ -838,6 +963,10 @@ function SessionDetailPage() {
   }
 
   const items = session.items || [];
+  const smartListItems = filterShoppingListItems(items, smartListSearch, smartListFilter);
+  const smartSortedItems = smartListSort === "manual" ? applyManualShoppingOrder(smartListItems, manualItemOrder) : sortShoppingListItems(smartListItems, smartListSort);
+  const smartListGroups = groupShoppingItems(smartSortedItems, categoryOverrides);
+
   const lists = session.source_lists || [];
   const completed = session.status === "completed";
   const unresolvedBills = (session.bills || []).filter(
@@ -1009,6 +1138,9 @@ function SessionDetailPage() {
               </div>
             </div>
           ))}
+          <button type="button" onClick={startVoiceEntry} disabled={voiceListening} className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-border py-2.5 text-[12.5px] font-bold disabled:opacity-60">
+            <Mic className="h-4 w-4" /> {voiceListening ? "Listening…" : "Add items by voice"}
+          </button>
           <button type="button" onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-border py-2.5 text-[12.5px] font-bold">
             <Plus className="h-4 w-4" /> Add another item
           </button>
@@ -1040,50 +1172,127 @@ function SessionDetailPage() {
               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${shoppingProgress}%` }} />
             </div>
           </div>
-          <div className="overflow-hidden rounded-[22px] border border-border bg-white">
-            {items.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
-                <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-bold">{item.product_name}</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
-                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                    Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
-                    {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
-                    {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
-                  </p>
-                  {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
-                        aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
-                        <option value="">Keep separate / choose merge target</option>
-                        {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()).map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
-                        ))}
-                      </select>
-                      <button type="button" onClick={() => mergePlannedItem(item.id)} disabled={!mergeTargets[item.id]}
-                        className="rounded-full border border-primary px-3 py-1.5 text-[10.5px] font-bold text-primary disabled:opacity-40">Merge</button>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
-                    {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
-                  </span>
-                  {!completed ? (
-                    <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
-                      className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
+          <div className="mb-3 rounded-[22px] border border-border bg-white p-3">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input value={smartListSearch} onChange={(event) => setSmartListSearch(event.target.value)} placeholder="Find an item in this trip" aria-label="Search shopping list" className="h-10 min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              {[
+                ["all", "All items"],
+                ["remaining", "To buy"],
+                ["purchased", "Bought"],
+              ].map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setSmartListFilter(value)}
+                  className={`flex-1 rounded-full px-3 py-2 text-[11px] font-bold ${smartListFilter === value ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <label htmlFor="smart-list-sort" className="text-[10.5px] font-semibold text-muted-foreground">Sort:</label>
+              <select id="smart-list-sort" value={smartListSort} onChange={(event) => setSmartListSort(event.target.value)} className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                <option value="category">Category</option><option value="manual">Manual order</option><option value="name">Name A–Z</option><option value="remaining">Most remaining</option><option value="planned">Largest planned qty</option>
+              </select>
+            </div>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">Categories are suggested automatically. You can change any item’s category; your choices stay on this device for this trip.</p>
+          </div>
+          {editingItemId && !completed ? (
+            <form onSubmit={saveItemEdit} className="mb-3 rounded-xl border border-border bg-white p-3 space-y-2">
+              <p className="text-xs font-bold">Edit shopping item</p>
+              <input value={itemEditDraft.product_name} onChange={(event) => setItemEditDraft((d) => ({ ...d, product_name: event.target.value }))} aria-label="Edit item name" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" min="0" step="any" value={itemEditDraft.planned_quantity} onChange={(event) => setItemEditDraft((d) => ({ ...d, planned_quantity: event.target.value }))} aria-label="Edit planned quantity" className="h-9 rounded-lg border border-border px-2 text-sm" />
+                <input value={itemEditDraft.unit} onChange={(event) => setItemEditDraft((d) => ({ ...d, unit: event.target.value }))} aria-label="Edit unit" className="h-9 rounded-lg border border-border px-2 text-sm" />
               </div>
-            ))}
+              <input value={itemEditDraft.brand} onChange={(event) => setItemEditDraft((d) => ({ ...d, brand: event.target.value }))} aria-label="Edit brand" placeholder="Brand (optional)" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <input value={itemEditDraft.pack_size} onChange={(event) => setItemEditDraft((d) => ({ ...d, pack_size: event.target.value }))} aria-label="Edit pack size" placeholder="Pack size (optional)" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
+              <textarea value={itemEditDraft.notes} onChange={(event) => setItemEditDraft((d) => ({ ...d, notes: event.target.value }))} aria-label="Edit notes" placeholder="Notes (optional)" className="w-full rounded-lg border border-border p-2 text-sm" />
+              <div className="flex gap-2"><button type="submit" disabled={itemEditSaving} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">{itemEditSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingItemId("")} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button></div>
+            </form>
+          ) : null}
+          {undoItem ? <div role="status" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/50 p-3 text-sm"><span>Removed {undoItem.product_name}</span><button type="button" onClick={undoPlannedItem} disabled={undoSaving} className="rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground disabled:opacity-50">{undoSaving ? "Restoring…" : "Undo"}</button></div> : null}
+          <div className="space-y-3">
+            {smartListGroups.length ? smartListGroups.map(([category, categoryItems]) => (
+              <section key={category} className="overflow-hidden rounded-[22px] border border-border bg-white">
+                <div className="flex items-center justify-between bg-secondary/40 px-4 py-3">
+                  <h3 className="text-[12.5px] font-extrabold">{category}</h3>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold">{categoryItems.length}</span>
+                </div>
+                {categoryItems.map((item, index) => (
+                  <div key={item.id} className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[13.5px] font-bold">{item.product_name}</p>
+                      <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
+                      <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                        Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
+                        {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
+                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
+                      </p>
+                      {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <select value={mergeTargets[item.id] || ""} onChange={(event) => setMergeTargets((current) => ({ ...current, [item.id]: event.target.value }))}
+                            aria-label={`Merge ${item.product_name} into another item`} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                            <option value="">Keep separate / choose merge target</option>
+                            {items.filter((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()).map((candidate) => (
+                              <option key={candidate.id} value={candidate.id}>{candidate.product_name} · {candidate.unit}</option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => mergePlannedItem(item.id)} disabled={!mergeTargets[item.id]}
+                            className="rounded-full border border-primary px-3 py-1.5 text-[10.5px] font-bold text-primary disabled:opacity-40">Merge</button>
+                        </div>
+                      ) : null}
+                      {!completed ? (
+                        <select value={categoryOverrides[item.id] || "__auto"} onChange={(event) => setCategoryOverrides((current) => {
+                            const next = { ...current };
+                            if (event.target.value === "__auto") delete next[item.id];
+                            else next[item.id] = event.target.value;
+                            return next;
+                          })}
+                          aria-label={`Category for ${item.product_name}`} className="mt-2 h-8 max-w-full rounded-lg border border-border bg-background px-2 text-[10.5px]">
+                          <option value="__auto">Auto: {inferShoppingCategory(item.product_name)}</option>
+                          {SHOPPING_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      ) : <span className="mt-2 inline-block rounded-full bg-secondary px-2.5 py-1 text-[10px] font-semibold">{category}</span>}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold capitalize">
+                        {Number(item.remaining_quantity ?? item.planned_quantity) <= 0 ? "Purchased" : Number(item.purchased_quantity || 0) > 0 ? "Partially bought" : String(item.item_status || "planned").replaceAll("_", " ")}
+                      </span>
+                      {!completed ? (
+                        <>
+                        <button type="button" disabled={smartListSort !== "manual" || index === 0} onClick={() => moveListItem(categoryItems, item, -1)} aria-label={`Move ${item.product_name} up`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↑</span></button>
+                        <button type="button" disabled={smartListSort !== "manual" || index === categoryItems.length - 1} onClick={() => moveListItem(categoryItems, item, 1)} aria-label={`Move ${item.product_name} down`} className="rounded-full border border-border p-2 text-muted-foreground disabled:opacity-30"><span className="text-[11px] font-bold">↓</span></button>
+                        <button type="button" onClick={() => beginItemEdit(item)} aria-label={`Edit ${item.product_name}`} className="rounded-full border border-border p-2 text-muted-foreground hover:bg-secondary"><span className="text-[11px] font-bold">Edit</span></button>
+                        <button type="button" onClick={() => deletePlannedItem(item)} aria-label={`Remove ${item.product_name}`}
+                          className="rounded-full p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )) : (
+              <div className="rounded-[22px] border border-dashed border-border bg-white px-5 py-7 text-center">
+                <Search className="mx-auto h-6 w-6 text-muted-foreground" />
+                <p className="mt-2 text-[13px] font-bold">No items match this view</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Clear the search or switch back to All items.</p>
+              </div>
+            )}
           </div>
           </>
         ) : (
           <div className="rounded-[22px] border border-dashed border-border px-5 py-7 text-center">
             <ShoppingBasket className="mx-auto h-6 w-6 text-muted-foreground" />
             <p className="mt-2 text-[13px] font-bold">Your list is empty</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Start with a few essentials, or add your own items above.</p>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {["Milk", "Eggs", "Rice", "Vegetables", "Bread"].map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => { setRows((current) => [...current.filter((row) => row.name.trim()), { ...blankRow(), name: suggestion }]); toast.info(`${suggestion} added to your entry form above.`); }} className="rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-semibold">{suggestion} +</button>
+              ))}
+            </div>
             <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
           </div>
         )}
@@ -1378,12 +1587,29 @@ function SessionDetailPage() {
               {billLineDetails[bill.id] ? (
                 <div className="mt-2 space-y-1.5">
                   {billLineDetails[bill.id].length ? billLineDetails[bill.id].map((line) => (
-                    <div key={line.id} className="flex justify-between gap-2 rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
-                      <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
-                        <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
-                      </div>
+                    <div key={line.id} className="rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
+                      {billLineEditDrafts[line.id] ? (
+                        <div className="space-y-1.5">
+                          <input value={billLineEditDrafts[line.id].product_name} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], product_name: event.target.value } }))} aria-label="Edit bill item name" className="h-8 w-full rounded border border-border bg-background px-2" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].quantity} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], quantity: event.target.value } }))} aria-label="Edit quantity" className="h-8 rounded border border-border bg-background px-2" />
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].amount} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], amount: event.target.value } }))} aria-label="Edit line amount" placeholder="₹ amount" className="h-8 rounded border border-border bg-background px-2" />
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" disabled={billLineEditSaving === line.id} onClick={() => saveBillLineEdit(bill.id, line.id)} className="text-primary font-bold underline">Save</button>
+                            <button type="button" onClick={() => setBillLineEditDrafts((current) => { const next = { ...current }; delete next[line.id]; return next; })} className="text-muted-foreground underline">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between gap-2">
+                          <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
+                            <button type="button" onClick={() => editBillLine(bill.id, line)} aria-label={`Edit ${line.product_name}`} className="font-bold text-primary underline">Edit</button>
+                            <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )) : <p className="text-[11px] text-muted-foreground">No item details recorded yet.</p>}
                 </div>
