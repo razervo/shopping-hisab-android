@@ -176,4 +176,16 @@ assert 'if((body.quantity!==undefined||body.unit_price_paise!==undefined)&&body.
 # Explicit line amount in the same request is preserved as a deliberate correction.
 assert 'body.line_amount_paise===undefined' in engine and 'patch.line_amount_paise=null' in engine
 
+# Bill-line routes must capture both bill ID and line ID. The previous one-group
+# regex caused edits/deletions to bind the bill ID as the line ID (404).
+import re
+line_route_pattern = re.compile(r"^bills/([a-f0-9-]{36})/lines/([a-f0-9-]{36})$")
+sample_bill_id = "a" * 36
+sample_line_id = "b" * 36
+route_match = line_route_pattern.fullmatch(f"bills/{sample_bill_id}/lines/{sample_line_id}")
+assert route_match and route_match.group(1) == sample_bill_id and route_match.group(2) == sample_line_id
+assert 'const purchaseLineMatch=/^bills\\/([a-f0-9-]{36})\\/lines\\/([a-f0-9-]{36})$/.exec(subpath);' in engine
+assert 'const routeBillId=purchaseLineMatch[1],lineId=purchaseLineMatch[2];' in engine
+assert 'if(!line||line.bill_id!==routeBillId)return fail("Bill line not found.",404);' in engine
+
 print("PASS: bill deletion, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
