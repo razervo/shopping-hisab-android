@@ -1,5 +1,5 @@
 import test from "node:test";
-import { parseVoiceShoppingItems } from "./shopping-categories.js";
+import { parseVoiceShoppingItems, findDuplicateShoppingNames } from "./shopping-categories.js";
 import assert from "node:assert/strict";
 import { inferShoppingCategory, resolveShoppingCategory, groupShoppingItems, filterShoppingListItems, SHOPPING_CATEGORIES } from "./shopping-categories.js";
 
@@ -44,4 +44,10 @@ test("voice transcript splits spoken shopping lists without discarding item phra
   assert.deepEqual(parseVoiceShoppingItems("Add milk, eggs and 2 kg rice"), ["milk", "eggs", "2 kg rice"]);
   assert.deepEqual(parseVoiceShoppingItems("tomatoes; bread"), ["tomatoes", "bread"]);
   assert.deepEqual(parseVoiceShoppingItems(""), []);
+});
+
+test("detects duplicates against the trip and within a pasted/manual batch", () => {
+  const existing = [{ product_name: "Milk 1L" }, { product_name: "Rice" }];
+  assert.deepEqual(findDuplicateShoppingNames(existing, ["milk 1l", "Eggs", "Eggs", "RICE"]), ["milk 1l", "Eggs", "RICE"]);
+  assert.deepEqual(findDuplicateShoppingNames(existing, ["Sugar", "Salt"]), []);
 });
