@@ -14,7 +14,7 @@ test("sensitive auth routes receive tighter limits", () => {
   const rules = nativeAuthSecurityConfig().rateLimit.customRules;
   assert.deepEqual(rules["/sign-in/email"], { window: 60, max: 5 });
   assert.deepEqual(rules["/sign-up/email"], { window: 60, max: 5 });
-  assert.deepEqual(rules["/forget-password"], { window: 60, max: 3 });
+  assert.deepEqual(rules["/request-password-reset"], { window: 60, max: 3 });
   assert.deepEqual(rules["/reset-password"], { window: 60, max: 5 });
   assert.deepEqual(rules["/change-password"], { window: 60, max: 5 });
 });
