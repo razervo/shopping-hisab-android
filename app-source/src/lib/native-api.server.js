@@ -51,21 +51,29 @@ function mapRecord(row) {
   };
 }
 
+function finiteNonNegative(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
+}
+
 function validateRecord(input) {
   const date = String(input?.date || "");
   if (!isValidCalendarDate(date)) throw new Error("Please provide a valid shopping date.");
   const items = Array.isArray(input?.items) ? input.items : [];
   if (items.length > 500) throw new Error("A shopping record cannot contain more than 500 items.");
-  const cleaned = items.map((item) => ({
-    name: String(item?.name || "").trim().slice(0, 120),
-    qty: Math.max(0, Number(item?.qty) || 0),
-    unit: String(item?.unit || "").trim().slice(0, 24),
-    price: Math.max(0, Number(item?.price) || 0),
-    ...(Number(item?.estimated_price ?? item?.estimatedPrice) > 0
-      ? { estimated_price: Number(item.estimated_price ?? item.estimatedPrice) }
-      : {}),
-    amount: Math.max(0, Number(item?.amount) || 0),
-  }));
+  const cleaned = items.map((item) => {
+    const estimatedPrice = Number(item?.estimated_price ?? item?.estimatedPrice);
+    return {
+      name: String(item?.name || "").trim().slice(0, 120),
+      qty: finiteNonNegative(item?.qty),
+      unit: String(item?.unit || "").trim().slice(0, 24),
+      price: finiteNonNegative(item?.price),
+      ...(Number.isFinite(estimatedPrice) && estimatedPrice > 0
+        ? { estimated_price: estimatedPrice }
+        : {}),
+      amount: finiteNonNegative(item?.amount),
+    };
+  });
   if (!cleaned.length) throw new Error("Add at least one item.");
   const total = Number(input?.total);
   if (!Number.isFinite(total) || total < 0 || total > 100000000) throw new Error("Please provide a valid total.");
