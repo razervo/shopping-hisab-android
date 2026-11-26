@@ -19,6 +19,7 @@ export function RecordForm({
   onSave,
   footerNote,
   allowEstimate = false,
+  allowActualReceiptUpload = false,
   onActualListUploaded,
   billFileUri = "",
 }) {
@@ -331,6 +332,12 @@ export function RecordForm({
   );
 
   const runEstimate = async () => {
+    const incomplete = items.filter((i) => String(i.name || "").trim() && (!(Number(i.qty) > 0) || !String(i.unit || "").trim()));
+    if (incomplete.length) {
+      const labels = incomplete.map((i) => String(i.name || "Unnamed item").trim()).slice(0, 5).join(", ");
+      window.alert(`Complete quantity and unit for: ${labels}${incomplete.length > 5 ? " and more" : ""} before estimating.`);
+      return;
+    }
     const targets = items.filter((i) => String(i.name).trim() && !(Number(i.price) > 0));
     if (!targets.length) {
       setEstimateMsg("Every item already has a price. Edit any of them to re-estimate.");
