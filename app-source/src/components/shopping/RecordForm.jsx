@@ -109,7 +109,7 @@ export function RecordForm({
     const recognition = new SpeechRecognitionApi();
     recognitionRef.current = recognition;
     recognition.lang = "en-IN";
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setVoiceListening(true);
@@ -120,7 +120,10 @@ export function RecordForm({
       toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Please try again or enter items manually.");
     };
     recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      const transcript = Array.from(event.results || [])
+        .map((result) => result?.[0]?.transcript || "")
+        .join(" ")
+        .trim();
       const names = parseVoiceShoppingItems(transcript);
       if (!names.length) {
         toast.info("No items recognized. Try saying: milk, eggs, rice.");
@@ -153,7 +156,7 @@ export function RecordForm({
           price: rawPrice && Number(rawPrice) > 0 ? rawPrice : "",
         };
       }
-      const match = /^(.*?)\s+(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litre|litres|ltr|pcs?|pieces?|pkt|packet|dozen|box)?$/i.exec(line);
+      const match = /^(.*?)\s+(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litre|litres|liter|liters|ltr|pcs?|pieces?|pkt|packets?|dozen|boxes?|bottles?|cans?|bags?)?$/i.exec(line);
       if (match) {
         return {
           ...emptyItem(),
