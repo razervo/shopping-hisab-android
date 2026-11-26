@@ -51,7 +51,7 @@ function AddManualPage() {
 
       <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Record a past purchase</h1>
       <p className="mb-4 mt-1 text-[13.5px] text-muted-foreground">
-        Add something you have already bought. The total updates automatically as you enter quantities and prices.
+        Use this for a completed shopping trip—not a shopping list. Enter what you bought and the actual prices you paid; the total updates automatically.
       </p>
 
       <RecordForm submitLabel="Save shopping" saving={saving} onSave={save} footerNote="Added manually" />
