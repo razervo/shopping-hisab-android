@@ -637,15 +637,17 @@ export async function handleShoppingEngine(request, env) {
       db.prepare("UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL,updated_at=? WHERE duplicate_of_bill_id=? AND user_id=? AND session_id=?").bind(timestamp,billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_purchase_lines WHERE bill_id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
-      // A post-confirmation bill deletion changes the total. Reopen the session
-      // in this same batch so reports cannot retain a stale confirmed amount.
-      db.prepare(`INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
-          SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status='completed'
-        )`).bind(id(),userId,sessionId,"session",sessionId,"expense_confirmation_reopened",
-          JSON.stringify({status:"completed",confirmed_actual_total_paise:session.confirmed_actual_total_paise}),
-          JSON.stringify({status:"ready_to_confirm",confirmed_actual_total_paise:null,reason:"bill_deleted"}),timestamp,sessionId,userId),
-      db.prepare("UPDATE shopping_sessions SET status='ready_to_confirm',confirmed_actual_total_paise=NULL,updated_at=? WHERE id=? AND user_id=? AND status='completed'").bind(timestamp,sessionId,userId),
+      // Only deleting a counted bill changes the confirmed actual total. Duplicate,
+      // void, or excluded receipts do not invalidate an otherwise completed trip.
+      ...(Number(existing.included_in_actual)===1&&!["duplicate","void"].includes(existing.bill_status)?[
+        db.prepare(`INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
+          SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (
+            SELECT 1 FROM shopping_sessions WHERE id=? AND user_id=? AND status='completed'
+          )`).bind(id(),userId,sessionId,"session",sessionId,"expense_confirmation_reopened",
+            JSON.stringify({status:"completed",confirmed_actual_total_paise:session.confirmed_actual_total_paise}),
+            JSON.stringify({status:"ready_to_confirm",confirmed_actual_total_paise:null,reason:"counted_bill_deleted"}),timestamp,sessionId,userId),
+        db.prepare("UPDATE shopping_sessions SET status='ready_to_confirm',confirmed_actual_total_paise=NULL,updated_at=? WHERE id=? AND user_id=? AND status='completed'").bind(timestamp,sessionId,userId),
+      ]:[]),
       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
     ];
     await db.batch(statements);
