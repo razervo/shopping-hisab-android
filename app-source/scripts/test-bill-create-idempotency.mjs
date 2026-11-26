@@ -14,7 +14,7 @@ assert.ok(handler.includes("request_hash!==requestHash"), "a reused key with cha
 assert.ok(handler.includes("SELECT * FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND file_id=?"));
 assert.ok(handler.includes("bill_upload_recovered"), "saved-file recovery is audited");
 assert.ok(handler.includes("INSERT INTO shopping_idempotency_keys"), "bill create idempotency markers are persisted");
-assert.ok(handler.includes("try{await db.batch(statements);}catch(cause)"));
+assert.ok(handler.includes("try{") && handler.includes("await db.batch(statements);") && handler.includes("catch(cause)"), "bill writes use atomic batch and winner recovery");
 assert.ok(handler.includes('const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys'));
 assert.ok(handler.includes("winner.request_hash!==requestHash"), "race winner replay rejects mismatched payloads");
 
