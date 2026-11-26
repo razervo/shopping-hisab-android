@@ -9,7 +9,7 @@ const start = engine.indexOf('if (subpath === "bills" && method === "POST")');
 const end = engine.indexOf("const billMatch=", start);
 assert.notEqual(start, -1, "bill creation endpoint exists");
 const handler = engine.slice(start, end);
-assert.ok(handler.includes("const operation=`bill_create:${sessionId}`));
+assert.ok(handler.includes('const operation=`bill_create:${sessionId}`'));
 assert.ok(handler.includes("JSON.stringify(body)"), "bill creation hashes the request payload");
 assert.ok(handler.includes("request_hash!==requestHash"), "a reused key with changed bill data is rejected");
 assert.ok(handler.includes("SELECT * FROM shopping_actual_bills WHERE user_id=? AND session_id=? AND file_id=?"));
