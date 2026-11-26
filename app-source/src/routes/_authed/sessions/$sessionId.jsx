@@ -742,11 +742,11 @@ function SessionDetailPage() {
         undoRestoreRequestKeyRef.current = { payload: restorePayloadText, key: crypto.randomUUID() };
       }
       await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", headers: { "Idempotency-Key": undoRestoreRequestKeyRef.current.key }, body: restorePayloadText });
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       if (!await loadSession()) {
         toast.warning("Item restored, but the list refresh failed. Retry Undo to safely recover the result.");
         return;
       }
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       undoRestoreRequestKeyRef.current = null;
       setUndoItem(null);
       toast.success("Item restored.");
