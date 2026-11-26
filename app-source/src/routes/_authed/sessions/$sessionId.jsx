@@ -746,6 +746,10 @@ function SessionDetailPage() {
   };
 
   const deleteBill = async (billId) => {
+    const billBeforeDelete = (session?.bills || []).find((bill) => bill.id === billId);
+    const reopenedForReconfirmation = session?.status === "completed"
+      && Number(billBeforeDelete?.included_in_actual) === 1
+      && !["duplicate", "void"].includes(billBeforeDelete?.bill_status);
     if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
     const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {

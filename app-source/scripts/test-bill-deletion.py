@@ -291,6 +291,7 @@ assert '!["duplicate","void"].includes(existing.bill_status)' in completed_delet
 bill_delete_ui_start=session_ui.index("const deleteBill = async")
 bill_delete_ui_end=session_ui.index("const editBillLine =",bill_delete_ui_start)
 bill_delete_ui_handler=session_ui[bill_delete_ui_start:bill_delete_ui_end]
+assert 'const reopenedForReconfirmation = session?.status === "completed"' in bill_delete_ui_handler
 assert "reopenedForReconfirmation" in bill_delete_ui_handler
 assert "Trip reopened for reconfirmation." in bill_delete_ui_handler
 confirm_start=engine.index('if(subpath==="confirm" && method==="POST"){')
