@@ -44,14 +44,14 @@ function HomePage() {
   }, []);
 
   return (
-    <div className="pb-4">
-      <section className="mb-4">
-        <p className="micro text-primary">YOUR SHOPPING COMPANION</p>
-        <h1 className="mt-2 max-w-[19ch] text-[26px] font-extrabold leading-[1.15] tracking-tight">
+    <div className="pb-6">
+      <section className="mb-5 rounded-[26px] border border-primary/10 bg-gradient-to-br from-accent/55 via-background to-background p-5">
+        <p className="micro inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-primary">YOUR SHOPPING COMPANION</p>
+        <h1 className="mt-2 max-w-[19ch] text-[28px] font-extrabold leading-[1.12] tracking-tight">
           What are we shopping for today?
         </h1>
         <p className="mt-2 max-w-[34ch] text-[13px] leading-[1.65] text-muted-foreground">
-          Make a list, get an idea of the cost, and keep everything together while you shop.
+          Plan what you need, check the expected cost, and keep your actual shopping totals organised.
         </p>
       </section>
 
@@ -90,7 +90,7 @@ function HomePage() {
         </section>
       ) : null}
 
-      <section className="animate-fade-up overflow-hidden rounded-[26px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
+      <section className="animate-fade-up overflow-hidden rounded-[28px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
           <Sparkles className="h-5 w-5" />
         </div>
@@ -119,7 +119,7 @@ function HomePage() {
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/history"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-3.5 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border/80 bg-card p-4 shadow-[0_8px_24px_-18px_hsl(var(--foreground)/0.24)] transition-all hover:border-primary/20 hover:bg-secondary/30 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <History className="h-5 w-5" />
@@ -147,7 +147,7 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[20px] border border-border bg-white px-3.5 py-3.5">
+        <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-border/80 bg-card px-4 py-4 shadow-[0_8px_24px_-18px_hsl(var(--foreground)/0.24)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
             <ReceiptText className="h-5 w-5" />
           </span>
