@@ -511,38 +511,7 @@ export function RecordForm({
       </div>
 
       <div className="space-y-3">
-        {(allowEstimate || allowActualReceiptUpload) ? (
-          <section className="space-y-3 rounded-[22px] border border-primary/20 bg-primary/[0.035] p-3.5">
-            <div className="flex items-start gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Camera className="h-4 w-4" /></span>
-              <div>
-                <p className="text-[13px] font-extrabold">{allowActualReceiptUpload ? "Scan receipt or bill" : `Scan another shopping list · ${receiptCount} list(s) added`}</p>
-                <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{allowActualReceiptUpload ? "Take a photo or choose a receipt image/PDF to import the items and prices you actually paid. Review before saving." : "Take a photo or select a shopping-list image/PDF to extract items. Review before adding."}</p>
-              </div>
-            </div>
-            <BillUploader compact purpose={allowActualReceiptUpload ? "priced_list" : "shopping_list"} onExtracted={allowActualReceiptUpload ? appendActualReceipt : appendReceipt} />
-            {receiptMessage ? <p className="text-[11px] font-semibold text-primary">{receiptMessage}</p> : null}
-            {allowActualReceiptUpload && actualUploadMessage ? <p className="text-[11px] font-semibold text-primary">{actualUploadMessage}</p> : null}
-          </section>
-        ) : null}
-        {estimateReferenceCount > 0 ? (
-          <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-[18px] border border-border bg-white px-3 py-3">
-              <p className="micro text-muted-foreground">Original market estimate</p>
-              <p className="tnum mt-1 text-[17px] font-extrabold">{inr(estimateReferenceTotal)}</p>
-              <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-                {estimateReferenceCount} of {filled.length} items
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border bg-white px-3 py-3">
-              <p className="micro text-muted-foreground">Current shopping total</p>
-              <p className="tnum mt-1 text-[17px] font-extrabold">{inr(total)}</p>
-              <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-                {estimatedCount > 0 ? "Includes estimated rates" : "Updated prices"}
-              </p>
-            </div>
-          </div>
-        ) : null}
+
 
         <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -609,7 +578,7 @@ export function RecordForm({
           </div>
         ) : null}
 
-        {!initial || allowEstimate ? (
+        {!allowActualReceiptUpload && (!initial || allowEstimate) ? (
           <EstimateBar
             busy={estimating}
             message={estimateMsg}
