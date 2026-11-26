@@ -36,6 +36,7 @@ export function RecordForm({
   const [restored, setRestored] = useState(false);
   const [actualUploadMessage, setActualUploadMessage] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [toolbarScanOpen, setToolbarScanOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
@@ -565,6 +566,13 @@ export function RecordForm({
             </button>
             <button
               type="button"
+              onClick={() => setToolbarScanOpen((open) => !open)}
+              className="inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-2 text-xs font-bold text-primary sm:flex-none"
+            >
+              <Camera className="h-3.5 w-3.5" /> {toolbarScanOpen ? "Close scan" : "Scan bill"}
+            </button>
+            <button
+              type="button"
               onClick={addItem}
               className="inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-full bg-accent px-2 py-2 text-xs font-bold text-accent-foreground transition-colors hover:bg-accent/70 sm:flex-none"
             >
@@ -572,6 +580,13 @@ export function RecordForm({
             </button>
           </div>
         </div>
+        {toolbarScanOpen ? (
+          <section className="space-y-2 rounded-[18px] border border-primary/20 bg-primary/[0.035] p-3">
+            <p className="text-xs font-bold">Scan receipt or shopping list</p>
+            <p className="text-[11px] text-muted-foreground">Take a photo or choose an image/PDF. Review imported items before saving.</p>
+            <BillUploader compact purpose={allowActualReceiptUpload ? "priced_list" : "shopping_list"} onExtracted={allowActualReceiptUpload ? appendActualReceipt : appendReceipt} />
+          </section>
+        ) : null}
         {bulkOpen ? (
           <div className="space-y-2 rounded-[18px] border border-border bg-white p-3">
             <p className="text-[12px] font-bold">Paste multiple items</p>
