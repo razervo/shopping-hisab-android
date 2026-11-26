@@ -166,3 +166,11 @@
     transition-timing-function: ease-out;
   }
 }
+
+
+/* Mobile layout guardrails: prevent page-wide horizontal overflow. */
+@layer base {
+  html, body, #root { width: 100%; max-width: 100%; overflow-x: clip; }
+  *, *::before, *::after { box-sizing: border-box; }
+  img, video, canvas, svg { max-width: 100%; }
+}
