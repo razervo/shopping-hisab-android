@@ -1145,9 +1145,6 @@ function SessionDetailPage() {
         </summary>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
-        <>
-        
-        ) : null}
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
@@ -1199,7 +1196,6 @@ function SessionDetailPage() {
             {saving ? "Saving list…" : "Save shopping list"}
           </button>
         </form>
-        </>
       ) : null}
 
       <section id="trip-list" className="mt-6">
