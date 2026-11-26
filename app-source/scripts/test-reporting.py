@@ -80,6 +80,10 @@ db.executemany(
 export_source = (ROOT / "src/lib/export.js").read_text(encoding="utf-8")
 assert "Item details (JSON)" in export_source
 assert "Receipt details (JSON)" in export_source
+assert "const first = value.trimStart().charAt(0);" in export_source
+assert 'const safeValue = "=+-@".includes(first)' in export_source
+assert 'safeValue.replace(/"/g, "\\"\\")' in export_source
+assert "formula-leading CSV values are prefixed" not in export_source
 assert "const itemRows = Array.isArray(r.items) ? r.items : []" in export_source
 assert "const receipts = Array.isArray(r.receipts) ? r.receipts : []" in export_source
 assert 'doc.text(wrapped, left + 84, y)' in export_source
