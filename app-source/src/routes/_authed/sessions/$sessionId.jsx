@@ -7,6 +7,7 @@ import { parseReceiptMoney } from "@/lib/receipt-money";
 import { reviewEstimateItems } from "@/lib/estimate-review";
 import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
+import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -1299,6 +1300,8 @@ function SessionDetailPage() {
       </section>
         </div>
       </details>
+
+      <PriceComparisonPanel items={items} estimatePrices={estimatePrices} />
 
       <details id="trip-step-2" open={!completed && items.length > 0 && !latestEstimate} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">

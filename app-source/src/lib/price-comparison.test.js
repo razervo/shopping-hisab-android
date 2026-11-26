@@ -1,0 +1,11 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { compareShoppingBasket, retailerSearchLinks } from "./price-comparison.js";
+const now = Date.parse("2026-11-26T12:00:00Z");
+const actual = { id: "a1", product_name: "Amul Gold Milk", brand: "Amul", pack_size: "1 L", quantity: 2, actual_price_paise: 7200 };
+const offer = { product_name: "Amul Gold Milk", brand: "Amul", pack_size: "1 L", price_paise: 3500, verified: true, source_url: "https://example.com/product", checked_at: "2026-11-26T11:30:00Z" };
+test("compares verified matching brand, variant, pack, price and quantity", () => { const out = compareShoppingBasket([actual], { a1: [offer] }, now); assert.equal(out.comparable_count, 1); assert.equal(out.rows[0].comparison.actual_line_paise, 14400); assert.equal(out.rows[0].comparison.offer_line_paise, 7000); assert.equal(out.potential_difference_paise, 7400); });
+test("does not compare brand mismatch or unverified prices", () => { const out = compareShoppingBasket([actual], { a1: [{ ...offer, brand: "Other" }, { ...offer, verified: false }] }, now); assert.equal(out.no_match_count, 1); assert.equal(out.comparable_count, 0); });
+test("rejects stale prices and pack-size mismatch", () => { const stale = { ...offer, checked_at: "2026-11-01T10:00:00Z" }; const mismatch = { ...offer, pack_size: "500 ml" }; const out = compareShoppingBasket([actual], { a1: [stale, mismatch] }, now); assert.equal(out.no_match_count, 1); });
+test("retailer links are search-only and never claim verified prices", () => { const links = retailerSearchLinks("Rice 5 kg"); assert.equal(links.length, 3); assert.ok(links.every((x) => x.url.startsWith("https://"))); });
+test("empty basket has zero totals", () => { const out = compareShoppingBasket([]); assert.equal(out.comparable_count, 0); assert.equal(out.potential_difference_paise, 0); });
