@@ -45,6 +45,7 @@ test("smart list search and filters exclude cancelled items from active views", 
 test("voice transcript splits spoken shopping lists without discarding item phrases", () => {
   assert.deepEqual(parseVoiceShoppingItems("Add milk, eggs and 2 kg rice"), ["milk", "eggs", "2 kg rice"]);
   assert.deepEqual(parseVoiceShoppingItems("tomatoes; bread"), ["tomatoes", "bread"]);
+  assert.deepEqual(parseVoiceShoppingItems("milk 2 L then eggs 12 pcs"), ["milk 2 L", "eggs 12 pcs"]);
   assert.deepEqual(parseVoiceShoppingItems(""), []);
 });
 

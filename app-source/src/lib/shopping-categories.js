@@ -32,7 +32,7 @@ export function findDuplicateShoppingNames(existingItems = [], incomingNames = [
 export function parseVoiceShoppingItems(transcript) {
   return String(transcript || "")
     .replace(/^\s*(add|please add|i need|we need|buy)\s+/i, "")
-    .split(/[,;\n]+|\s+and\s+/i)
+    .split(/[,;\n]+|\s+(?:and|then)\s+/i)
     .map((name) => name.trim().replace(/[.!?]+$/, ""))
     .filter(Boolean);
 }
