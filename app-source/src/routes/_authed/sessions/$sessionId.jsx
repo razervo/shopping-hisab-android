@@ -96,6 +96,8 @@ function SessionDetailPage() {
   const [undoItem, setUndoItem] = useState(null);
   const [undoSaving, setUndoSaving] = useState(false);
   const undoRestoreLockRef = useRef(false);
+  const undoRequestKeyRef = useRef(null);
+  const undoTimerItemIdRef = useRef(null);
   const undoTimerRef = useRef(null);
   const [categoryOverrides, setCategoryOverrides] = useState(() => {
     if (typeof window === "undefined") return {};
@@ -132,7 +134,7 @@ function SessionDetailPage() {
 
   useEffect(() => { loadSession(); }, [loadSession]);
   useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
-  useEffect(() => { if (!undoItem) return; undoTimerRef.current = setTimeout(() => setUndoItem(null), 10000); return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem]);
+  useEffect(() => { if (!undoItem || undoSaving) return; const itemId = undoItem.id; undoTimerItemIdRef.current = itemId; undoTimerRef.current = setTimeout(() => { if (undoTimerItemIdRef.current !== itemId) return; undoTimerRef.current = null; undoTimerItemIdRef.current = null; if (undoRequestKeyRef.current?.itemId === itemId) undoRequestKeyRef.current = null; setUndoItem((current) => current?.id === itemId ? null : current); }, 10000); return () => { if (undoTimerItemIdRef.current === itemId && undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem, undoSaving]);
   useEffect(() => {
     try { window.localStorage.setItem(`shopping-hisab-categories-${sessionId}`, JSON.stringify(categoryOverrides)); }
     catch { /* category preferences are optional local-only enhancements */ }
@@ -706,6 +708,9 @@ function SessionDetailPage() {
       });
       await loadSession();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+      undoTimerItemIdRef.current = item.id;
+      undoRequestKeyRef.current = { itemId: item.id, key: crypto.randomUUID() };
       setUndoItem({ ...item });
       toast.success("Planned item removed. Undo is available for 10 seconds.");
     } catch (cause) {
@@ -718,9 +723,14 @@ function SessionDetailPage() {
     undoRestoreLockRef.current = true;
     setUndoSaving(true);
     try {
-      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-      setUndoItem(null);
+      const restoreItem = undoItem;
+      const keyRecord = undoRequestKeyRef.current?.itemId === restoreItem.id ? undoRequestKeyRef.current : (undoRequestKeyRef.current = { itemId: restoreItem.id, key: crypto.randomUUID() });
+      const requestKey = keyRecord.key;
+      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ product_name: restoreItem.product_name, planned_quantity: Number(restoreItem.planned_quantity || 0), unit: restoreItem.unit || "pcs", brand: restoreItem.brand || "", pack_size: restoreItem.pack_size || "", product_type: restoreItem.product_type || "unsure", notes: restoreItem.notes || "" }) });
+      if (undoTimerItemIdRef.current === restoreItem.id && undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      if (undoTimerItemIdRef.current === restoreItem.id) { undoTimerRef.current = null; undoTimerItemIdRef.current = null; }
+      if (undoRequestKeyRef.current?.itemId === restoreItem.id) undoRequestKeyRef.current = null;
+      setUndoItem((current) => current?.id === restoreItem.id ? null : current);
       toast.success("Item restored.");
       await loadSession();
     } catch (cause) { toast.error(cause.message || "Could not restore item."); }
@@ -736,6 +746,10 @@ function SessionDetailPage() {
   };
 
   const deleteBill = async (billId) => {
+    const billBeforeDelete = (session?.bills || []).find((bill) => bill.id === billId);
+    const reopenedForReconfirmation = session?.status === "completed"
+      && Number(billBeforeDelete?.included_in_actual) === 1
+      && !["duplicate", "void"].includes(billBeforeDelete?.bill_status);
     if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
     const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {
@@ -746,7 +760,7 @@ function SessionDetailPage() {
       delete billDeleteKeysRef.current[billId];
       setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
       await loadSession();
-      toast.success("Bill deleted. Trip totals recalculated.");
+      toast.success(reopenedForReconfirmation ? "Bill deleted. Trip reopened for reconfirmation." : "Bill deleted. Trip totals recalculated.");
     } catch (cause) {
       toast.error(cause.message || "Could not delete this bill.");
       await loadSession();
