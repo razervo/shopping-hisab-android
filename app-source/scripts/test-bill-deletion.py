@@ -263,4 +263,74 @@ assert "billLineDeleteRequestKeysRef.current[lineId]" in delete_ui_handler
 assert 'headers: { "Idempotency-Key": requestKey }' in delete_ui_handler
 assert "delete billLineDeleteRequestKeysRef.current[lineId]" in delete_ui_handler
 
-print("PASS: bill deletion, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
+# Deleting a bill from a completed trip invalidates its current confirmation.
+# The historical confirmation snapshot remains, but reporting excludes the
+# reopened session until a fresh confirmation is saved.
+db.execute("""INSERT INTO shopping_sessions
+  (id,user_id,name,shopping_date,status,confirmed_actual_total_paise,created_at,updated_at)
+  VALUES (?,?,?,?,?,?,?,?)""",
+  ("s-completed","u1","Completed trip","2026-11-24","completed",10000,"t0","t0"))
+db.execute("""INSERT INTO shopping_actual_bills
+  (id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at)
+  VALUES (?,?,?,?,?,?,?,?,?)""",
+  ("b-completed","u1","s-completed","Completed shop",10000,"verified",1,"t0","t0"))
+db.execute("""INSERT INTO shopping_expense_confirmations
+  (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,
+   estimate_id,calculation_snapshot_json,confirmed_at)
+  VALUES (?,?,?,?,?,?,?,?,?)""",
+  ("c-completed","u1","s-completed",1,10000,10000,None,
+   json.dumps({"bill_ids":["b-completed"]}),"t0"))
+completed_delete_start=engine.index('if (billMatch && method === "DELETE")')
+completed_delete_end=engine.index('if (billMatch && ["GET","PATCH"].includes(method)',completed_delete_start)
+completed_delete_handler=engine[completed_delete_start:completed_delete_end]
+assert "expense_confirmation_reopened" in completed_delete_handler
+assert "status='ready_to_confirm',confirmed_actual_total_paise=NULL" in completed_delete_handler
+assert "WHERE id=? AND user_id=? AND status='completed'" in completed_delete_handler
+assert "Number(existing.included_in_actual)===1" in completed_delete_handler
+assert '!["duplicate","void"].includes(existing.bill_status)' in completed_delete_handler
+confirm_start=engine.index('if(subpath==="confirm" && method==="POST"){')
+confirm_end=engine.index('if (subpath === "audit" && method === "GET")',confirm_start)
+confirm_handler=engine[confirm_start:confirm_end]
+assert "status IN ('open','ready_to_confirm')" in confirm_handler
+with db:
+  db.execute("""INSERT INTO shopping_audit_events
+    (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?)""",
+    ("audit-reopen","u1","s-completed","session","s-completed","expense_confirmation_reopened",
+     json.dumps({"status":"completed","confirmed_actual_total_paise":10000}),
+     json.dumps({"status":"ready_to_confirm","confirmed_actual_total_paise":None,"reason":"counted_bill_deleted"}),"t1"))
+  db.execute("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?",
+    ("b-completed","u1","s-completed"))
+  db.execute("UPDATE shopping_sessions SET status='ready_to_confirm',confirmed_actual_total_paise=NULL,updated_at=? WHERE id=? AND user_id=? AND status='completed'",
+    ("t1","s-completed","u1"))
+assert db.execute("SELECT status,confirmed_actual_total_paise FROM shopping_sessions WHERE id='s-completed'").fetchone()==("ready_to_confirm",None)
+assert db.execute("SELECT COUNT(*) FROM shopping_expense_confirmations WHERE session_id='s-completed'").fetchone()[0]==1
+assert db.execute("SELECT event_type FROM shopping_audit_events WHERE id='audit-reopen'").fetchone()[0]=="expense_confirmation_reopened"
+assert db.execute("SELECT COUNT(*) FROM shopping_sessions WHERE id='s-completed' AND status='completed'").fetchone()[0]==0
+assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
+# Removing an excluded duplicate receipt from a completed trip does not change
+# the counted total, so it must not reopen confirmation.
+db.execute("""INSERT INTO shopping_sessions
+  (id,user_id,name,shopping_date,status,confirmed_actual_total_paise,created_at,updated_at)
+  VALUES (?,?,?,?,?,?,?,?)""",
+  ("s-dup-completed","u1","Completed trip with duplicate","2026-11-24","completed",20000,"t0","t0"))
+db.execute("""INSERT INTO shopping_actual_bills
+  (id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at)
+  VALUES (?,?,?,?,?,?,?,?,?)""",
+  ("b-dup-completed","u1","s-dup-completed","Duplicate shop",9000,"duplicate",0,"t0","t0"))
+db.execute("""INSERT INTO shopping_expense_confirmations
+  (id,user_id,session_id,revision_number,calculated_total_paise,confirmed_total_paise,
+   estimate_id,calculation_snapshot_json,confirmed_at)
+  VALUES (?,?,?,?,?,?,?,?,?)""",
+  ("c-dup-completed","u1","s-dup-completed",1,20000,20000,None,
+   json.dumps({"bill_ids":["counted-before"]}),"t0"))
+with db:
+  db.execute("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?",
+    ("b-dup-completed","u1","s-dup-completed"))
+assert db.execute("SELECT status,confirmed_actual_total_paise FROM shopping_sessions WHERE id='s-dup-completed'").fetchone()==("completed",20000)
+assert db.execute("SELECT COUNT(*) FROM shopping_expense_confirmations WHERE session_id='s-dup-completed'").fetchone()[0]==1
+assert db.execute("SELECT COUNT(*) FROM shopping_sessions WHERE id='s-dup-completed' AND status='completed'").fetchone()[0]==1
+assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
+print("PASS: bill deletion/reconfirmation, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
