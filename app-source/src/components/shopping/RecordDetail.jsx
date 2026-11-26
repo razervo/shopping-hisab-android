@@ -78,11 +78,6 @@ export function RecordDetail({ record, onDeleted }) {
               {Number(item.price) > 0 ? (
                 <p className="text-[11.5px] text-muted-foreground">{inr(item.price)} each</p>
               ) : null}
-              {Number(item.estimated_price) > 0 ? (
-                <p className="text-[10.5px] text-muted-foreground">
-                  Market estimate: {inr(item.estimated_price)} / unit
-                </p>
-              ) : null}
             </div>
             <span className="w-16 text-right text-[13px] text-muted-foreground">
               {formatQty(item.qty, item.unit)}
