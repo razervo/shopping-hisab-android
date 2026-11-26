@@ -1,0 +1,37 @@
+name: Playwright Live Smoke
+
+on:
+  pull_request:
+    branches: [cloudflare-native-migration]
+    paths:
+      - "tests/playwright/**"
+      - ".github/workflows/playwright-live.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: npm install --no-save playwright
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run live smoke tests
+        env:
+          SHOPPING_HISAB_URL: https://shopping-hisab-native.hasimabd13.workers.dev
+        run: node tests/playwright/live-smoke.spec.mjs
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-screenshots
+          path: test-results/
+          if-no-files-found: ignore
