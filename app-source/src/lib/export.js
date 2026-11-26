@@ -11,7 +11,12 @@ function download(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+const cell = (v) => {
+  const value = String(v ?? "");
+  const first = value.trimStart().charAt(0);
+  const safeValue = "=+-@".includes(first) ? "'" + value : value;
+  return "\"" + safeValue.replace(/"/g, "\"\"") + "\"";
+};
 
 export function exportRecordsCSV(records, label = "shopping-hisab") {
   const header = ["Date", "Shop / Session", "Item count", "Total (INR)", "Item details (JSON)", "Receipt details (JSON)", "Notes"];
