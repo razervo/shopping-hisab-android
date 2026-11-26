@@ -90,4 +90,10 @@ assert "files are intentionally not deleted" in handler
 route=(ROOT/"src/routes/_authed/sessions/$sessionId.jsx").read_text(encoding="utf-8")
 assert "Delete trip" in route and "Delete empty trip" not in route
 assert "deleteTrip" in route and "ALL saved trip data" in route
+# Session creation permits an omitted name because the UI labels it optional.
+create_engine = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
+create_page = (ROOT / "src/routes/_authed/sessions.index.jsx").read_text(encoding="utf-8")
+assert 'const name=text(body.name,120) || "Shopping trip";' in create_engine
+assert "Give this trip a name (optional)" in create_page
+
 print("PASS: populated/completed trip deletion, full snapshots, FK-safe cleanup, duplicate references, and attachment retention.")
