@@ -97,6 +97,7 @@ function SessionDetailPage() {
   const [undoItem, setUndoItem] = useState(null);
   const [undoSaving, setUndoSaving] = useState(false);
   const undoRestoreLockRef = useRef(false);
+  const undoRestoreRequestKeyRef = useRef(null);
   const undoTimerRef = useRef(null);
   const [categoryOverrides, setCategoryOverrides] = useState(() => {
     if (typeof window === "undefined") return {};
@@ -124,8 +125,10 @@ function SessionDetailPage() {
     try {
       const data = await api(`/api/shopping/sessions/${sessionId}`);
       setSession(data);
+      return true;
     } catch (cause) {
       setError(cause.message || "Could not load this session.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -307,12 +310,15 @@ function SessionDetailPage() {
         headers: { "Idempotency-Key": estimateRequestKeyRef.current.key },
         body: estimatePayloadText,
       });
-      estimateRequestKeyRef.current = null;
       rememberEstimatePrices(currentItems, estimatePrices);
+      if (!await loadSession()) {
+        toast.warning("Estimate saved, but the trip did not refresh. Retry the same estimate to safely recover it.");
+        return;
+      }
+      estimateRequestKeyRef.current = null;
       toast.success("Your estimate is saved.");
       setEstimateReviewOpen(false);
       setEstimateReviewWarnings([]);
-      await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not save this estimate.");
     } finally {
@@ -378,24 +384,32 @@ function SessionDetailPage() {
     manualBillSaveLockRef.current = true;
     setBillSaving(true);
     try {
+      const billPayload = {
+        shop_name: billForm.shop_name.trim(),
+        purchase_date: billForm.purchase_date || null,
+        receipt_number: billForm.receipt_number.trim(),
+        bill_total_paise: Math.round(rupees * 100),
+        bill_status: "verified",
+        duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
+        original_ocr: { entry_method: "manual" },
+      };
+      const billPayloadText = JSON.stringify(billPayload);
+      if (!billRequestKeyRef.current || billRequestKeyRef.current.payload !== billPayloadText) {
+        billRequestKeyRef.current = { payload: billPayloadText, key: crypto.randomUUID() };
+      }
       const savedBill = await api(`/api/shopping/sessions/${sessionId}/bills`, {
         method: "POST",
-        headers: { "Idempotency-Key": billRequestKeyRef.current || (billRequestKeyRef.current = crypto.randomUUID()) },
-        body: JSON.stringify({
-          shop_name: billForm.shop_name.trim(),
-          purchase_date: billForm.purchase_date || null,
-          receipt_number: billForm.receipt_number.trim(),
-          bill_total_paise: Math.round(rupees * 100),
-          bill_status: "verified",
-          duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
-          original_ocr: { entry_method: "manual" },
-        }),
+        headers: { "Idempotency-Key": billRequestKeyRef.current.key },
+        body: billPayloadText,
       });
-      if (savedBill.possible_duplicate) toast.warning("Possible duplicate bill detected. Review it before trusting the spending total.");
-      else toast.success("Bill added to actual spending.");
+      if (!await loadSession()) {
+        toast.warning("Bill saved, but the trip did not refresh. Retry the same details to safely recover it.");
+        return;
+      }
       billRequestKeyRef.current = null;
       setBillForm({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
-      await loadSession();
+      if (savedBill.possible_duplicate) toast.warning("Possible duplicate bill detected. Review it before trusting the spending total.");
+      else toast.success("Bill added to actual spending.");
     } catch (cause) {
       toast.error(cause.message || "Could not add this bill.");
     } finally {
@@ -403,8 +417,6 @@ function SessionDetailPage() {
       setBillSaving(false);
     }
   };
-
-
   const handleUploadedBill = (draft, fileUri) => {
     const extracted = Array.isArray(draft?.items) ? draft.items : [];
     if (!extracted.length) {
@@ -525,9 +537,10 @@ function SessionDetailPage() {
           })) }),
         });
       }
-      toast.success(lines.length
-        ? "Receipt and reviewed item details saved. The bill total is counted once."
-        : "Receipt and total saved. You can add item details later.");
+      if (!await loadSession()) {
+        toast.warning("Receipt saved, but the trip did not refresh. Retry the same receipt to safely recover it.");
+        return;
+      }
       uploadedBillCreateKeyRef.current = null;
       uploadedBillLinesKeyRef.current = null;
       setUploadedBillDraft(null);
@@ -537,7 +550,9 @@ function SessionDetailPage() {
       setUploadedBillTotal("");
       setUploadedBillTotalSource("manual");
       setUploadedBillShop("");
-      await loadSession();
+      toast.success(lines.length
+        ? "Receipt and reviewed item details saved. The bill total is counted once."
+        : "Receipt and total saved. You can add item details later.");
     } catch (cause) {
       toast.error(cause.message || "Could not save the uploaded bill.");
     } finally {
@@ -648,9 +663,12 @@ function SessionDetailPage() {
         headers: { "Idempotency-Key": confirmationRequestKeyRef.current || (confirmationRequestKeyRef.current = crypto.randomUUID()) },
         body: JSON.stringify({ confirmed_total_paise: Math.round(rupees * 100) }),
       });
+      if (!await loadSession()) {
+        toast.warning(`Shopping trip completed (confirmation v${result.revision_number}), but the trip did not refresh. Retry the same total to safely recover it.`);
+        return;
+      }
       confirmationRequestKeyRef.current = null;
       toast.success(`Shopping trip completed. Confirmation v${result.revision_number} saved.`);
-      await loadSession();
     } catch (cause) {
       toast.error(cause.message || "Could not complete this session.");
     } finally {
@@ -719,11 +737,20 @@ function SessionDetailPage() {
     undoRestoreLockRef.current = true;
     setUndoSaving(true);
     try {
-      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
+      const restorePayload = { product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" };
+      const restorePayloadText = JSON.stringify(restorePayload);
+      if (!undoRestoreRequestKeyRef.current || undoRestoreRequestKeyRef.current.payload !== restorePayloadText) {
+        undoRestoreRequestKeyRef.current = { payload: restorePayloadText, key: crypto.randomUUID() };
+      }
+      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", headers: { "Idempotency-Key": undoRestoreRequestKeyRef.current.key }, body: restorePayloadText });
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      if (!await loadSession()) {
+        toast.warning("Item restored, but the list refresh failed. Retry Undo to safely recover the result.");
+        return;
+      }
+      undoRestoreRequestKeyRef.current = null;
       setUndoItem(null);
       toast.success("Item restored.");
-      await loadSession();
     } catch (cause) { toast.error(cause.message || "Could not restore item."); }
     finally { undoRestoreLockRef.current = false; setUndoSaving(false); }
   };
@@ -744,9 +771,12 @@ function SessionDetailPage() {
         method: "DELETE",
         headers: { "Idempotency-Key": requestKey },
       });
-      delete billDeleteKeysRef.current[billId];
       setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
-      await loadSession();
+      if (!await loadSession()) {
+        toast.warning("Bill deleted, but the trip did not refresh. Retry the deletion to safely recover it.");
+        return;
+      }
+      delete billDeleteKeysRef.current[billId];
       toast.success("Bill deleted. Trip totals recalculated.");
     } catch (cause) {
       toast.error(cause.message || "Could not delete this bill.");
@@ -785,9 +815,12 @@ function SessionDetailPage() {
     const requestKey = billLineDeleteRequestKeysRef.current[lineId] || (billLineDeleteRequestKeysRef.current[lineId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE", headers: { "Idempotency-Key": requestKey } });
-      delete billLineDeleteRequestKeysRef.current[lineId];
       setBillLineDetails((current) => ({ ...current, [billId]: (current[billId] || []).filter((line) => line.id !== lineId) }));
-      await loadSession();
+      if (!await loadSession()) {
+        toast.warning("Bill item deleted, but the trip did not refresh. Retry the deletion to safely recover it.");
+        return;
+      }
+      delete billLineDeleteRequestKeysRef.current[lineId];
       toast.success("Bill item deleted and reconciliation updated.");
     } catch (cause) {
       toast.error(cause.message || "Could not delete this bill item.");
@@ -860,13 +893,16 @@ function SessionDetailPage() {
           }),
         });
       }
-      toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
+      if (!await loadSession()) {
+        toast.warning("Scanned list saved, but the trip did not refresh. Retry the same list to safely recover it.");
+        return;
+      }
       scannedSourceListKeyRef.current = null;
       scannedSourceLinesKeyRef.current = null;
       setScannedDraft(null);
       setScannedFileUri("");
       setScannedRows([]);
-      await loadSession();
+      toast.success(`${validRows.length} scanned ${validRows.length === 1 ? "item" : "items"} added after review.`);
     } catch (cause) {
       toast.error(cause.message || "Could not save the scanned list.");
       await loadSession();
@@ -936,12 +972,15 @@ function SessionDetailPage() {
           }),
         });
       }
-      toast.success(`${validRows.length} ${validRows.length === 1 ? "item" : "items"} added`);
+      if (!await loadSession()) {
+        toast.warning("Shopping list saved, but the trip did not refresh. Retry the same list to safely recover it.");
+        return;
+      }
       manualSourceListKeyRef.current = null;
       manualSourceLinesKeyRef.current = null;
       setListName("My shopping list");
       setRows([blankRow()]);
-      await loadSession();
+      toast.success(`${validRows.length} ${validRows.length === 1 ? "item" : "items"} added`);
     } catch (cause) {
       toast.error(cause.message || "Could not save this list.");
       await loadSession();
@@ -1064,41 +1103,49 @@ function SessionDetailPage() {
         </a>
       </nav>
 
-      <details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      {!completed ? (
+        <section className="mb-4 space-y-3 rounded-[24px] border border-primary/20 bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Quick scan · handwritten list</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Scan and review a handwritten list here without opening the preparation step.</p>
+          </div>
+          <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
+                    <div>
+                      <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
+                      <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
+                    </div>
+                    <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
+                  </section>
+                  {scannedDraft ? (
+                    <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
+                      <div>
+                        <p className="text-[15px] font-extrabold">Review scanned list</p>
+                        <p className="mt-1 text-[12px] text-muted-foreground">Nothing is added until you save. Original scan data is retained with the source list.</p>
+                      </div>
+                      <input value={scannedListName} onChange={(event) => setScannedListName(event.target.value)} maxLength={120} aria-label="Scanned list name" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+                      {scannedRows.map((row, index) => (
+                        <div key={index} className="grid grid-cols-[minmax(0,1fr)_82px_72px] gap-2">
+                          <input value={row.name} onChange={(event) => updateScannedRow(index, "name", event.target.value)} aria-label={`Scanned item ${index + 1} name`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+                          <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateScannedRow(index, "quantity", event.target.value)} aria-label={`Scanned item ${index + 1} quantity`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+                          <input value={row.unit} onChange={(event) => updateScannedRow(index, "unit", event.target.value)} aria-label={`Scanned item ${index + 1} unit`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+                        </div>
+                      ))}
+                      <button type="submit" disabled={scannedListSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+                        {scannedListSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
+                      </button>
+                    </form>
+        </section>
+      ) : null}
+
+
+<details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
         </summary>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
-        <>
-        <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
-          <div>
-            <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
-          </div>
-          <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
-        </section>
-        {scannedDraft ? (
-          <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
-            <div>
-              <p className="text-[15px] font-extrabold">Review scanned list</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">Nothing is added until you save. Original scan data is retained with the source list.</p>
-            </div>
-            <input value={scannedListName} onChange={(event) => setScannedListName(event.target.value)} maxLength={120} aria-label="Scanned list name" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
-            {scannedRows.map((row, index) => (
-              <div key={index} className="grid grid-cols-[minmax(0,1fr)_82px_72px] gap-2">
-                <input value={row.name} onChange={(event) => updateScannedRow(index, "name", event.target.value)} aria-label={`Scanned item ${index + 1} name`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2.5 text-[12px]" />
-                <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateScannedRow(index, "quantity", event.target.value)} aria-label={`Scanned item ${index + 1} quantity`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
-                <input value={row.unit} onChange={(event) => updateScannedRow(index, "unit", event.target.value)} aria-label={`Scanned item ${index + 1} unit`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
-              </div>
-            ))}
-            <button type="submit" disabled={scannedListSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
-              {scannedListSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
-            </button>
-          </form>
-        ) : null}
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
@@ -1150,7 +1197,6 @@ function SessionDetailPage() {
             {saving ? "Saving list…" : "Save shopping list"}
           </button>
         </form>
-        </>
       ) : null}
 
       <section id="trip-list" className="mt-6">
@@ -1380,22 +1426,24 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
+      {completed ? (
       <section id="trip-estimate" className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Estimated cost</p>
-            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
-            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
-          </div>
-          <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Paid so far</p>
-            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
-            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
-          </div>
-        </div>
-        <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
-      </section>
+              <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-[18px] border border-border bg-white p-3">
+                  <p className="text-[11px] text-muted-foreground">Estimated cost</p>
+                  <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
+                  {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
+                </div>
+                <div className="rounded-[18px] border border-border bg-white p-3">
+                  <p className="text-[11px] text-muted-foreground">Paid so far</p>
+                  <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
+                  {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
+                </div>
+              </div>
+              <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
+            </section>
+    ) : null}
 
       <section className="mt-4">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>

@@ -26,6 +26,16 @@ jobs:
       - name: Run Phase 3 integrity regression checks
         working-directory: app-source
         run: python scripts/test-bill-deletion.py
+      - name: Run Phase 3 reconciliation and retry-recovery audit
+        working-directory: app-source
+        run: |
+          python3 scripts/test-reconciliation-integrity.py
+          python3 scripts/test-drive-recovery.py
+          node scripts/test-bill-line-idempotency.mjs
+          node scripts/test-bill-create-idempotency.mjs
+          node scripts/test-ui-mutation-retry-recovery.mjs
+          node scripts/test-estimate-line-integrity.mjs
+          node scripts/test-estimate-idempotency.mjs
       - name: Run Phase 2 regression tests
         working-directory: app-source
         run: npm run test:shopping-categories
