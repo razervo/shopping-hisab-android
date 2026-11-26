@@ -30,13 +30,14 @@ export function findDuplicateShoppingNames(existingItems = [], incomingNames = [
 }
 
 export function parseVoiceShoppingItems(transcript) {
-  return String(transcript || "")
-    .replace(/^\s*(add|please add|i need|we need|buy)\s+/i, "")
-    .split(/[,;\n]+|\s+and\s+/i)
-    .map((name) => name.trim().replace(/[.!?]+$/, ""))
+  const cleaned = String(transcript || "")
+    .replace(/^\\s*(add|please add|i need|we need|i want|we want|buy|shopping list)\\s+/i, "")
+    .replace(/\\s+(?:and|then)\\s+/gi, ",");
+  return cleaned
+    .split(/[,;\\n]+/)
+    .map((item) => item.trim().replace(/^[\\s-]+|[.!?]+$/g, ""))
     .filter(Boolean);
 }
-
 const CATEGORY_RULES = [
   ["Produce", /\b(apple|banana|orange|mango|tomato(?:es)?|potato(?:es)?|onions?|garlic|ginger|spinach|cabbage|carrot|cucumber|lemon|chilli|pepper|vegetables?|fruits?|okra|brinjal|cauliflower|broccoli|peas|beans)\b/i],
   ["Dairy & Eggs", /\b(milk|curd|yogurt|paneer|cheese|butter|ghee|cream|egg|eggs)\b/i],
