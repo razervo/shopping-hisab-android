@@ -4,43 +4,85 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 155 12% 8%;
+    color-scheme: light;
+    /* Shopping Hisab semantic palette — warm neutral surfaces + emerald */
+    --background: 150 14% 97%;
+    --foreground: 155 16% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 155 12% 8%;
+    --card-foreground: 155 16% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 155 12% 8%;
-    --primary: 152 58% 25%;
+    --popover-foreground: 155 16% 10%;
+    --primary: 154 82% 25%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 150 24% 96%;
-    --secondary-foreground: 152 35% 15%;
-    --muted: 150 18% 96%;
+    --secondary: 148 35% 92%;
+    --secondary-foreground: 154 45% 16%;
+    --muted: 150 14% 94%;
     --muted-foreground: 155 8% 40%;
-    --accent: 150 34% 94%;
-    --accent-foreground: 152 58% 20%;
+    --accent: 148 38% 91%;
+    --accent-foreground: 154 66% 22%;
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 100%;
-    --border: 150 14% 89%;
-    --input: 150 14% 87%;
-    --ring: 152 58% 25%;
-    --chart-1: 152 58% 30%;
-    --chart-2: 142 45% 45%;
-    --chart-3: 165 40% 55%;
-    --chart-4: 45 70% 55%;
-    --chart-5: 20 65% 55%;
+    --success: 145 63% 31%;
+    --warning: 38 91% 48%;
+    --border: 150 13% 87%;
+    --input: 150 13% 85%;
+    --ring: 154 82% 25%;
+    --chart-1: 154 82% 25%;
+    --chart-2: 142 48% 42%;
+    --chart-3: 165 43% 53%;
+    --chart-4: 38 91% 48%;
+    --chart-5: 20 67% 52%;
     --radius: 1.25rem;
     --font-heading: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     --font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    --sidebar-background: 150 20% 98%;
+    --sidebar-background: 150 18% 96%;
     --sidebar-foreground: 155 10% 20%;
-    --sidebar-primary: 152 58% 25%;
+    --sidebar-primary: 154 82% 25%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 150 30% 94%;
-    --sidebar-accent-foreground: 152 50% 18%;
-    --sidebar-border: 150 14% 89%;
-    --sidebar-ring: 152 58% 25%;
+    --sidebar-accent: 148 32% 91%;
+    --sidebar-accent-foreground: 154 52% 18%;
+    --sidebar-border: 150 13% 87%;
+    --sidebar-ring: 154 82% 25%;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 155 16% 8%;
+    --foreground: 150 12% 93%;
+    --card: 155 14% 12%;
+    --card-foreground: 150 12% 93%;
+    --popover: 155 14% 12%;
+    --popover-foreground: 150 12% 93%;
+    --primary: 151 52% 48%;
+    --primary-foreground: 155 20% 8%;
+    --secondary: 155 12% 17%;
+    --secondary-foreground: 150 12% 93%;
+    --muted: 155 12% 16%;
+    --muted-foreground: 150 8% 63%;
+    --accent: 151 24% 19%;
+    --accent-foreground: 150 18% 91%;
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 145 50% 48%;
+    --warning: 38 82% 56%;
+    --border: 155 10% 22%;
+    --input: 155 10% 25%;
+    --ring: 151 52% 48%;
+    --chart-1: 151 52% 48%;
+    --chart-2: 142 45% 54%;
+    --chart-3: 165 40% 60%;
+    --chart-4: 38 82% 56%;
+    --chart-5: 20 65% 58%;
+    --sidebar-background: 155 15% 10%;
+    --sidebar-foreground: 150 12% 92%;
+    --sidebar-primary: 151 52% 48%;
+    --sidebar-primary-foreground: 155 20% 8%;
+    --sidebar-accent: 155 12% 17%;
+    --sidebar-accent-foreground: 150 12% 92%;
+    --sidebar-border: 155 10% 22%;
+    --sidebar-ring: 151 52% 48%;
   }
 }
 
@@ -99,5 +141,28 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up {
     animation: none;
+  }
+}
+
+/* UI redesign foundation: touch-friendly, soft surfaces, safe-area aware. */
+@layer base {
+  body {
+    min-height: 100dvh;
+    background-image: radial-gradient(ellipse at 0% 0%, hsl(var(--accent) / 0.28), transparent 42%);
+  }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button, [role="button"] { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+  ::selection { background: hsl(var(--primary) / 0.18); }
+}
+@layer utilities {
+  .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+  .surface-shadow { box-shadow: 0 8px 24px -18px hsl(var(--foreground) / 0.24); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  a, button, [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 160ms;
+    transition-timing-function: ease-out;
   }
 }
