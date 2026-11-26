@@ -496,25 +496,25 @@ export function RecordForm({
             <h2 className="text-[13px] font-bold tracking-wide">Items ({filled.length})</h2>
             <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add items, paste a list, or scan another receipt</p>
           </div>
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+          <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
             <button
               type="button"
               onClick={startVoiceEntry}
               aria-pressed={voiceListening}
-              className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full border px-3 py-2 text-xs font-bold sm:flex-none ${voiceListening ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-white text-foreground"}`}
+              className={`inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border px-3 py-2 text-xs font-bold sm:flex-none ${voiceListening ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-white text-foreground"}`}
             >
               <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Stop voice" : "Add by voice"}
             </button>
             <button
               onClick={() => { setBulkOpen((open) => !open); setBulkError(""); }}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full border border-border bg-white px-3 py-2 text-xs font-bold text-foreground sm:flex-none"
+              className="inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-border bg-white px-2 py-2 text-xs font-bold text-foreground sm:flex-none"
             >
               <ListPlus className="h-3.5 w-3.5" /> {bulkOpen ? "Close" : "Paste multiple"}
             </button>
             <button
               type="button"
               onClick={addItem}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full bg-accent px-3 py-2 text-xs font-bold text-accent-foreground transition-colors hover:bg-accent/70 sm:flex-none"
+              className="inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-full bg-accent px-2 py-2 text-xs font-bold text-accent-foreground transition-colors hover:bg-accent/70 sm:flex-none"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add item
             </button>
@@ -621,7 +621,7 @@ export function RecordForm({
       ) : null}
 
       <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-2xl items-center gap-2 sm:gap-4">
+        <div className="mx-auto flex w-full max-w-2xl min-w-0 items-center gap-2 sm:gap-4">
           <div className="min-w-0 flex-1">
             <p className="micro text-muted-foreground">
               {estimatedCount > 0 ? "Estimated + actual total" : "Actual shopping total"}
