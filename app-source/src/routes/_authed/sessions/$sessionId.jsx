@@ -96,6 +96,7 @@ function SessionDetailPage() {
   const [undoItem, setUndoItem] = useState(null);
   const [undoSaving, setUndoSaving] = useState(false);
   const undoRestoreLockRef = useRef(false);
+  const undoRequestKeyRef = useRef(null);
   const undoTimerRef = useRef(null);
   const [categoryOverrides, setCategoryOverrides] = useState(() => {
     if (typeof window === "undefined") return {};
@@ -132,7 +133,7 @@ function SessionDetailPage() {
 
   useEffect(() => { loadSession(); }, [loadSession]);
   useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
-  useEffect(() => { if (!undoItem) return; undoTimerRef.current = setTimeout(() => setUndoItem(null), 10000); return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem]);
+  useEffect(() => { if (!undoItem || undoSaving) return; undoTimerRef.current = setTimeout(() => { setUndoItem(null); undoRequestKeyRef.current = null; }, 10000); return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }; }, [undoItem, undoSaving]);
   useEffect(() => {
     try { window.localStorage.setItem(`shopping-hisab-categories-${sessionId}`, JSON.stringify(categoryOverrides)); }
     catch { /* category preferences are optional local-only enhancements */ }
@@ -706,6 +707,7 @@ function SessionDetailPage() {
       });
       await loadSession();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoRequestKeyRef.current = crypto.randomUUID();
       setUndoItem({ ...item });
       toast.success("Planned item removed. Undo is available for 10 seconds.");
     } catch (cause) {
@@ -718,8 +720,10 @@ function SessionDetailPage() {
     undoRestoreLockRef.current = true;
     setUndoSaving(true);
     try {
-      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
+      const requestKey = undoRequestKeyRef.current || (undoRequestKeyRef.current = crypto.randomUUID());
+      await api(`/api/shopping/sessions/${sessionId}/items`, { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ product_name: undoItem.product_name, planned_quantity: Number(undoItem.planned_quantity || 0), unit: undoItem.unit || "pcs", brand: undoItem.brand || "", pack_size: undoItem.pack_size || "", product_type: undoItem.product_type || "unsure", notes: undoItem.notes || "" }) });
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoRequestKeyRef.current = null;
       setUndoItem(null);
       toast.success("Item restored.");
       await loadSession();
