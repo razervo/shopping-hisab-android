@@ -1,3 +1,4 @@
+import console from "node:console";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { URL } from "node:url";
@@ -18,12 +19,12 @@ const afterRefresh = (code, resetMarker, label) => {
 const loadStart = ui.indexOf("const loadSession = useCallback(async");
 const loadEnd = ui.indexOf("}, [sessionId]);", loadStart);
 const loader = ui.slice(loadStart, loadEnd);
-assert.match(loader, /return true;/);
-assert.match(loader, /return false;/);
+assert.ok(loader.includes("return true;"));
+assert.ok(loader.includes("return false;"));
 
 const undo = section("const undoPlannedItem = async", "const loadBillLines = async");
-assert.match(undo, /headers: \\{ "Idempotency-Key": undoRestoreRequestKeyRef\\.current\\.key \\}/, "Undo restoration must send a retry key");
-assert.match(undo, /undoRestoreRequestKeyRef\\.current\\.payload/);
+assert.ok(undo.includes('headers: { "Idempotency-Key": undoRestoreRequestKeyRef.current.key }'), "Undo restoration must send a retry key");
+assert.ok(undo.includes("undoRestoreRequestKeyRef.current.payload"));
 afterRefresh(undo, "undoRestoreRequestKeyRef.current = null", "Undo restore");
 afterRefresh(undo, "setUndoItem(null)", "Undo restore");
 
@@ -32,7 +33,7 @@ afterRefresh(estimate, "estimateRequestKeyRef.current = null", "Estimate save");
 
 const bill = section("const saveBill = async", "const handleUploadedBill");
 afterRefresh(bill, "billRequestKeyRef.current = null", "Manual bill save");
-assert.match(bill, /billRequestKeyRef\\.current\\.payload !== billPayloadText/, "manual bill key is payload-bound");
+assert.ok(bill.includes("billRequestKeyRef.current.payload !== billPayloadText"), "manual bill key is payload-bound");
 
 const upload = section("const saveUploadedBill = async", "const updateBillStatus");
 afterRefresh(upload, "uploadedBillCreateKeyRef.current = null", "Uploaded bill save");
