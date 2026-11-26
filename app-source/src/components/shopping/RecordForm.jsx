@@ -441,7 +441,7 @@ export function RecordForm({
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4 pb-28">
+    <form onSubmit={submit} className="w-full min-w-0 space-y-4 overflow-x-clip pb-32">
       <div className="rounded-[20px] border border-border bg-white p-3.5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -491,34 +491,30 @@ export function RecordForm({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-[13px] font-bold tracking-wide">Items ({filled.length})</h2>
             <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add items, paste a list, or scan another receipt</p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={startVoiceEntry} aria-pressed={voiceListening} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-2 text-[11px] font-bold ${voiceListening ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-white text-foreground"}`}>
-              <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Stop voice" : "Voice"}
-            </button>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             <button
               type="button"
               onClick={startVoiceEntry}
-              disabled={voiceListening}
-              aria-label="Add items by voice"
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground disabled:opacity-60"
+              aria-pressed={voiceListening}
+              className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full border px-3 py-2 text-xs font-bold sm:flex-none ${voiceListening ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-white text-foreground"}`}
             >
-              <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Listening…" : "Voice"}
+              <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Stop voice" : "Add by voice"}
             </button>
             <button
               onClick={() => { setBulkOpen((open) => !open); setBulkError(""); }}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2.5 py-2 text-[11px] font-bold text-foreground"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full border border-border bg-white px-3 py-2 text-xs font-bold text-foreground sm:flex-none"
             >
               <ListPlus className="h-3.5 w-3.5" /> {bulkOpen ? "Close" : "Paste multiple"}
             </button>
             <button
               type="button"
               onClick={addItem}
-              className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-2 text-[11px] font-bold text-accent-foreground transition-colors hover:bg-accent/70"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-full bg-accent px-3 py-2 text-xs font-bold text-accent-foreground transition-colors hover:bg-accent/70 sm:flex-none"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add item
             </button>
@@ -625,7 +621,7 @@ export function RecordForm({
       ) : null}
 
       <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-2xl items-center gap-4">
+        <div className="mx-auto flex w-full max-w-2xl items-center gap-2 sm:gap-4">
           <div className="min-w-0 flex-1">
             <p className="micro text-muted-foreground">
               {estimatedCount > 0 ? "Estimated + actual total" : "Actual shopping total"}
@@ -643,7 +639,7 @@ export function RecordForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-full bg-primary px-5 py-3.5 text-[14px] font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+            className="max-w-[48%] shrink-0 rounded-full bg-primary px-3 py-3.5 text-center text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60 sm:max-w-none sm:px-5"
           >
             {saving ? "Saving…" : submitLabel}
           </button>
