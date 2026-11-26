@@ -95,5 +95,9 @@ create_engine = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding=
 create_page = (ROOT / "src/routes/_authed/sessions.index.jsx").read_text(encoding="utf-8")
 assert 'const name=text(body.name,120) || "Shopping trip";' in create_engine
 assert "Give this trip a name (optional)" in create_page
+# Session creation retry keys are payload-bound: same payload recovers, changed input gets a new key.
+assert "createSessionKeyRef.current.payload !== sessionPayload" in create_page
+assert "createSessionKeyRef.current = { payload: sessionPayload, key: crypto.randomUUID() }" in create_page
+assert 'headers: { "Content-Type": "application/json", "Idempotency-Key": createSessionKeyRef.current.key }' in create_page
 
 print("PASS: populated/completed trip deletion, full snapshots, FK-safe cleanup, duplicate references, and attachment retention.")
