@@ -96,6 +96,14 @@ assert 'url.pathname === "/api/reports"' in server_source
 assert 'url.pathname === "/api/reports/export"' in server_source
 assert 'return handleNativeApi(request, env);' in server_source
 api_source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
+# Non-finite item values must be sanitized before JSON serialization, which
+# otherwise converts Infinity/NaN to null and can poison legacy record data.
+assert "function finiteNonNegative(value)" in api_source
+assert "Number.isFinite(numeric) ? Math.max(0, numeric) : 0" in api_source
+assert "qty: finiteNonNegative(item?.qty)" in api_source
+assert "price: finiteNonNegative(item?.price)" in api_source
+assert "amount: finiteNonNegative(item?.amount)" in api_source
+assert "Number.isFinite(estimatedPrice) && estimatedPrice > 0" in api_source
 assert "const monthlyLimit = Number.isSafeInteger(requestedLimit)" in api_source
 assert "monthlyOffset" in api_source
 assert "next_cursor: monthly.next_cursor" in api_source
