@@ -15,13 +15,16 @@ function EditRecordPage() {
   const { recordId } = Route.useParams();
   const navigate = useNavigate();
   const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     base44.entities.ShoppingRecord.get(recordId)
-      .then((r) => !cancelled && setRecord(r))
-      .catch(() => !cancelled && setRecord(false));
+      .then((r) => { if (!cancelled) { setRecord(r); setNotFound(false); } })
+      .catch(() => !cancelled && setNotFound(true))
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
@@ -46,7 +49,7 @@ function EditRecordPage() {
     }
   };
 
-  if (!record) {
+  if (loading) {
     return (
       <div className="animate-pulse space-y-4">
         <div className="h-11 rounded-xl bg-muted" />
@@ -55,6 +58,16 @@ function EditRecordPage() {
       </div>
     );
   }
+
+  if (notFound || !record) {
+    return (
+      <div className="rounded-[24px] border border-border px-5 py-10 text-center">
+        <p className="text-sm font-semibold">This shopping record was not found</p>
+        <button type="button" onClick={() => navigate({ to: "/history" })} className="mt-4 rounded-full bg-primary px-5 py-2.5 text-[13px] font-bold text-primary-foreground">Back to history</button>
+      </div>
+    );
+  }
+
 
   return (
     <div>
