@@ -54,7 +54,7 @@ function AddManualPage() {
         Use this for a completed shopping trip—not a shopping list. Enter what you bought and the actual prices you paid; the total updates automatically.
       </p>
 
-      <RecordForm submitLabel="Save shopping" saving={saving} onSave={save} footerNote="Added manually" />
+      <RecordForm submitLabel="Save shopping" saving={saving} onSave={save} footerNote="Added manually" allowActualReceiptUpload />
     </div>
   );
 }
