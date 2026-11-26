@@ -90,11 +90,11 @@ export function RecordForm({
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
   useEffect(() => () => {
-    try { recognitionRef.current?.abort(); } catch {}
+    try { recognitionRef.current?.abort(); } catch (abortError) { /* recognition may already be stopped */ }
     recognitionRef.current = null;
   }, []);
   const stopVoiceEntry = () => {
-    try { recognitionRef.current?.stop(); } catch {}
+    try { recognitionRef.current?.stop(); } catch (stopError) { /* ignore stop when recognition is inactive */ }
     recognitionRef.current = null;
     setVoiceListening(false);
   };
