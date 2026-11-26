@@ -196,6 +196,27 @@ export function RecordForm({
     });
   };
 
+  const appendActualReceipt = (extracted, fileUri) => {
+    const incoming = (extracted?.items || []).filter((entry) => String(entry.name || "").trim());
+    if (!incoming.length) { setActualUploadMessage("No readable items were found on this receipt. Try a clearer photo or enter prices manually."); return; }
+    const imported = incoming.map((entry) => ({
+      ...emptyItem(),
+      name: String(entry.name || "").trim(),
+      qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1,
+      unit: normalizeShoppingUnit(entry.unit || "pcs"),
+      price: Number(entry.price) > 0 ? String(entry.price) : "",
+      receiptRefs: [fileUri].filter(Boolean),
+    }));
+    setItems((prev) => [...prev.filter((item) => String(item.name || "").trim()), ...imported]);
+    const actualTotal = Math.round(incoming.reduce((sum, entry) => sum + (Number(entry.amount) || (Number(entry.qty) || 1) * (Number(entry.price) || 0)), 0) * 100) / 100;
+    const receipt = { id: `actual-receipt-${Date.now()}`, file_uri: fileUri || "", kind: "actual", status: "attached", amount: actualTotal, item_count: imported.length, merged_items: [], created_at: new Date().toISOString() };
+    setReceipts((prev) => [...prev, receipt]);
+    setReceiptCount((count) => count + 1);
+    setActualUploadMessage(`Receipt imported: ${imported.length} item(s). Actual prices were imported where readable; review any missing prices before saving.`);
+    if (fileUri) onActualListUploaded?.(fileUri);
+    toast.success("Receipt imported", { description: `${imported.length} item(s) added from your bill.` });
+  };
+
   const appendReceipt = (extracted, fileUri) => {
     const incoming = (extracted?.items || []).filter((entry) => String(entry.name || "").trim());
     if (!incoming.length) { setReceiptMessage("No readable items were found on this receipt."); return; }
@@ -320,7 +341,9 @@ export function RecordForm({
   };
 
   const filled = items.filter((i) => String(i.name).trim() && (Number(i.qty) || 0) > 0);
-  const total = filled.reduce((sum, i) => sum + amountOf(i), 0);
+  const actualTotal = filled.reduce((sum, i) => sum + (estimatedIds.has(i.id) ? 0 : amountOf(i)), 0);
+  const estimatedTotal = filled.reduce((sum, i) => sum + (estimatedIds.has(i.id) ? amountOf(i) : 0), 0);
+  const total = actualTotal;
   const estimatedCount = filled.filter((i) => estimatedIds.has(i.id) && Number(i.price) > 0).length;
   const unpricedCount = filled.filter((i) => !(Number(i.price) > 0)).length;
   const estimateReferenceCount = filled.filter(
@@ -630,10 +653,9 @@ export function RecordForm({
       <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-2xl min-w-0 items-center gap-2 sm:gap-4">
           <div className="min-w-0 flex-1">
-            <p className="micro text-muted-foreground">
-              {estimatedCount > 0 ? "Estimated + actual total" : "Actual shopping total"}
-            </p>
+            <p className="micro text-muted-foreground">Actual spend (estimates excluded)</p>
             <p className="tnum text-[22px] font-extrabold leading-tight">{inr(total)}</p>
+            {estimatedTotal > 0 ? <p className="truncate text-[10.5px] text-amber-700">Estimated portion: {inr(estimatedTotal)}</p> : null}
             {footerNote ? (
               <p className="truncate text-[11px] text-muted-foreground">{footerNote}</p>
             ) : null}
