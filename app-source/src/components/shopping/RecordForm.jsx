@@ -199,14 +199,19 @@ export function RecordForm({
   const appendActualReceipt = (extracted, fileUri) => {
     const incoming = (extracted?.items || []).filter((entry) => String(entry.name || "").trim());
     if (!incoming.length) { setActualUploadMessage("No readable items were found on this receipt. Try a clearer photo or enter prices manually."); return; }
-    const imported = incoming.map((entry) => ({
-      ...emptyItem(),
-      name: String(entry.name || "").trim(),
-      qty: Number(entry.qty) > 0 ? Number(entry.qty) : 1,
-      unit: normalizeShoppingUnit(entry.unit || "pcs"),
-      price: Number(entry.price) > 0 ? String(entry.price) : "",
-      receiptRefs: [fileUri].filter(Boolean),
-    }));
+    const imported = incoming.map((entry) => {
+      const quantity = Number(entry.qty) > 0 ? Number(entry.qty) : 1;
+      const lineAmount = Number(entry.amount) > 0 ? Number(entry.amount) : 0;
+      const unitRate = lineAmount > 0 ? lineAmount / quantity : Number(entry.price) > 0 ? Number(entry.price) : 0;
+      return {
+        ...emptyItem(),
+        name: String(entry.name || "").trim(),
+        qty: quantity,
+        unit: normalizeShoppingUnit(entry.unit || "pcs"),
+        price: unitRate > 0 ? String(Math.round(unitRate * 10000) / 10000) : "",
+        receiptRefs: [fileUri].filter(Boolean),
+      };
+    });
     setItems((prev) => [...prev.filter((item) => String(item.name || "").trim()), ...imported]);
     const actualTotal = Math.round(incoming.reduce((sum, entry) => sum + (Number(entry.amount) || (Number(entry.qty) || 1) * (Number(entry.price) || 0)), 0) * 100) / 100;
     const receipt = { id: `actual-receipt-${Date.now()}`, file_uri: fileUri || "", kind: "actual", status: "attached", amount: actualTotal, item_count: imported.length, merged_items: [], created_at: new Date().toISOString() };
