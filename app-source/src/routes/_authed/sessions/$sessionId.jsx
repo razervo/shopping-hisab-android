@@ -1102,7 +1102,43 @@ function SessionDetailPage() {
         </a>
       </nav>
 
-      <details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      {!completed ? (
+        <section className="mb-4 space-y-3 rounded-[24px] border border-primary/20 bg-white p-4">
+          <div>
+            <p className="text-[15px] font-extrabold">Quick scan · handwritten list</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Scan and review a handwritten list here without opening the preparation step.</p>
+          </div>
+          <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
+                    <div>
+                      <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
+                      <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
+                    </div>
+                    <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
+                  </section>
+                  {scannedDraft ? (
+                    <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
+                      <div>
+                        <p className="text-[15px] font-extrabold">Review scanned list</p>
+                        <p className="mt-1 text-[12px] text-muted-foreground">Nothing is added until you save. Original scan data is retained with the source list.</p>
+                      </div>
+                      <input value={scannedListName} onChange={(event) => setScannedListName(event.target.value)} maxLength={120} aria-label="Scanned list name" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
+                      {scannedRows.map((row, index) => (
+                        <div key={index} className="grid grid-cols-[minmax(0,1fr)_82px_72px] gap-2">
+                          <input value={row.name} onChange={(event) => updateScannedRow(index, "name", event.target.value)} aria-label={`Scanned item ${index + 1} name`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2.5 text-[12px]" />
+                          <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateScannedRow(index, "quantity", event.target.value)} aria-label={`Scanned item ${index + 1} quantity`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+                          <input value={row.unit} onChange={(event) => updateScannedRow(index, "unit", event.target.value)} aria-label={`Scanned item ${index + 1} unit`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
+                        </div>
+                      ))}
+                      <button type="submit" disabled={scannedListSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
+                        {scannedListSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
+                      </button>
+                    </form>
+        </section>
+      ) : null}
+
+
+<details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
@@ -1110,32 +1146,7 @@ function SessionDetailPage() {
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <>
-        <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
-          <div>
-            <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
-          </div>
-          <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
-        </section>
-        {scannedDraft ? (
-          <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
-            <div>
-              <p className="text-[15px] font-extrabold">Review scanned list</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">Nothing is added until you save. Original scan data is retained with the source list.</p>
-            </div>
-            <input value={scannedListName} onChange={(event) => setScannedListName(event.target.value)} maxLength={120} aria-label="Scanned list name" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
-            {scannedRows.map((row, index) => (
-              <div key={index} className="grid grid-cols-[minmax(0,1fr)_82px_72px] gap-2">
-                <input value={row.name} onChange={(event) => updateScannedRow(index, "name", event.target.value)} aria-label={`Scanned item ${index + 1} name`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2.5 text-[12px]" />
-                <input type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateScannedRow(index, "quantity", event.target.value)} aria-label={`Scanned item ${index + 1} quantity`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
-                <input value={row.unit} onChange={(event) => updateScannedRow(index, "unit", event.target.value)} aria-label={`Scanned item ${index + 1} unit`} className="h-10 min-w-0 rounded-xl border border-border bg-background px-2 text-[12px]" />
-              </div>
-            ))}
-            <button type="submit" disabled={scannedListSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
-              {scannedListSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
-            </button>
-          </form>
+        
         ) : null}
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
@@ -1416,22 +1427,24 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
+      {completed ? (
       <section id="trip-estimate" className="mt-6">
-        <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Estimated cost</p>
-            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
-            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
-          </div>
-          <div className="rounded-[18px] border border-border bg-white p-3">
-            <p className="text-[11px] text-muted-foreground">Paid so far</p>
-            <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
-            {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
-          </div>
-        </div>
-        <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
-      </section>
+              <h2 className="mb-3 px-1 text-[15px] font-extrabold">Estimate vs actual</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-[18px] border border-border bg-white p-3">
+                  <p className="text-[11px] text-muted-foreground">Estimated cost</p>
+                  <p className="mt-1 text-[17px] font-extrabold tabular-nums">{latestEstimate ? inr(latestEstimate.estimated_total_paise) : "—"}</p>
+                  {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">Version {latestEstimate.version_number}</p> : null}
+                </div>
+                <div className="rounded-[18px] border border-border bg-white p-3">
+                  <p className="text-[11px] text-muted-foreground">Paid so far</p>
+                  <p className="mt-1 text-[17px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</p>
+                  {latestEstimate ? <p className="mt-1 text-[10px] text-muted-foreground">{estimateDifference > 0 ? "Over estimate" : estimateDifference < 0 ? "Under estimate" : "Equal to estimate"}: {inr(Math.abs(estimateDifference))}</p> : null}
+                </div>
+              </div>
+              <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">Paid so far uses included bill totals only. Bill item amounts are not added again.</p>
+            </section>
+    ) : null}
 
       <section className="mt-4">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>
