@@ -58,13 +58,17 @@ function SessionsPage() {
       toast.error("Choose a shopping date.");
       return;
     }
+    const sessionPayload = JSON.stringify({ name: name.trim(), shopping_date: date });
+    if (!createSessionKeyRef.current || createSessionKeyRef.current.payload !== sessionPayload) {
+      createSessionKeyRef.current = { payload: sessionPayload, key: crypto.randomUUID() };
+    }
     setCreating(true);
     try {
       const response = await fetch("/api/shopping/sessions", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": createSessionKeyRef.current || (createSessionKeyRef.current = crypto.randomUUID()) },
-        body: JSON.stringify({ name: name.trim(), shopping_date: date }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": createSessionKeyRef.current.key },
+        body: sessionPayload,
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Could not start this shopping trip.");
