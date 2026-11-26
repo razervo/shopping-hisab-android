@@ -341,9 +341,10 @@ assert not db.execute("PRAGMA foreign_key_check").fetchall()
 undo_start=session_ui.index("const undoPlannedItem = async")
 undo_end=session_ui.index("const loadBillLines",undo_start)
 undo_handler=session_ui[undo_start:undo_end]
-assert "undoRequestKeyRef.current" in undo_handler
+assert "undoRequestKeyRef.current?.itemId === restoreItem.id" in undo_handler
 assert 'headers: { "Idempotency-Key": requestKey }' in undo_handler
-assert "undoRequestKeyRef.current = null" in undo_handler
-assert "undoSaving" in session_ui and "setTimeout(() => { setUndoItem(null); undoRequestKeyRef.current = null; }, 10000)" in session_ui
+assert "setUndoItem((current) => current?.id === restoreItem.id ? null : current)" in undo_handler
+assert "undoTimerItemIdRef.current === restoreItem.id" in undo_handler
+assert "if (!undoItem || undoSaving) return" in session_ui
 
 print("PASS: bill deletion/reconfirmation, cleanup, auditing, retry, source-line merge integrity and file-preservation checks.")
