@@ -1,6 +1,12 @@
 name: Build and deploy Shopping Hisab native Worker
 
 on:
+  push:
+    branches:
+      - shopping-hisab-ui-redesign
+    paths:
+      - 'app-source/**'
+      - '.github/workflows/deploy-native-preview.yml'
   workflow_dispatch:
 
 permissions:
