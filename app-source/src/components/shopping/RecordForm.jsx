@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ListPlus, Mic, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function RecordForm({
   const [bulkText, setBulkText] = useState("");
   const [bulkError, setBulkError] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
+  const recognitionRef = useRef(null);
   const [receiptCount, setReceiptCount] = useState(() => Math.max(1, Array.isArray(initial?.receipts) ? initial.receipts.length : 0));
   const [receiptMessage, setReceiptMessage] = useState("");
   const [receipts, setReceipts] = useState(() => Array.isArray(initial?.receipts) ? initial.receipts : (billFileUri ? [{ id: "receipt-1", file_uri: billFileUri, kind: "shopping_list", status: "attached", amount: 0 }] : []));
@@ -88,21 +89,33 @@ export function RecordForm({
     }
   };
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
+  useEffect(() => () => {
+    try { recognitionRef.current?.abort(); } catch {}
+    recognitionRef.current = null;
+  }, []);
+  const stopVoiceEntry = () => {
+    try { recognitionRef.current?.stop(); } catch {}
+    recognitionRef.current = null;
+    setVoiceListening(false);
+  };
   const startVoiceEntry = () => {
+    if (voiceListening) { stopVoiceEntry(); return; }
     const SpeechRecognitionApi = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
     if (!SpeechRecognitionApi) {
       toast.error("Voice input is not supported in this browser. Try Chrome or enter items manually.");
       return;
     }
     const recognition = new SpeechRecognitionApi();
+    recognitionRef.current = recognition;
     recognition.lang = "en-IN";
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setVoiceListening(true);
-    recognition.onend = () => setVoiceListening(false);
+    recognition.onend = () => { setVoiceListening(false); if (recognitionRef.current === recognition) recognitionRef.current = null; };
     recognition.onerror = (event) => {
       setVoiceListening(false);
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
       toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Please try again or enter items manually.");
     };
     recognition.onresult = (event) => {
@@ -121,6 +134,7 @@ export function RecordForm({
       recognition.start();
     } catch {
       setVoiceListening(false);
+      recognitionRef.current = null;
       toast.error("Could not start voice input. Please try again.");
     }
   };
@@ -483,6 +497,9 @@ export function RecordForm({
             <p className="mt-0.5 text-[10.5px] text-muted-foreground">Add items, paste a list, or scan another receipt</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={startVoiceEntry} aria-pressed={voiceListening} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-2 text-[11px] font-bold ${voiceListening ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-white text-foreground"}`}>
+              <Mic className="h-3.5 w-3.5" /> {voiceListening ? "Stop voice" : "Voice"}
+            </button>
             <button
               type="button"
               onClick={startVoiceEntry}
