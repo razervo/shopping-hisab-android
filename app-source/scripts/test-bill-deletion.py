@@ -288,6 +288,11 @@ assert "status='ready_to_confirm',confirmed_actual_total_paise=NULL" in complete
 assert "WHERE id=? AND user_id=? AND status='completed'" in completed_delete_handler
 assert "Number(existing.included_in_actual)===1" in completed_delete_handler
 assert '!["duplicate","void"].includes(existing.bill_status)' in completed_delete_handler
+bill_delete_ui_start=session_ui.index("const deleteBill = async")
+bill_delete_ui_end=session_ui.index("const editBillLine =",bill_delete_ui_start)
+bill_delete_ui_handler=session_ui[bill_delete_ui_start:bill_delete_ui_end]
+assert "reopenedForReconfirmation" in bill_delete_ui_handler
+assert "Trip reopened for reconfirmation." in bill_delete_ui_handler
 confirm_start=engine.index('if(subpath==="confirm" && method==="POST"){')
 confirm_end=engine.index('if (subpath === "audit" && method === "GET")',confirm_start)
 confirm_handler=engine[confirm_start:confirm_end]

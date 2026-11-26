@@ -746,7 +746,7 @@ function SessionDetailPage() {
       delete billDeleteKeysRef.current[billId];
       setBillLineDetails((current) => { const next = { ...current }; delete next[billId]; return next; });
       await loadSession();
-      toast.success("Bill deleted. Trip totals recalculated.");
+      toast.success(reopenedForReconfirmation ? "Bill deleted. Trip reopened for reconfirmation." : "Bill deleted. Trip totals recalculated.");
     } catch (cause) {
       toast.error(cause.message || "Could not delete this bill.");
       await loadSession();
