@@ -1,6 +1,6 @@
 import { todayISO } from "@/lib/format";
 
-export const UNIT_OPTIONS = ["pcs", "kg", "g", "L", "ml", "pkt", "dozen", "box"];
+export const UNIT_OPTIONS = ["pcs", "kg", "g", "L", "ml", "pkt", "dozen", "box", "bottle", "can", "bag", "tsp", "tbsp"];
 
 export const UNIT_LABELS = {
   pcs: "Piece (pcs)",
@@ -11,6 +11,11 @@ export const UNIT_LABELS = {
   pkt: "Packet (pkt)",
   dozen: "Dozen",
   box: "Box",
+  bottle: "Bottle",
+  can: "Can",
+  bag: "Bag",
+  tsp: "Teaspoon (tsp)",
+  tbsp: "Tablespoon (tbsp)",
 };
 
 // Common quantities offered in the Qty dropdown, per unit.
