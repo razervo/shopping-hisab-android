@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ListPlus, Mic, Plus } from "lucide-react";
+import { Camera, ListPlus, Mic, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
@@ -602,17 +602,7 @@ export function RecordForm({
           </div>
         ) : null}
 
-        {(allowEstimate || allowActualReceiptUpload) ? (
-          <div className="space-y-2 rounded-[18px] border border-dashed border-border bg-white p-3">
-            <div>
-              <p className="text-[12.5px] font-bold">{allowActualReceiptUpload ? "Upload receipt / bill" : `Shopping lists added: ${receiptCount}`}</p>
-              <p className="text-[11px] text-muted-foreground">{allowActualReceiptUpload ? "Upload the completed shop's bill to import actual paid prices and attach it to this purchase." : "Scan another receipt to add its items to this same shopping list."}</p>
-            </div>
-            <BillUploader compact purpose={allowActualReceiptUpload ? "priced_list" : "shopping_list"} onExtracted={allowActualReceiptUpload ? appendActualReceipt : appendReceipt} />
-            {receiptMessage ? <p className="text-[11px] font-semibold text-primary">{receiptMessage}</p> : null}
-            {allowActualReceiptUpload && actualUploadMessage ? <p className="text-[11px] font-semibold text-primary">{actualUploadMessage}</p> : null}
-          </div>
-        ) : null}
+
 
         {allowEstimate && actualUploadMessage ? (
           <p className="rounded-xl bg-accent px-3 py-2.5 text-[11.5px] font-semibold leading-relaxed text-accent-foreground">{actualUploadMessage}</p>
