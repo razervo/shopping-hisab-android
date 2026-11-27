@@ -1424,7 +1424,6 @@ function SessionDetailPage() {
         </div>
       ) : null}
 
-      {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
 
       {activeStep === 2 ? (
 <section id="trip-step-2" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
@@ -1704,8 +1703,8 @@ function SessionDetailPage() {
           <div className="space-y-2">{session.bills.map((bill) => (
             <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
-                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p><button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button></div>
+                <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${bill.bill_status === "verified" ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{bill.bill_status === "verified" ? "Verified · receipt attached" : ["duplicate", "void"].includes(bill.bill_status) ? String(bill.bill_status).toUpperCase() : "Unverified · no confirmed receipt"}</span></div>
+                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>{!completed ? <button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button> : null}</div>
               </div>
               {!completed ? (
                 <div className="mt-2">
@@ -1744,7 +1743,7 @@ function SessionDetailPage() {
                           <div className="flex shrink-0 items-center gap-2">
                             <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
                             <button type="button" onClick={() => editBillLine(bill.id, line)} aria-label={`Edit ${line.product_name}`} className="font-bold text-primary underline">Edit</button>
-                            <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
+                            {!completed ? <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button> : null}
                           </div>
                         </div>
                       )}
