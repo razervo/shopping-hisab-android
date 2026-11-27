@@ -39,6 +39,8 @@ function SessionDetailPage() {
   const { sessionId } = Route.useParams();
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
+  const [activeStep, setActiveStep] = useState(1);
+  const [expandedMetadataRows, setExpandedMetadataRows] = useState({});
   const [loading, setLoading] = useState(true);
   const [editingTrip, setEditingTrip] = useState(false);
   const [tripName, setTripName] = useState("");
@@ -1034,7 +1036,7 @@ function SessionDetailPage() {
     : null;
 
   return (
-    <div className="pb-5">
+    <div className="pb-32">
       <Link to="/sessions" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
         <ArrowLeft className="h-4 w-4" /> All trips
       </Link>
@@ -1084,34 +1086,30 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
-      <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-emerald-100 bg-white p-2 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-        <a href="#trip-step-1" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${items.length ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm text-[10px]">1</span>
-          Your list
-        </a>
-        <a href="#trip-step-2" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${latestEstimate ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">2</span>
-          Estimate
-        </a>
-        <a href="#trip-step-3" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${(session.bills || []).length ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">3</span>
-          Shop & bills
-        </a>
-        <a href="#trip-step-4" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${completed ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">4</span>
-          Finish
-        </a>
-      </nav>
+      <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-[#3B0A0A] bg-white p-2 shadow-sm">
+        {[
+          { id: 1, label: "Your list", done: items.length > 0 },
+          { id: 2, label: "Estimate", done: Boolean(latestEstimate) },
+          { id: 3, label: "Shop & bills", done: (session.bills || []).length > 0 },
+          { id: 4, label: "Finish", done: completed },
+        ].map((step) => (
+          <button key={step.id} type="button" onClick={() => setActiveStep(step.id)} aria-current={activeStep === step.id ? "step" : undefined}
+            className={`flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${activeStep === step.id ? "bg-[#EA580C] text-white shadow-sm" : step.done ? "bg-[#0F766E]/10 text-[#0F766E]" : "bg-secondary/40 text-muted-foreground"}`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] ${activeStep === step.id ? "bg-white/20" : step.done ? "bg-[#0F766E]/15" : "bg-secondary"}`}>{step.id}</span>
+            {step.label}
+          </button>
+        ))}
+      </nav>>
 
       {!completed ? (
-        <section className="mb-4 space-y-3 rounded-[24px] border border-emerald-100 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+        <section className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
-            <p className="text-[15px] font-extrabold">Quick scan · handwritten list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Scan and review a handwritten list here without opening the preparation step.</p>
+            <p className="text-[15px] font-extrabold">Scan handwritten list</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Scan and review your list, then correct detected items and quantities before adding them.</p>
           </div>
           <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
                     <div>
-                      <p className="text-[15px] font-extrabold">Scan a handwritten shopping list</p>
+                      <p className="text-[15px] font-extrabold">Scan handwritten list</p>
                       <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
                     </div>
                     <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
@@ -1140,11 +1138,11 @@ function SessionDetailPage() {
       ) : null}
 
 
-<details id="trip-step-1" open={!completed && items.length === 0} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
-        <summary className="cursor-pointer px-4 py-4">
+<section id="trip-step-1" hidden={activeStep !== 1} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+        <div className="px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
-        </summary>
+        </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
@@ -1177,14 +1175,13 @@ function SessionDetailPage() {
                   aria-label={`Unit for item ${index + 1}`} placeholder="Unit (kg, pcs)"
                   className="h-10 min-w-0 rounded-xl border border-border bg-white px-3 text-[13px]" />
               </div>
+                            <button type="button" onClick={() => setExpandedMetadataRows((current) => ({ ...current, [index]: !current[index] }))} className="mt-2 w-full text-left text-[11px] font-semibold text-muted-foreground">+ Add brand / pack size</button>
+              {expandedMetadataRows[index] ? (
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <input value={row.brand} onChange={(event) => updateRow(index, "brand", event.target.value)}
-                  placeholder="Brand (optional)" maxLength={100}
-                  className="h-9 min-w-0 rounded-lg border border-border bg-white px-2.5 text-[12px]" />
-                <input value={row.pack_size} onChange={(event) => updateRow(index, "pack_size", event.target.value)}
-                  placeholder="Pack size (optional)" maxLength={60}
-                  className="h-9 min-w-0 rounded-lg border border-border bg-white px-2.5 text-[12px]" />
+                <input value={row.brand} onChange={(event) => updateRow(index, "brand", event.target.value)} placeholder="Brand (optional)" maxLength={100} className="h-9 min-w-0 rounded-lg border border-border bg-white px-2.5 text-[12px]" />
+                <input value={row.pack_size} onChange={(event) => updateRow(index, "pack_size", event.target.value)} placeholder="Pack size (optional)" maxLength={60} className="h-9 min-w-0 rounded-lg border border-border bg-white px-2.5 text-[12px]" />
               </div>
+              ) : null}
             </div>
           ))}
           <button type="button" onClick={startVoiceEntry} disabled={voiceListening} className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-border py-2.5 text-[12.5px] font-bold disabled:opacity-60">
@@ -1346,11 +1343,11 @@ function SessionDetailPage() {
         )}
       </section>
         </div>
-      </details>
+      </section>
 
-      <PriceComparisonPanel items={items} estimatePrices={estimatePrices} />
+      {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
 
-      <details id="trip-step-2" open={!completed && items.length > 0 && !latestEstimate} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      <section id="trip-step-2" hidden={activeStep !== 2} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Get an idea of the total before you shop{latestEstimate ? " · Estimate saved" : ""}</span>
@@ -1385,10 +1382,10 @@ function SessionDetailPage() {
               </div>
             </div>
           )) : <p className="rounded-xl bg-secondary/40 px-3 py-3 text-[12px] text-muted-foreground">Add planned items first, then enter their estimated prices.</p>}
-          <div className="rounded-[18px] bg-accent/70 p-3.5">
+          <div className="rounded-[18px] bg-[#EA580C]/10 p-3.5">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11.5px] font-bold text-accent-foreground">Estimated shopping total</p>
-              <p className="tnum text-[19px] font-extrabold text-accent-foreground">{inr(Math.round(draftEstimateRupees * 100))}</p>
+              <p className="text-[11.5px] font-bold text-[#EA580C]">Estimated shopping total</p>
+              <p className="tnum text-[19px] font-extrabold text-[#EA580C]">{inr(Math.round(draftEstimateRupees * 100))}</p>
             </div>
             <p className="mt-1 text-[10.5px] text-muted-foreground">
               {pricedEstimateItems.length} of {items.length} items priced
@@ -1460,7 +1457,7 @@ function SessionDetailPage() {
         </div>
       </details>
 
-      <details id="trip-step-3" open={!completed} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      <section id="trip-step-3" hidden={activeStep !== 3} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">
@@ -1487,7 +1484,7 @@ function SessionDetailPage() {
             placeholder="Total paid (₹)" required className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <button type="submit" disabled={billSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
             {billSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {billSaving ? "Adding bill…" : "Add bill amount"}
+            {billSaving ? "Adding bill…" : "Save shop bill"}
           </button>
         </form>
       ) : null}
@@ -1696,7 +1693,7 @@ function SessionDetailPage() {
         </div>
       </details>
 
-      <details id="trip-step-4" open={completed} className="mt-4 overflow-hidden rounded-[24px] border border-border bg-white">
+      <section id="trip-step-4" hidden={activeStep !== 4} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white>
         <summary className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">4. Finish your trip</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Review your totals and save the final shopping summary</span>
@@ -1764,6 +1761,14 @@ function SessionDetailPage() {
       </section>
         </div>
       </details>
+      {!completed ? (
+        <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
+          <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
+            className="flex w-full items-center justify-center rounded-full bg-[#EA580C] px-4 py-3.5 text-sm font-extrabold text-white shadow-lg disabled:opacity-40">
+            {activeStep === 1 ? "Next: Estimate →" : activeStep === 2 ? "Next: Shop & bills →" : activeStep === 3 ? "Next: Finish →" : "Finish"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
