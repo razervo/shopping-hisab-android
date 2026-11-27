@@ -539,7 +539,7 @@ function SessionDetailPage() {
             file_id: fileMatch?.[1] || null,
             original_file_uri: uploadedBillFileUri || null,
             duplicate_fingerprint: duplicateFingerprint,
-            bill_status: "needs_review",
+            bill_status: fileMatch ? "verified" : "needs_review",
             original_ocr: { entry_method: "existing_bill_uploader", draft: uploadedBillDraft },
           }),
         });
