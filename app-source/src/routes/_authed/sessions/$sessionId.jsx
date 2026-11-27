@@ -367,7 +367,9 @@ function SessionDetailPage() {
         const item = currentItems[entry.index];
         const rate = Number(entry.rate);
         if (!item || !Number.isFinite(rate) || rate <= 0) continue;
-        updates[item.id] = String(rate);
+        const quantity = Number(item.planned_quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) continue;
+        updates[item.id] = String(Math.round(rate * quantity * 100) / 100);
         sources[item.id] = "ai_estimate";
       }
       if (!Object.keys(updates).length) {
@@ -1052,7 +1054,7 @@ function SessionDetailPage() {
     return value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
   });
   const draftEstimateRupees = pricedEstimateItems.reduce(
-    (total, item) => total + Number(item.planned_quantity || 0) * Number(estimatePrices[item.id]),
+    (total, item) => total + Number(estimatePrices[item.id]),
     0,
   );
   const uploadedBillRowsHaveAmounts = uploadedBillRows.length > 0 && uploadedBillRows.every((row) =>
