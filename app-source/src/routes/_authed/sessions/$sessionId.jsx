@@ -1822,6 +1822,7 @@ function SessionDetailPage() {
         </section>
       )}
 
+      {completed ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Saved estimates</h2>
         {(session.estimates || []).length ? (
