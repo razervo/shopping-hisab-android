@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - phase2-complete-feature-work
+      - shopping-hisab-main-transition
+      - main
 
 permissions:
   contents: read
