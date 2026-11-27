@@ -1135,6 +1135,7 @@ function SessionDetailPage() {
                         {scannedListSaving ? "Saving reviewed list…" : "Confirm and add scanned list"}
                       </button>
                     </form>
+                  ) : null}
         </section>
       ) : null}
 
