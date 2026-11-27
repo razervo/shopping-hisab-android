@@ -407,7 +407,7 @@ function SessionDetailPage() {
         purchase_date: billForm.purchase_date || null,
         receipt_number: billForm.receipt_number.trim(),
         bill_total_paise: Math.round(rupees * 100),
-        bill_status: "verified",
+        bill_status: "needs_review",
         duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
         original_ocr: { entry_method: "manual" },
       };
@@ -1541,7 +1541,7 @@ function SessionDetailPage() {
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Add a shop purchase</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Record the amount you paid at each shop. This amount is counted immediately in actual spending.</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Record each shop purchase. Typed or voice-only bills are marked Unverified until you attach a receipt; scanned bills stay in review until checked.</p>
           </div>
           <input value={billForm.shop_name} onChange={(event) => setBillForm((v) => ({ ...v, shop_name: event.target.value }))}
             placeholder="Shop name" maxLength={160} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
@@ -1556,7 +1556,7 @@ function SessionDetailPage() {
             placeholder="Total paid (₹)" required className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <button type="submit" disabled={billSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
             {billSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {billSaving ? "Adding bill…" : "Save shop bill"}
+            {billSaving ? "Adding bill…" : "Save unverified bill"}
           </button>
         </form>
       ) : null}
