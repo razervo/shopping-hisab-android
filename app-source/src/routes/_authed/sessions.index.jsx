@@ -100,7 +100,7 @@ function SessionsPage() {
         </button>
       </div>
 
-      <form onSubmit={createSession} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+      <form onSubmit={createSession} className="mt-5 space-y-3 rounded-[24px] border border-emerald-100 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <div>
           <label htmlFor="session-name" className="mb-1.5 block text-[12px] font-bold text-muted-foreground">Give this trip a name (optional)</label>
           <input id="session-name" value={name} onChange={(event) => setName(event.target.value)}
@@ -137,7 +137,7 @@ function SessionsPage() {
           <button type="button" onClick={loadSessions} className="ml-2 underline">Retry</button>
         </div>
       ) : sessions.length === 0 ? (
-        <div className="rounded-[22px] border border-dashed border-border px-5 py-8 text-center">
+        <div className="rounded-[22px] border border-dashed border-border bg-white/70 px-5 py-8 text-center">
           <ShoppingBag className="mx-auto h-7 w-7 text-muted-foreground" />
           <p className="mt-2 text-[14px] font-bold">No shopping trips yet</p>
           <p className="mt-1 text-[12.5px] text-muted-foreground">Create your first trip above. We'll keep your list and bills together.</p>
@@ -145,7 +145,7 @@ function SessionsPage() {
       ) : (
         <div className="space-y-2.5">
           {sessions.map((session) => (
-            <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="block rounded-[20px] border border-border bg-white p-4 transition-colors hover:bg-secondary/30">
+            <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="block rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_10px_rgba(15,23,42,0.035)] transition-colors hover:bg-secondary/30">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14.5px] font-extrabold">{session.name || "Shopping trip"}</p>
