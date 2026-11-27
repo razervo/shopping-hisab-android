@@ -2,7 +2,7 @@ name: Verify Shopping Hisab Cloudflare build
 
 on:
   push:
-    branches: [main, cloudflare-native-migration]
+    branches: [main, cloudflare-native-migration, shopping-hisab-main-transition]
     paths:
       - "app-source/**"
       - ".github/workflows/cloudflare-build.yml"
@@ -31,7 +31,7 @@ jobs:
         run: npm install
       - name: Build for Cloudflare Workers
         run: |
-          if [ "$GITHUB_REF_NAME" = "cloudflare-native-migration" ] || [ "$GITHUB_BASE_REF" = "cloudflare-native-migration" ]; then
+          if [ "$GITHUB_REF_NAME" = "main" ] || [ "$GITHUB_REF_NAME" = "cloudflare-native-migration" ] || [ "$GITHUB_REF_NAME" = "shopping-hisab-main-transition" ] || [ "$GITHUB_BASE_REF" = "main" ] || [ "$GITHUB_BASE_REF" = "cloudflare-native-migration" ] || [ "$GITHUB_BASE_REF" = "shopping-hisab-main-transition" ]; then
             npm run build:native
           else
             npm run build
