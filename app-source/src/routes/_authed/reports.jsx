@@ -45,7 +45,7 @@ function ReportsPage() {
   const spendingDays = month ? month.daily.filter((d) => d.total > 0) : [];
 
   return (
-    <div className="pb-2">
+    <div className="min-h-full bg-[#F6F8F7] pb-28">
       <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Spending summary</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">A simple look at where your shopping went.</p>
 
@@ -55,7 +55,7 @@ function ReportsPage() {
           type="month"
           value={monthKey}
           onChange={(e) => setMonthKey(e.target.value || currentMonthKey())}
-          className="h-12 w-full rounded-xl border-[1.5px] border-[#3B0A0A] bg-white px-3 text-[14px] font-semibold shadow-[0_2px_8px_rgba(15,23,42,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-12 w-full rounded-xl border-[1.5px] border-[#450A0A] bg-white px-3 text-[14px] font-semibold shadow-[0_2px_8px_rgba(15,23,42,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </label>
 
@@ -71,7 +71,7 @@ function ReportsPage() {
         </p>
       ) : (
         <>
-          <section className="mt-4 rounded-[24px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
+          <section className="mt-4 rounded-[24px] bg-[#0F766E] px-5 py-5 text-[#0F766E]-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
             <p className="micro text-[#FED7AA]">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
             <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-white/15 pt-3 text-[12px]">
