@@ -1261,12 +1261,15 @@ function SessionDetailPage() {
                 {categoryItems.map((item, index) => (
                   <div key={item.id} className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
                     <div className="min-w-0 flex-1">
-                      <p className="break-words text-[13.5px] font-bold">{item.product_name}</p>
-                      <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
-                      <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                        Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
+                      <div className="flex min-w-0 items-baseline gap-1.5">
+                        <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">• {Number(item.planned_quantity)} {item.unit}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
+                        {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit} left to buy
+                        {item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}
                         {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
-                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
+                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es)` : ""}
                       </p>
                       {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
