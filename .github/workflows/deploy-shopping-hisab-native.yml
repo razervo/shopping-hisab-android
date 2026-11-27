@@ -8,6 +8,8 @@ on:
   # Keep manual deployment available as a fallback.
   workflow_dispatch:
 
+# Pushes to cloudflare-native-migration deploy the native production Worker for physical-device validation.
+
 permissions:
   contents: read
 
