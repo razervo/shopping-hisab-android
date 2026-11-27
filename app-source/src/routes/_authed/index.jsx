@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, CalendarDays, History, PlayCircle, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
+import { ArrowRight, CalendarDays, History, PlayCircle, ReceiptText, ShoppingBag } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { useOverview } from "@/components/dashboard/useOverview";
 import { inr, inrPaise } from "@/lib/format";
@@ -38,9 +38,9 @@ function HomePage() {
   }, []);
 
   return (
-    <div className="pb-6">
-      <section className="mb-5 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
-        <p className="micro inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-primary">YOUR SHOPPING COMPANION</p>
+    <div className="min-h-full bg-[#F6F8F7] pb-28">
+      <section className="mb-5 rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+        <p className="micro inline-flex rounded-full bg-[#0F766E]/10 px-2.5 py-1 text-[#0F766E]">YOUR SHOPPING COMPANION</p>
         <h1 className="mt-2 max-w-[19ch] text-[28px] font-extrabold leading-[1.12] tracking-tight">
           What are we shopping for today?
         </h1>
@@ -61,7 +61,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-emerald-50"
+                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-[#F6F8F7]"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
@@ -84,67 +84,37 @@ function HomePage() {
         </section>
       ) : null}
 
-      <section className="animate-fade-up overflow-hidden rounded-[26px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_12px_30px_-18px_rgba(11,60,40,0.55)]">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
-          <Sparkles className="h-5 w-5" />
-        </div>
-        <p className="micro mt-5 text-white/65">START WITH YOUR LIST</p>
-        <h2 className="mt-2 text-[21px] font-extrabold leading-tight">Plan your next shopping trip</h2>
-        <p className="mt-2 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
-          List what you need, estimate the cost, then record bills as you shop.
-        </p>
-        <Link
-          to="/sessions"
-          className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-[14px] font-extrabold text-primary transition-transform active:scale-[0.99]"
-        >
-          <ShoppingBag className="h-[18px] w-[18px]" />
-          Start a shopping trip
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </section>
-
-      <section className="mt-5">
+      <section className="mt-1">
         <div className="mb-2 px-1">
-          <h2 className="text-[14px] font-extrabold">Quick actions</h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">Jump straight into what you need.</p>
+          <h2 className="text-[14px] font-extrabold">Choose what you need</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Start a planned trip or record shopping already completed.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/sessions"
-            className="flex min-h-[124px] flex-col items-start justify-between rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
+            className="flex min-h-[150px] flex-col items-start justify-between rounded-[22px] border-[1.5px] border-[#450A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:bg-[#F6F8F7] active:scale-[0.99]"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E]/10 text-[#0F766E]">
               <ShoppingBag className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">Plan a list</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Create a trip and add items</span>
+              <span className="block text-[13px] font-extrabold">Plan a Shopping Trip</span>
+              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">Build a list, estimate and track bills.</span>
             </span>
+            <ArrowRight className="h-4 w-4 text-[#0F766E]" />
           </Link>
           <Link
             to="/add/manual"
-            className="flex min-h-[124px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[150px] flex-col items-start justify-between rounded-[22px] border-[1.5px] border-[#450A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:bg-[#F6F8F7] active:scale-[0.99]"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EA580C]/10 text-[#EA580C]">
               <ReceiptText className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">Quick expense</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record a purchase you made</span>
+              <span className="block text-[13px] font-extrabold">Log Past Purchase</span>
+              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">Quickly save what you already bought.</span>
             </span>
-          </Link>
-          <Link
-            to="/history"
-            className="col-span-2 flex min-h-[68px] items-center gap-3 rounded-[22px] border border-border bg-white px-4 py-3 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/30 active:scale-[0.99]"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-primary">
-              <History className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-extrabold">My shopping history</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">Review previous trips and purchases</span>
-            </span>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            <ArrowRight className="h-4 w-4 text-[#EA580C]" />
           </Link>
         </div>
       </section>
@@ -153,7 +123,7 @@ function HomePage() {
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
         <section className="mt-5 flex items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0F766E]/10 text-[#0F766E]">
             <ReceiptText className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
