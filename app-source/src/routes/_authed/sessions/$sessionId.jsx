@@ -399,7 +399,7 @@ function SessionDetailPage() {
     recognition.lang = "en-IN"; recognition.continuous = false; recognition.interimResults = false; recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
       const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim(); if (!transcript) return;
-      const match = transcript.match(/(?:rupees?|rs\\.?|₹)\\s*(\\d+(?:\\.\\d{1,2})?)|\\b(\\d+(?:\\.\\d{1,2})?)\\s*(?:rupees?|rs\\.?|₹)\\b/i;
+      const match = transcript.match(/(?:rupees?|rs\\.?|₹)\\s*(\\d+(?:\\.\\d{1,2})?)|\\b(\\d+(?:\\.\\d{1,2})?)\\s*(?:rupees?|rs\\.?|₹)\\b/i);
       const amount = match ? (match[1] || match[2]) : "";
       const shop = amount ? transcript.replace(match[0], "").trim() : transcript;
       setBillForm((current) => ({ ...current, shop_name: shop || current.shop_name, bill_total: amount || current.bill_total }));
