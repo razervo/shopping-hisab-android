@@ -9,6 +9,7 @@ import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimateP
 import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
 import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
 import { StyledConfirmModal } from "@/components/ui/styled-confirm-modal";
+import { useStyledConfirm } from "@/components/ui/use-styled-confirm";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -38,6 +39,7 @@ async function api(path, options = {}) {
 
 function SessionDetailPage() {
   const { sessionId } = Route.useParams();
+  const { confirmStyled, dialogElement: pendingConfirmDialog } = useStyledConfirm();
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
@@ -740,7 +742,7 @@ function SessionDetailPage() {
     finally { setItemEditSaving(false); }
   };
   const deletePlannedItem = async (item) => {
-    if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
+    if (!await confirmStyled(`Remove "${item.product_name}" from this shopping session?`)) return;
     try {
       await api(`/api/shopping/sessions/${sessionId}/items/${item.id}`, { method: "DELETE" });
       setEstimatePrices((current) => {
@@ -794,7 +796,7 @@ function SessionDetailPage() {
   };
 
   const deleteBill = async (billId) => {
-    if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
+    if (!await confirmStyled("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
     const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
@@ -841,7 +843,7 @@ function SessionDetailPage() {
   };
 
   const deleteBillLine = async (billId, lineId) => {
-    if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    if (!await confirmStyled("Delete this bill item? The bill reconciliation will be recalculated.")) return;
     const requestKey = billLineDeleteRequestKeysRef.current[lineId] || (billLineDeleteRequestKeysRef.current[lineId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE", headers: { "Idempotency-Key": requestKey } });
@@ -883,7 +885,7 @@ function SessionDetailPage() {
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
     const scannedDuplicates = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
-    if (scannedDuplicates.length && !window.confirm(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
+    if (scannedDuplicates.length && !await confirmStyled(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
     if (scannedListSaveLockRef.current) return;
     scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
@@ -959,7 +961,7 @@ function SessionDetailPage() {
     }
 
     const duplicateNames = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
-    if (duplicateNames.length && !window.confirm(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
+    if (duplicateNames.length && !await confirmStyled(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
     if (manualListSaveLockRef.current) return;
     manualListSaveLockRef.current = true;
     setSaving(true);
@@ -1855,6 +1857,7 @@ function SessionDetailPage() {
         </div>
       </section>
 ) : null}
+      {pendingConfirmDialog}
       <StyledConfirmModal open={deleteTripDialogOpen} title="Delete this shopping trip?" description="This will delete the trip and all saved trip data (lists, items, estimates, bills and history). Uploaded files are retained and not physically deleted. This cannot be undone." confirmLabel="Delete trip" destructive onCancel={() => setDeleteTripDialogOpen(false)} onConfirm={confirmDeleteTrip} />
       <StyledConfirmModal open={Boolean(pendingTotalDifference)} title="Confirm final expense difference" description={pendingTotalDifference ? `Your confirmed total is ₹${pendingTotalDifference.rupees.toFixed(2)}, but bills calculate to ₹${pendingTotalDifference.calculatedRupees.toFixed(2)} (₹${Math.abs(pendingTotalDifference.difference).toFixed(2)} ${pendingTotalDifference.difference > 0 ? "higher" : "lower"}). Save this difference in the final confirmation?` : ""} confirmLabel="Confirm total" onCancel={() => setPendingTotalDifference(null)} onConfirm={() => finishSession(pendingTotalDifference?.rupees)} />
       {!completed ? (
