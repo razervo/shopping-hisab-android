@@ -1819,6 +1819,12 @@ function SessionDetailPage() {
           <p className="text-[15px] font-extrabold">Trip finished</p>
           <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. Your trip summary is saved and cannot be edited.</p>
           <p className="mt-2 text-[11px] text-muted-foreground">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length} planned item(s) remain unpurchased or partially purchased.</p>
+          <button type="button" onClick={() => {
+            const rows = [["Shopping Trip", tripName || "Shopping"], ["Date", tripDate || ""], ["Final total (₹)", (Number(session.confirmed_actual_total_paise || 0) / 100).toFixed(2)], ["Planned Items"], ...items.map((item) => [item.product_name, item.planned_quantity, item.unit]), ["Bills"], ...(session.bills || []).map((bill) => [bill.shop_name || "Shop", (Number(bill.bill_total_paise || 0) / 100).toFixed(2), bill.bill_status])];
+            const csv = rows.map((row) => row.map((value) => String(value ?? "").split('"').join('""')).map((value) => '"' + value + '"' ).join(",")).join("\\r\\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "shopping-trip-summary.csv"; link.click(); URL.revokeObjectURL(url);
+          }} className="mt-3 w-full rounded-full border border-primary py-3 text-[12px] font-bold text-primary">Download Summary (CSV)</button>
         </section>
       )}
 
