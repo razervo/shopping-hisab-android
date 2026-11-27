@@ -7,6 +7,10 @@ export function inr(amount, opts = {}) {
   })}`;
 }
 
+export function inrPaise(paise, opts = {}) {
+  return inr((Number(paise) || 0) / 100, opts);
+}
+
 export function todayISO() {
   const d = new Date();
   return toISO(d);

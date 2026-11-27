@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, ChevronRight, Loader2, Plus, RefreshCw, ShoppingBag } from "lucide-react";
+import { inrPaise } from "@/lib/format";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/sessions/")({
@@ -13,10 +14,6 @@ const localDate = () => {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
 };
-
-const inr = (paise) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 })
-    .format(Number(paise || 0) / 100);
 
 const prettyDate = (value) => {
   if (!value) return "Date not set";
@@ -100,7 +97,7 @@ function SessionsPage() {
         </button>
       </div>
 
-      <form onSubmit={createSession} className="mt-5 space-y-3 rounded-[24px] border border-emerald-100 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+      <form onSubmit={createSession} className="mt-5 space-y-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <div>
           <label htmlFor="session-name" className="mb-1.5 block text-[12px] font-bold text-muted-foreground">Give this trip a name (optional)</label>
           <input id="session-name" value={name} onChange={(event) => setName(event.target.value)}
@@ -145,22 +142,22 @@ function SessionsPage() {
       ) : (
         <div className="space-y-2.5">
           {sessions.map((session) => (
-            <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="block rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_10px_rgba(15,23,42,0.035)] transition-colors hover:bg-secondary/30">
+            <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="block rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.05)] transition-colors hover:bg-secondary/30">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14.5px] font-extrabold">{session.name || "Shopping trip"}</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">{prettyDate(session.shopping_date)}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold ${session.status === "completed" ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary"}`}>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold ${session.status === "completed" ? "bg-secondary text-muted-foreground" : "bg-[#FFF7ED] text-[#EA580C] border border-[#FED7AA]"}`}>
                   {session.status === "completed" ? "Finished" : "In progress"}
                 </span>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
                 <div className="flex gap-4 text-[11.5px] text-muted-foreground">
-                  <span>{Number(session.item_count || 0)} items</span>
-                  <span>{Number(session.list_count || 0)} lists</span>
+                  <span>{Number(session.item_count || 0)} {Number(session.item_count || 0) === 1 ? "item" : "items"}</span>
+                  <span>{Number(session.list_count || 0)} {Number(session.list_count || 0) === 1 ? "list" : "lists"}</span>
                 </div>
-                <span className="text-[13px] font-extrabold tabular-nums">{inr(session.actual_total_paise)}</span>
+                <span className="text-[13px] font-extrabold tabular-nums">{inrPaise(session.actual_total_paise)}</span>
               </div>
               <p className="mt-2 text-[11px] font-semibold text-primary">{session.status === "completed" ? "View trip summary →" : "Continue shopping →"}</p>
             </Link>

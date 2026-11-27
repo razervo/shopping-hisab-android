@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, FileSpreadsheet, FileText, Loader2, TrendingUp } from "lucide-react";
+import { CalendarDays, Download, FileSpreadsheet, FileText, Loader2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { useReport } from "@/components/reports/useReport";
 import { ddmmyyyy, inr, toISO } from "@/lib/format";
@@ -50,12 +50,12 @@ function ReportsPage() {
       <p className="mt-1 text-[13.5px] text-muted-foreground">A simple look at where your shopping went.</p>
 
       <label className="mt-4 block">
-        <span className="micro mb-1.5 block text-muted-foreground">Month</span>
+        <span className="micro mb-1.5 flex items-center gap-1.5 text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" /> Month</span>
         <input
           type="month"
           value={monthKey}
           onChange={(e) => setMonthKey(e.target.value || currentMonthKey())}
-          className="h-12 w-full rounded-xl border border-input bg-white px-3 text-[14px] font-semibold shadow-[0_2px_8px_rgba(15,23,42,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-12 w-full rounded-xl border-[1.5px] border-[#3B0A0A] bg-white px-3 text-[14px] font-semibold shadow-[0_2px_8px_rgba(15,23,42,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </label>
 
@@ -72,7 +72,7 @@ function ReportsPage() {
       ) : (
         <>
           <section className="mt-4 rounded-[24px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
-            <p className="micro text-white/65">{monthLabel}</p>
+            <p className="micro text-[#FED7AA]">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
             <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-white/15 pt-3 text-[12px]">
               <div className="rounded-xl bg-white/10 px-2.5 py-2">
@@ -93,14 +93,14 @@ function ReportsPage() {
           </section>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-[20px] border border-border bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+            <div className="rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Total spent</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.total || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {lifetime?.entries || 0} {(lifetime?.entries || 0) === 1 ? "purchase" : "purchases"}, all time
               </p>
             </div>
-            <div className="rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+            <div className="rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Biggest purchase</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.highest || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">Single highest bill</p>
@@ -129,7 +129,7 @@ function ReportsPage() {
                     </span>
                     <span className="h-2 overflow-hidden rounded-full bg-secondary">
                       <span
-                        className="block h-full rounded-full bg-primary"
+                        className="block h-full rounded-full bg-[#EA580C]"
                         style={{ width: `${Math.max((d.total / maxDaily) * 100, 4)}%` }}
                       />
                     </span>
@@ -149,7 +149,7 @@ function ReportsPage() {
                   exportRecordsCSV(month.records, `shopping-hisab-${monthKey}`);
                   toast.success("CSV exported");
                 }}
-                className="flex items-center justify-center gap-2 rounded-full border border-border bg-white py-3.5 text-[13px] font-bold"
+                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#3B0A0A] bg-white py-3.5 text-[13px] font-bold"
               >
                 <FileSpreadsheet className="h-4 w-4" /> Export CSV
               </button>
@@ -159,7 +159,7 @@ function ReportsPage() {
                   if (!month.records.length) return toast.error("Nothing to export for this month.");
                   await exportRecordsPDF(month.records, `shopping-hisab-${monthKey}`);
                 }}
-                className="flex items-center justify-center gap-2 rounded-full border border-border bg-white py-3 text-[13px] font-bold"
+                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#3B0A0A] bg-white py-3 text-[13px] font-bold"
               >
                 <FileText className="h-4 w-4" /> Export PDF
               </button>
@@ -169,7 +169,7 @@ function ReportsPage() {
               type="button"
               onClick={backup}
               disabled={backingUp}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3.5 text-[13px] font-bold text-secondary-foreground disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0F766E] py-3.5 text-[13px] font-bold text-white disabled:opacity-60"
             >
               {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {backingUp ? "Preparing backup…" : "Backup my shopping (CSV)"}

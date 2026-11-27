@@ -6,33 +6,33 @@
   :root {
     color-scheme: light;
     /* Shopping Hisab semantic palette — warm neutral surfaces + emerald */
-    --background: 150 14% 97%;
-    --foreground: 155 16% 10%;
+    --background: 150 14% 97%; /* #F6F8F7 */
+    --foreground: 222 47% 11%; /* #0F172A */
     --card: 0 0% 100%;
     --card-foreground: 155 16% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 155 16% 10%;
-    --primary: 154 82% 25%;
+    --primary: 177 77% 26%; /* #0F766E */
     --primary-foreground: 0 0% 100%;
-    --secondary: 148 35% 92%;
-    --secondary-foreground: 154 45% 16%;
+    --secondary: 24 100% 97%; /* #FFF7ED */
+    --secondary-foreground: 177 76% 19%;
     --muted: 150 14% 94%;
-    --muted-foreground: 155 8% 40%;
-    --accent: 148 38% 91%;
-    --accent-foreground: 154 66% 22%;
+    --muted-foreground: 215 19% 35%; /* #475569 */
+    --accent: 21 90% 48%; /* #EA580C */
+    --accent-foreground: 24 100% 97%;
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 100%;
     --success: 145 63% 31%;
-    --warning: 38 91% 48%;
-    --border: 150 13% 87%;
-    --input: 150 13% 85%;
-    --ring: 154 82% 25%;
-    --chart-1: 154 82% 25%;
-    --chart-2: 142 48% 42%;
-    --chart-3: 165 43% 53%;
-    --chart-4: 38 91% 48%;
+    --warning: 21 90% 48%;
+    --border: 0 71% 13%; /* #3B0A0A */
+    --input: 0 71% 13%;
+    --ring: 177 77% 26%;
+    --chart-1: 177 77% 26%;
+    --chart-2: 21 90% 48%;
+    --chart-3: 21 90% 48%;
+    --chart-4: 21 90% 48%;
     --chart-5: 20 67% 52%;
-    --radius: 1.25rem;
+    --radius: 1.125rem;
     --font-heading: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     --font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
@@ -157,6 +157,8 @@
 }
 @layer utilities {
   .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+  .hisab-card { border: 1.5px solid #3B0A0A; border-radius: 18px; background: #FFFFFF; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
+  .hisab-card-soft { border: 1.5px solid #3B0A0A; border-radius: 18px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
   .surface-shadow { box-shadow: 0 8px 24px -18px hsl(var(--foreground) / 0.24); }
 }
 @media (prefers-reduced-motion: no-preference) {

@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, CalendarDays, History, PlayCircle, ReceiptText, ShoppingBag, Sparkles } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { useOverview } from "@/components/dashboard/useOverview";
-import { inr } from "@/lib/format";
+import { inr, inrPaise } from "@/lib/format";
 
 export const Route = createFileRoute("/_authed/")({
   head: () => ({ meta: [{ title: "Home · Shopping Hisab" }] }),
@@ -13,12 +13,6 @@ export const Route = createFileRoute("/_authed/")({
 const formatTripDate = (value) => value
   ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
   : "Date not set";
-
-const formatPaise = (value) => new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 2,
-}).format(Number(value || 0) / 100);
 
 function HomePage() {
   const { loading, overview } = useOverview();
@@ -45,7 +39,7 @@ function HomePage() {
 
   return (
     <div className="pb-6">
-      <section className="mb-5 rounded-[24px] border border-emerald-100 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+      <section className="mb-5 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
         <p className="micro inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-primary">YOUR SHOPPING COMPANION</p>
         <h1 className="mt-2 max-w-[19ch] text-[28px] font-extrabold leading-[1.12] tracking-tight">
           What are we shopping for today?
@@ -67,7 +61,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border border-emerald-200 bg-emerald-50/80 p-3.5 transition-colors hover:bg-emerald-50"
+                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-emerald-50"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
@@ -81,7 +75,7 @@ function HomePage() {
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block text-[12px] font-extrabold tabular-nums">{formatPaise(trip.actual_total_paise)}</span>
+                  <span className="block text-[12px] font-extrabold tabular-nums">{inrPaise(trip.actual_total_paise)}</span>
                   <span className="mt-1 block text-[10px] font-bold text-primary">Continue <ArrowRight className="inline h-3 w-3" /></span>
                 </span>
               </Link>
@@ -117,7 +111,7 @@ function HomePage() {
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/sessions"
-            className="flex min-h-[124px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
+            className="flex min-h-[124px] flex-col items-start justify-between rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <ShoppingBag className="h-5 w-5" />
@@ -158,7 +152,7 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-emerald-100 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+        <section className="mt-5 flex items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
             <ReceiptText className="h-5 w-5" />
           </span>
