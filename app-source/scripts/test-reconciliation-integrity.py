@@ -150,4 +150,60 @@ assert refresh_reconciliation("b2") == (1500,3500)
 db.execute("UPDATE shopping_purchase_lines SET line_amount_paise=NULL WHERE id='l5'")
 assert refresh_reconciliation("b2") == (None,None)
 assert not db.execute("PRAGMA foreign_key_check").fetchall()
+# Execute the actual reconciliation SQL from the bill-line creation, edit and
+# deletion handlers instead of relying only on a separate Python model.
+def route_reconciliation_sql(start_marker, end_marker):
+    route_start = engine.index(start_marker)
+    route_end = engine.index(end_marker, route_start)
+    statement_start = engine.index("db.prepare(`UPDATE shopping_actual_bills SET", route_start)
+    statement_end = engine.index("`).bind(", statement_start)
+    return engine[statement_start + len("db.prepare(`"):statement_end].strip()
+
+create_sql = route_reconciliation_sql(
+    'if(purchaseLinesMatch && method==="POST"){', "const purchaseLineMatch=")
+patch_sql = route_reconciliation_sql(
+    'if(purchaseLineMatch && method==="PATCH"){', 'if(purchaseLineMatch && method==="DELETE"){')
+delete_sql = route_reconciliation_sql(
+    'if(purchaseLineMatch && method==="DELETE"){', 'if(subpath==="confirm" && method==="POST"){')
+normalize_sql = lambda sql: ",".join(" ".join(sql.split()).split(", "))
+assert normalize_sql(create_sql) == normalize_sql(patch_sql) == normalize_sql(delete_sql), (
+    "Bill-line creation, edit and delete reconciliation SQL has drifted"
+)
+assert delete_sql.count("?") == 22, "Reconciliation SQL bind count changed unexpectedly"
+
+db.execute("""INSERT INTO shopping_actual_bills
+(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,line_total_paise,reconciliation_difference_paise,uploaded_at,updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+("b3","u1","s1","Actual SQL QA",3000,"verified",1,3000,0,"t0","t0"))
+db.executemany("""INSERT INTO shopping_purchase_lines
+(id,user_id,session_id,bill_id,product_name,normalized_name,quantity,unit,line_amount_paise,is_extra,match_method,created_at,updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+[("l6","u1","s1","b3","Actual A","actual a",1,"pcs",1000,0,"confirmed","t0","t0"),
+ ("l7","u1","s1","b3","Actual B","actual b",2,"pcs",2000,0,"confirmed","t0","t0")])
+
+def run_actual_reconciliation(bill_id, timestamp="t2"):
+    params = ([bill_id,"u1","s1"] * 3
+              + [bill_id,"u1","s1"] * 2
+              + [bill_id,"u1","s1"]
+              + [timestamp,bill_id,"u1","s1"])
+    assert len(params) == 22
+    db.execute(delete_sql, params)
+    return db.execute("""SELECT line_total_paise,reconciliation_difference_paise
+                       FROM shopping_actual_bills WHERE id=?""", (bill_id,)).fetchone()
+
+assert run_actual_reconciliation("b3") == (3000,0)
+db.execute("UPDATE shopping_purchase_lines SET quantity=2,line_amount_paise=NULL WHERE id='l6'")
+assert run_actual_reconciliation("b3") == (None,None)
+db.execute("UPDATE shopping_purchase_lines SET line_amount_paise=2500 WHERE id='l6'")
+assert run_actual_reconciliation("b3") == (4500,-1500)
+db.execute("DELETE FROM shopping_purchase_lines WHERE id='l6'")
+assert run_actual_reconciliation("b3") == (2000,1000)
+db.execute("UPDATE shopping_actual_bills SET bill_total_paise=5000 WHERE id='b3'")
+assert run_actual_reconciliation("b3") == (2000,3000)
+db.execute("UPDATE shopping_purchase_lines SET line_amount_paise=NULL WHERE id='l7'")
+assert run_actual_reconciliation("b3") == (None,None)
+db.execute("DELETE FROM shopping_purchase_lines WHERE id='l7'")
+assert run_actual_reconciliation("b3") == (0,5000)
+assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
 print("PASS: second-pass bill reconciliation covered totals, edits, deletion, receipt-total corrections and missing prices.")
