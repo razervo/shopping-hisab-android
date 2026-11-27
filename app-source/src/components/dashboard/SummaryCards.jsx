@@ -7,7 +7,7 @@ function Bars({ values }) {
       {values.map((v, i) => (
         <div
           key={i}
-          className="flex-1 rounded-t-[3px] bg-primary/85 transition-all duration-500"
+          className="flex-1 rounded-t-[3px] bg-[#EA580C] transition-all duration-500"
           style={{ height: `${Math.max((v / max) * 100, 3)}%`, transitionDelay: `${i * 25}ms` }}
         />
       ))}
@@ -47,7 +47,7 @@ function Stat({ label, value }) {
 
 function Card({ title, sub, children }) {
   return (
-    <article className="flex flex-col gap-4 rounded-[24px] border border-border bg-white p-5">
+    <article className="flex flex-col gap-4 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-5">
       <header>
         <h2 className="text-[13px] font-bold tracking-wide">{title}</h2>
         <p className="mt-0.5 text-[11.5px] text-muted-foreground">{sub}</p>

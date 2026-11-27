@@ -65,7 +65,7 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-[#F6F8F7]">
       {profileComplete ? <DrivePermissionCheck userId={user?.id} /> : null}
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-white/85 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-[#3B0A0A]/30 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
           <Link to="/" className="flex items-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
@@ -88,7 +88,7 @@ export function AppShell() {
               to="/profile"
               aria-label="Open your profile"
               title="Profile"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-[1.5px] border-[#3B0A0A] bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <UserRound className="h-4 w-4" />
             </Link>

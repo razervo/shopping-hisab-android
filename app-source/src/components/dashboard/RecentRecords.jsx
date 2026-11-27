@@ -13,14 +13,14 @@ export function RecentRecords({ records }) {
       </div>
 
       {records.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-border bg-secondary/40 px-5 py-8 text-center">
+        <div className="rounded-[18px] border-[1.5px] border-dashed border-[#3B0A0A] bg-secondary/40 px-5 py-8 text-center">
           <p className="text-sm font-semibold">No shopping recorded yet</p>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Add your first bill to start the hisab.
           </p>
         </div>
       ) : (
-        <ul className="overflow-hidden rounded-[24px] border border-border bg-white">
+        <ul className="overflow-hidden rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white">
           {records.map((r, i) => (
             <li key={r.id}>
               <Link
