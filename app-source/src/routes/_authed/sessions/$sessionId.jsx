@@ -1642,10 +1642,10 @@ function SessionDetailPage() {
                     <div key={line.id} className="rounded-lg bg-secondary/40 px-2.5 py-2 text-[11px]">
                       {billLineEditDrafts[line.id] ? (
                         <div className="space-y-1.5">
-                          <input value={billLineEditDrafts[line.id].product_name} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], product_name: event.target.value } }))} aria-label="Edit bill item name" className="h-8 w-full rounded border border-border bg-background px-2" />
+                          <input value={billLineEditDrafts[line.id].product_name} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], product_name: event.target.value } }))} aria-label="Edit bill item name" className="h-10 w-full rounded-lg border border-border bg-background px-2.5" />
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].quantity} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], quantity: event.target.value } }))} aria-label="Edit quantity" className="h-8 rounded border border-border bg-background px-2" />
-                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].amount} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], amount: event.target.value } }))} aria-label="Edit line amount" placeholder="₹ amount" className="h-8 rounded border border-border bg-background px-2" />
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].quantity} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], quantity: event.target.value } }))} aria-label="Edit quantity" className="h-10 min-w-0 rounded-lg border border-border bg-background px-2.5" />
+                            <input type="number" min="0" step="0.01" value={billLineEditDrafts[line.id].amount} onChange={(event) => setBillLineEditDrafts((current) => ({ ...current, [line.id]: { ...current[line.id], amount: event.target.value } }))} aria-label="Edit line amount" placeholder="₹ amount" className="h-10 min-w-0 rounded-lg border border-border bg-background px-2.5" />
                           </div>
                           <div className="flex gap-2">
                             <button type="button" disabled={billLineEditSaving === line.id} onClick={() => saveBillLineEdit(bill.id, line.id)} className="text-primary font-bold underline">Save</button>
@@ -1670,17 +1670,17 @@ function SessionDetailPage() {
                 <form onSubmit={(event) => saveBillLine(event, bill.id)} className="mt-3 space-y-2 border-t border-border pt-3">
                   <p className="text-[11.5px] font-bold">Add a bill item</p>
                   <input value={(billLineForms[bill.id] || {}).product_name || ""} onChange={(event) => updateBillLine(bill.id, "product_name", event.target.value)}
-                    placeholder="Product name" maxLength={160} className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[12px]" />
+                    placeholder="Product name" maxLength={160} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-[12px]" />
                   <div className="grid grid-cols-3 gap-2">
                     <input type="number" min="0" step="0.01" value={(billLineForms[bill.id] || {}).quantity || "1"} onChange={(event) => updateBillLine(bill.id, "quantity", event.target.value)}
-                      aria-label="Bill item quantity" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                      aria-label="Bill item quantity" className="h-10 min-w-0 rounded-lg border border-border bg-background px-2.5 text-[12px]" />
                     <input value={(billLineForms[bill.id] || {}).unit || "pcs"} onChange={(event) => updateBillLine(bill.id, "unit", event.target.value)}
-                      aria-label="Bill item unit" placeholder="Unit" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                      aria-label="Bill item unit" placeholder="Unit" className="h-10 min-w-0 rounded-lg border border-border bg-background px-2.5 text-[12px]" />
                     <input type="number" min="0" step="0.01" value={(billLineForms[bill.id] || {}).amount || ""} onChange={(event) => updateBillLine(bill.id, "amount", event.target.value)}
-                      aria-label="Bill item amount in rupees" placeholder="₹ amount" className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-[12px]" />
+                      aria-label="Bill item amount in rupees" placeholder="₹ amount" className="h-10 min-w-0 rounded-lg border border-border bg-background px-2.5 text-[12px]" />
                   </div>
                   <select value={(billLineForms[bill.id] || {}).shopping_item_id || ""} onChange={(event) => updateBillLine(bill.id, "shopping_item_id", event.target.value)}
-                    className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[12px]">
+                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-[12px]">
                     <option value="">Extra / not matched to list</option>
                     {items.map((item) => <option key={item.id} value={item.id}>Match to: {item.product_name} ({item.planned_quantity} {item.unit})</option>)}
                   </select>
