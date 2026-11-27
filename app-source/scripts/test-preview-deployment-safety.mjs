@@ -1,30 +1,30 @@
 import assert from "node:assert/strict";
-import console from "node:console";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { URL } from "node:url";
 
-const workflow = await readFile(new URL("../../.github/workflows/deploy-native-preview.yml", import.meta.url), "utf8");
-const previewConfig = await readFile(new URL("../wrangler.preview.jsonc", import.meta.url), "utf8");
+const workflowDir = new URL("../../.github/workflows/", import.meta.url);
+const workflowFiles = await readdir(workflowDir);
+assert.ok(!workflowFiles.some((file) => /preview.*deploy|deploy.*preview/i.test(file)), "preview deployment workflows must not exist");
+
+const previewConfigPath = new URL("../wrangler.preview.jsonc", import.meta.url);
+await assert.rejects(readFile(previewConfigPath, "utf8"), { code: "ENOENT" }, "preview Worker config must not exist");
+
+const nativeConfigText = await readFile(new URL("../wrangler.native.jsonc", import.meta.url), "utf8");
+const nativeConfig = JSON.parse(nativeConfigText);
+assert.equal(nativeConfig.name, "shopping-hisab-native", "native config must target the dedicated Worker");
+assert.equal(nativeConfig.preview_urls, false, "native preview URLs must be disabled");
+assert.deepEqual(nativeConfig.previews, {}, "native preview configuration must remain empty");
+assert.equal(nativeConfig.d1_databases?.[0]?.database_name, "shopping-hisab-native", "native config must target dedicated D1");
+assert.equal(nativeConfig.d1_databases?.[0]?.database_id, "4392cac4-98c2-46b1-9a54-de811873c5a8", "native config must bind the native production D1");
+assert.doesNotMatch(nativeConfigText, /shopping-hisab-preview\.hasimabd13\.workers\.dev/, "native config must not contain preview Worker URLs");
+
 const viteConfig = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
+assert.match(viteConfig, /configPath:\s*"wrangler\.native\.jsonc"/, "Vite must build against the native config without a preview override");
 
-const guardIndex = workflow.indexOf("Refuse production-targeted preview deployment");
-const deployIndex = workflow.indexOf("Deploy isolated native Worker");
-const migrationIndex = workflow.indexOf("Apply preview-only database migrations");
-const buildIndex = workflow.indexOf("Build native app using isolated preview config");
-
-assert.notEqual(guardIndex, -1, "preview workflow contains a fail-closed isolation guard");
-assert.notEqual(deployIndex, -1, "preview deploy step exists");
-assert.notEqual(migrationIndex, -1, "preview database migrations are applied");
-assert.notEqual(buildIndex, -1, "preview config is used for the native build");
-assert.ok(migrationIndex < buildIndex && buildIndex < guardIndex && guardIndex < deployIndex, "migrations, preview build, guard, deploy occur in safe order");
-assert.match(workflow, /CF_WRANGLER_CONFIG:\s*wrangler\.preview\.jsonc/, "preview build explicitly selects isolated config");
-assert.match(workflow, /c\.name!=="shopping-hisab-preview"/, "preview must use its own Worker name");
-assert.match(workflow, /dbs\[0\]\.database_id!==previewDb/, "preview must require its dedicated D1 database");
-assert.match(workflow, /4392cac4-98c2-46b1-9a54-de811873c5a8/, "guard recognizes production D1 ID");
-assert.match(workflow, /2f5e0a14-59c9-40d8-8d17-e2f5856934d6/, "guard requires the preview D1 ID");
-assert.match(previewConfig, /"name":\s*"shopping-hisab-preview"/, "preview config uses separate Worker name");
-assert.match(previewConfig, /"database_name":\s*"shopping-hisab-preview"/, "preview config names isolated database");
-assert.match(previewConfig, /"database_id":\s*"2f5e0a14-59c9-40d8-8d17-e2f5856934d6"/, "preview config binds isolated D1");
-assert.doesNotMatch(previewConfig, /4392cac4-98c2-46b1-9a54-de811873c5a8/, "preview config must never contain production D1");
-assert.match(viteConfig, /process\.env\.CF_WRANGLER_CONFIG\s*\|\|\s*"wrangler\.native\.jsonc"/, "Vite supports explicit config override");
-console.log("PASS: preview deployment uses dedicated Worker and D1, migrations/build/guard are ordered, and production D1 is excluded.");
+const deployWorkflow = await readFile(new URL("../../.github/workflows/deploy-shopping-hisab-native.yml", import.meta.url), "utf8");
+assert.match(deployWorkflow, /workflow_dispatch:/, "production deploy workflow must be manual-only");
+assert.doesNotMatch(deployWorkflow, /^\s*(push|pull_request):/m, "production deploy workflow must not run on push or pull requests");
+assert.match(deployWorkflow, /if:\s*github\.ref\s*==\s*'refs\/heads\/main'/, "production deploy job must be main-only");
+assert.match(deployWorkflow, /npx wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler\.native\.jsonc/, "production D1 migration must target only native D1");
+assert.match(deployWorkflow, /npx wrangler deploy/, "production deploy step must exist behind the main-only manual job guard");
+console.log("PASS: preview workflows/config/URLs are absent; native build and manual main-only production deployment are guarded.");
