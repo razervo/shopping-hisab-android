@@ -71,7 +71,7 @@ function ReportsPage() {
         </p>
       ) : (
         <>
-          <section className="mt-4 rounded-[24px] bg-[#0F766E] px-5 py-5 text-[#0F766E]-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
+          <section className="mt-4 rounded-[24px] bg-[#0F766E] px-5 py-5 text-primary-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
             <p className="micro text-[#FED7AA]">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
             <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-white/15 pt-3 text-[12px]">
@@ -93,21 +93,21 @@ function ReportsPage() {
           </section>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+            <div className="rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Total spent</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.total || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {lifetime?.entries || 0} {(lifetime?.entries || 0) === 1 ? "purchase" : "purchases"}, all time
               </p>
             </div>
-            <div className="rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+            <div className="rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Biggest purchase</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.highest || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">Single highest bill</p>
             </div>
           </div>
 
-          <section className="mt-4 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+          <section className="mt-4 rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[13px] font-bold tracking-wide">Daily totals</h2>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
@@ -140,7 +140,7 @@ function ReportsPage() {
             )}
           </section>
 
-          <section className="mt-4 space-y-2.5 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+          <section className="mt-4 space-y-2.5 rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
@@ -149,7 +149,7 @@ function ReportsPage() {
                   exportRecordsCSV(month.records, `shopping-hisab-${monthKey}`);
                   toast.success("CSV exported");
                 }}
-                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#3B0A0A] bg-white py-3.5 text-[13px] font-bold"
+                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#450A0A] bg-white py-3.5 text-[13px] font-bold"
               >
                 <FileSpreadsheet className="h-4 w-4" /> Export CSV
               </button>
@@ -159,7 +159,7 @@ function ReportsPage() {
                   if (!month.records.length) return toast.error("Nothing to export for this month.");
                   await exportRecordsPDF(month.records, `shopping-hisab-${monthKey}`);
                 }}
-                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#3B0A0A] bg-white py-3 text-[13px] font-bold"
+                className="flex items-center justify-center gap-2 rounded-full border-[1.5px] border-[#450A0A] bg-white py-3 text-[13px] font-bold"
               >
                 <FileText className="h-4 w-4" /> Export PDF
               </button>
