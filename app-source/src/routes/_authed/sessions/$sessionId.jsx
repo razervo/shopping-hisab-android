@@ -82,6 +82,8 @@ function SessionDetailPage() {
   const [rememberedEstimateKeys, setRememberedEstimateKeys] = useState({});
   const [estimateReviewWarnings, setEstimateReviewWarnings] = useState([]);
   const [estimateReviewOpen, setEstimateReviewOpen] = useState(false);
+  const [estimateDetailsOpen, setEstimateDetailsOpen] = useState(false);
+  const [estimateDetailItems, setEstimateDetailItems] = useState([]);
   const [estimateSaving, setEstimateSaving] = useState(false);
   const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
   const [scannedDraft, setScannedDraft] = useState(null);
@@ -273,8 +275,17 @@ function SessionDetailPage() {
     event.preventDefault();
     const currentItems = session?.items || [];
     if (!currentItems.length) return toast.error("Add items to your list before estimating.");
+    const invalidDetails = currentItems.filter((item) => {
+      const quantity = Number(item.planned_quantity);
+      return !Number.isFinite(quantity) || quantity <= 0 || !String(item.unit || "").trim();
+    });
+    if (invalidDetails.length) {
+      setEstimateDetailItems(invalidDetails);
+      setEstimateDetailsOpen(true);
+      return;
+    }
     const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
-    if (missing.length) return toast.error("Add a price for each item before saving your estimate.");
+    if (missing.length) return toast.error("Add a total line price for each item before saving your estimate.");
     const warnings = reviewEstimateItems(currentItems);
     if (warnings.length && !estimateReviewOpen) {
       setEstimateReviewWarnings(warnings);
@@ -288,13 +299,16 @@ function SessionDetailPage() {
       if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
         return toast.error(`Enter a valid estimated price for ${item.product_name}.`);
       }
-      const unitPrice = Math.round(rupees * 100);
+      const quantity = Number(item.planned_quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) return toast.error(`Enter a valid quantity for ${item.product_name}.`);
+      const lineTotalPaise = Math.round(rupees * 100);
+      const unitPrice = Math.round(lineTotalPaise / quantity);
       lines.push({
         shopping_item_id: item.id,
-        quantity: Number(item.planned_quantity || 0),
+        quantity,
         unit: item.unit || "pcs",
         estimated_unit_price_paise: unitPrice,
-        estimated_line_total_paise: Math.round(Number(item.planned_quantity || 0) * unitPrice),
+        estimated_line_total_paise: lineTotalPaise,
         price_source: estimateSources[item.id] || "manual",
       });
     }
@@ -1010,6 +1024,19 @@ function SessionDetailPage() {
   const smartListGroups = groupShoppingItems(smartSortedItems, categoryOverrides);
 
   const lists = session.source_lists || [];
+  const listLineLookup = new Map();
+  for (const list of lists) {
+    const sourceLines = Array.isArray(list.lines) ? list.lines : Array.isArray(list.source_lines) ? list.source_lines : [];
+    for (const line of sourceLines) {
+      if (line?.id != null) listLineLookup.set(String(line.id), String(list.id));
+    }
+  }
+  const groupedSourceLists = lists.map((list) => ({
+    ...list,
+    groupedItems: items.filter((item) => listLineLookup.get(String(item.source_line_id || "")) === String(list.id)),
+  })).filter((list) => list.groupedItems.length);
+  const groupedItemIds = new Set(groupedSourceLists.flatMap((list) => list.groupedItems.map((item) => String(item.id))));
+  const fallbackItems = items.filter((item) => !groupedItemIds.has(String(item.id)));
   const completed = session.status === "completed";
   const unresolvedBills = (session.bills || []).filter(
     (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
@@ -1344,6 +1371,27 @@ function SessionDetailPage() {
       </section>
 ) : null}
 
+      {estimateDetailsOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="estimate-details-title" className="w-full max-w-md rounded-[22px] border border-[#3B0A0A] bg-white p-4 shadow-xl">
+            <h2 id="estimate-details-title" className="text-[15px] font-extrabold">Complete item details</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">Every item needs a quantity greater than zero and a unit before you can save an estimate.</p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {estimateDetailItems.map((item) => (
+                <div key={item.id} className="rounded-xl bg-secondary/50 px-3 py-2 text-[12px]">
+                  <span className="font-bold">{item.product_name}</span>
+                  <span className="mt-1 block text-muted-foreground">Quantity: {item.planned_quantity ?? "Missing"} {item.unit || "(unit missing)"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setEstimateDetailsOpen(false)} className="flex-1 rounded-full border border-border py-2.5 text-[12px] font-bold">Close</button>
+              <button type="button" onClick={() => { setEstimateDetailsOpen(false); setActiveStep(1); }} className="flex-1 rounded-full bg-primary py-2.5 text-[12px] font-bold text-primary-foreground">Edit list</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
 
       {activeStep === 2 ? (
@@ -1363,7 +1411,7 @@ function SessionDetailPage() {
             <div key={item.id} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
-                <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · price per {item.unit}</p>
+                <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · total for this line</p>
                 {item.brand || item.pack_size ? (
                   <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
                     {[item.brand, item.pack_size].filter(Boolean).join(" · ")}
@@ -1374,7 +1422,7 @@ function SessionDetailPage() {
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={estimatePrices[item.id] ?? ""}
                   onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); setRememberedEstimateKeys((current) => { if (!(item.id in current)) return current; const next = { ...current }; delete next[item.id]; return next; }); }}
-                  placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
+                  placeholder="₹ total" aria-label={`Estimated total line price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
                 {estimateSources[item.id] === "remembered" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Saved price · exact pack match</p>
                   : estimateSources[item.id] === "ai_estimate" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">AI estimate · review price</p>
@@ -1445,13 +1493,19 @@ function SessionDetailPage() {
 
       <section className="mt-4">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>
-        {lists.length ? <div className="space-y-2">
-          {lists.map((list) => (
+        {groupedSourceLists.length || fallbackItems.length ? <div className="space-y-2">
+          {groupedSourceLists.map((list) => (
             <div key={list.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <p className="text-[13px] font-bold">{list.source_metadata_json ? (() => { try { return JSON.parse(list.source_metadata_json).title || "Shopping list"; } catch { return "Shopping list"; } })() : "Shopping list"}</p>
-              <p className="mt-1 text-[11px] capitalize text-muted-foreground">{String(list.source_type).replaceAll("_", " ")} · {String(list.ocr_status).replaceAll("_", " ")}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{list.groupedItems.length} item(s)</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">{list.groupedItems.map((item) => <span key={item.id} className="rounded-full bg-secondary px-2.5 py-1 text-[10.5px]">{item.product_name}</span>)}</div>
             </div>
           ))}
+          {fallbackItems.length ? <div className="rounded-[18px] border border-dashed border-border bg-white px-4 py-3">
+            <p className="text-[13px] font-bold">All items</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Items whose source-line association is unavailable are kept here.</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">{fallbackItems.map((item) => <span key={item.id} className="rounded-full bg-secondary px-2.5 py-1 text-[10.5px]">{item.product_name}</span>)}</div>
+          </div> : null}
         </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your saved lists will appear here.</p>}
       </section>
         </div>
