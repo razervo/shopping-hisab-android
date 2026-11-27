@@ -139,6 +139,16 @@ assert "DELETE FROM uploaded_files" not in handler
 assert "dependent_duplicate_links" in handler or "dependent_duplicate_links" in engine
 assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
 
+# Bill-line deletion has a separate route and must also recover a concurrent
+# duplicate-key batch winner; the sequential model above cannot exercise that.
+line_delete_start = engine.index('if(purchaseLineMatch && method==="DELETE"){')
+line_delete_end = engine.index('if(subpath==="confirm" && method==="POST"){', line_delete_start)
+line_delete_handler = engine[line_delete_start:line_delete_end]
+assert "try{await db.batch(statements);}catch(cause)" in line_delete_handler
+assert "SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys" in line_delete_handler
+assert "winner.request_hash!==requestHash" in line_delete_handler
+assert "return new Response(winner.response_json,{status:winner.response_status,headers})" in line_delete_handler
+
 # Self-referential duplicate bill links are rejected by the API. SQLite's FK
 # alone permits a row to reference itself, so verify the handler guard explicitly.
 db.execute("INSERT INTO shopping_actual_bills(id,user_id,session_id,shop_name,bill_total_paise,bill_status,included_in_actual,uploaded_at,updated_at) VALUES('b-self','u1','s1','Self',10000,'verified',1,'t0','t0')")
