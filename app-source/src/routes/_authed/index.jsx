@@ -45,7 +45,7 @@ function HomePage() {
 
   return (
     <div className="pb-6">
-      <section className="mb-5 rounded-[24px] border border-border bg-white p-5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+      <section className="mb-5 rounded-[24px] border border-emerald-100 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <p className="micro inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-primary">YOUR SHOPPING COMPANION</p>
         <h1 className="mt-2 max-w-[19ch] text-[28px] font-extrabold leading-[1.12] tracking-tight">
           What are we shopping for today?
@@ -90,7 +90,7 @@ function HomePage() {
         </section>
       ) : null}
 
-      <section className="animate-fade-up overflow-hidden rounded-[24px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
+      <section className="animate-fade-up overflow-hidden rounded-[26px] bg-primary px-5 py-6 text-primary-foreground shadow-[0_12px_30px_-18px_rgba(11,60,40,0.55)]">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
           <Sparkles className="h-5 w-5" />
         </div>
@@ -117,7 +117,7 @@ function HomePage() {
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/sessions"
-            className="flex min-h-[120px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
+            className="flex min-h-[124px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               <ShoppingBag className="h-5 w-5" />
@@ -129,7 +129,7 @@ function HomePage() {
           </Link>
           <Link
             to="/add/manual"
-            className="flex min-h-[120px] flex-col items-start justify-between rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[124px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
               <ReceiptText className="h-5 w-5" />
@@ -141,7 +141,7 @@ function HomePage() {
           </Link>
           <Link
             to="/history"
-            className="col-span-2 flex min-h-[68px] items-center gap-3 rounded-[20px] border border-border bg-white px-4 py-3 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/30 active:scale-[0.99]"
+            className="col-span-2 flex min-h-[68px] items-center gap-3 rounded-[22px] border border-border bg-white px-4 py-3 shadow-[0_2px_12px_rgba(15,23,42,0.04)] transition-colors hover:bg-secondary/30 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-primary">
               <History className="h-5 w-5" />
@@ -158,7 +158,7 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[20px] border border-border bg-white px-4 py-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+        <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-emerald-100 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
             <ReceiptText className="h-5 w-5" />
           </span>
