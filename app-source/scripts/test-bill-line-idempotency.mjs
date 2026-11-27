@@ -16,4 +16,8 @@ assert.match(ui, /headers: \{ "Idempotency-Key": billLineRequestKeysRef\.current
 assert.match(ui, /headers: \{ "Idempotency-Key": uploadedBillLinesKeyRef\.current/, "uploaded bill-line flow sends a retry key");
 assert.match(ui, /headers: \{ "Idempotency-Key": scannedSourceLinesKeyRef\.current/, "scanned bill-line flow sends a retry key");
 assert.match(ui, /headers: \{ "Idempotency-Key": manualSourceLinesKeyRef\.current/, "manual source bill-line flow sends a retry key");
+assert.match(route, /try\{await db\.batch\(statements\);\}catch\(cause\)/, "bill-line create retries recover concurrent unique-key races");
+assert.match(route, /const winner=await db\.prepare\("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys/, "bill-line create recovers the committed race winner");
+assert.match(route, /winner\.request_hash!==requestHash/, "race recovery rejects conflicting payloads");
+assert.match(route, /return json\(safeJson\(winner\.response_json,\{\}\),Number\(winner\.response_status\)\|\|200\)/, "same-payload race replays the exact response");
 console.log("PASS: bill-line creation requires and persists idempotency keys; client bill-line flows send stable retry keys.");
