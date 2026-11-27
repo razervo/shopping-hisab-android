@@ -55,7 +55,7 @@ function ReportsPage() {
           type="month"
           value={monthKey}
           onChange={(e) => setMonthKey(e.target.value || currentMonthKey())}
-          className="h-11 w-full rounded-xl border border-input bg-white px-3 text-[14px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-12 w-full rounded-xl border border-input bg-white px-3 text-[14px] font-semibold shadow-[0_2px_8px_rgba(15,23,42,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </label>
 
@@ -71,10 +71,10 @@ function ReportsPage() {
         </p>
       ) : (
         <>
-          <section className="mt-4 rounded-[24px] bg-primary px-5 py-5 text-primary-foreground">
+          <section className="mt-4 rounded-[24px] bg-primary px-5 py-5 text-primary-foreground shadow-[0_10px_28px_-18px_rgba(11,60,40,0.55)]">
             <p className="micro text-white/65">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
-            <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-[12px]">
+            <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-white/15 pt-3 text-[12px]">
               <div>
                 <span className="block text-white/60">Purchases</span>
                 <span className="tnum mt-0.5 block text-[15px] font-bold">{month.entries}</span>
@@ -93,21 +93,21 @@ function ReportsPage() {
           </section>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-[20px] border border-border bg-white p-3.5">
+            <div className="rounded-[20px] border border-border bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Total spent</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.total || 0)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {lifetime?.entries || 0} {(lifetime?.entries || 0) === 1 ? "purchase" : "purchases"}, all time
               </p>
             </div>
-            <div className="rounded-[22px] border border-border bg-white p-4">
+            <div className="rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
               <p className="micro text-muted-foreground">Biggest purchase</p>
               <p className="tnum mt-1.5 text-[20px] font-extrabold leading-none">{inr(lifetime?.highest || 0)}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Largest purchase</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Single highest bill</p>
             </div>
           </div>
 
-          <section className="mt-4 rounded-[20px] border border-border bg-white p-4">
+          <section className="mt-4 rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[13px] font-bold tracking-wide">Daily totals</h2>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
