@@ -15,10 +15,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ddmmyyyy, formatQty, inr } from "@/lib/format";
 import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
+import { BillUploader } from "@/components/shopping/BillUploader";
 
 export function RecordDetail({ record, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [verifiedRecord, setVerifiedRecord] = useState(null);
+  const [verifyingBill, setVerifyingBill] = useState(false);
+  const displayRecord = verifiedRecord || record;
   const items = record.items || [];
   const total = record.source === "session" ? (Number(record.total) || 0) : (items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0);
 
@@ -34,7 +38,7 @@ export function RecordDetail({ record, onDeleted }) {
     }
   };
 
-  const remove = async () => {
+  const attachVerificationBill = async (_extracted, fileUri) => {\n    if (!fileUri || verifyingBill) return;\n    setVerifyingBill(true);\n    try {\n      const updated = await base44.entities.ShoppingRecord.update(record.id, {\n        shop_name: record.shop_name || "", date: record.date, items, total, item_count: items.length,\n        notes: record.notes || "", source: "bill", bill_file_uri: fileUri,\n        receipts: record.receipts || [], reconciliation_status: record.reconciliation_status || "not_required",\n      });\n      setVerifiedRecord(updated);\n      toast.success("Bill uploaded — purchase verified");\n    } catch (error) {\n      toast.error("Bill uploaded, but verification could not be saved", { description: error?.message || "Please try again." });\n    } finally { setVerifyingBill(false); }\n  };\n\n  const remove = async () => {
     setDeleting(true);
     try {
       await base44.entities.ShoppingRecord.delete(record.id);
@@ -147,7 +151,7 @@ export function RecordDetail({ record, onDeleted }) {
         </div>
       ) : null}
 
-      {record.bill_file_uri ? (
+      {displayRecord.bill_file_uri ? (
         <button
           type="button"
           onClick={openBill}
