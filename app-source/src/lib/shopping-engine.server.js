@@ -639,7 +639,14 @@ export async function handleShoppingEngine(request, env) {
       db.prepare("DELETE FROM shopping_actual_bills WHERE id=? AND user_id=? AND session_id=?").bind(billId,userId,sessionId),
       db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,requestKey,requestHash,JSON.stringify(responseBody),200,timestamp)
     ];
-    await db.batch(statements);
+    try{await db.batch(statements);}catch(cause){
+      const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,requestKey).first();
+      if(winner){
+        if(winner.request_hash!==requestHash)return fail("Idempotency key reused for a different bill deletion.",409);
+        return new Response(winner.response_json,{status:winner.response_status,headers});
+      }
+      throw cause;
+    }
     return json(responseBody);
   }
 
