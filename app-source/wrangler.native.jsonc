@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "shopping-hisab-native",
+  "name": "shopping-hisab-android",
   "main": "src/server.js",
   "compatibility_date": "2026-11-18",
   "compatibility_flags": ["nodejs_compat"],
