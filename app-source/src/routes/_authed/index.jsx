@@ -61,7 +61,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-[#F6F8F7]"
+                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#450A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-[#F6F8F7]"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
@@ -122,7 +122,7 @@ function HomePage() {
       {loading ? (
         <div className="mt-5 h-[88px] animate-pulse rounded-[22px] bg-muted" />
       ) : overview ? (
-        <section className="mt-5 flex items-center gap-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+        <section className="mt-5 flex items-center gap-3 rounded-[18px] border-[1.5px] border-[#450A0A] bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0F766E]/10 text-[#0F766E]">
             <ReceiptText className="h-5 w-5" />
           </span>
