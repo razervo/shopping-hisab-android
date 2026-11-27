@@ -2,7 +2,7 @@ name: Shopping Hisab hardening verification
 
 on:
   push:
-    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration, ux-recovery-voice-zero-trip-fixes, phase2-complete-feature-work]
+    branches: [shopping-hisab-idempotency-hardening, shopping-hisab-trip-simplification, cloudflare-native-migration, ux-recovery-voice-zero-trip-fixes, phase2-complete-feature-work, shopping-hisab-main-transition, main]
     paths:
       - "app-source/**"
       - ".github/workflows/shopping-hardening-verify.yml"
