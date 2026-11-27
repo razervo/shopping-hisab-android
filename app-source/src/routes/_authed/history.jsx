@@ -75,6 +75,10 @@ function HistoryPage() {
         </div>
       </form>
 
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Link to="/add/manual" className="flex min-h-12 items-center justify-center rounded-full bg-primary px-3 text-[12px] font-bold text-primary-foreground">Quick log purchase</Link>
+        <Link to="/add/bill" className="flex min-h-12 items-center justify-center rounded-full border border-primary/30 bg-primary/5 px-3 text-[12px] font-bold text-primary">Upload bill to verify</Link>
+      </div>
       <div className="mb-2 mt-5 flex items-baseline justify-between px-1">
         <h2 className="text-[13px] font-bold tracking-wide">
           {records.length > 0
