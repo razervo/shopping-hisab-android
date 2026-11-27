@@ -1084,20 +1084,20 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
-      <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[18px] border border-border bg-white p-2">
-        <a href="#trip-step-1" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${items.length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">1</span>
+      <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-emerald-100 bg-white p-2 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+        <a href="#trip-step-1" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${items.length ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm text-[10px]">1</span>
           Your list
         </a>
-        <a href="#trip-step-2" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${latestEstimate ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-2" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${latestEstimate ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">2</span>
           Estimate
         </a>
-        <a href="#trip-step-3" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${(session.bills || []).length ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-3" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${(session.bills || []).length ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">3</span>
           Shop & bills
         </a>
-        <a href="#trip-step-4" className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold ${completed ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+        <a href="#trip-step-4" className={`flex min-h-[64px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${completed ? "bg-emerald-50 text-primary" : "text-muted-foreground hover:bg-secondary/60"}`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px]">4</span>
           Finish
         </a>
