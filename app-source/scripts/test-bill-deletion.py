@@ -128,9 +128,26 @@ handler=engine[start:end]
 for required in ["Idempotency-Key","shopping_idempotency_keys","shopping_audit_events","bill_deleted",
                 "DELETE FROM shopping_purchase_lines","DELETE FROM shopping_actual_bills","db.batch(statements)"]:
     assert required in handler, f"Missing bill deletion safeguard: {required}"
+# Concurrent deletion may lose the unique idempotency-key race after the winner's
+# atomic batch commits. The loser must query that winner and replay the exact
+# stored response rather than return an internal error.
+assert "try{await db.batch(statements);}catch(cause)" in handler, "bill deletion must recover from a duplicate-key batch race"
+assert "SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys" in handler, "bill deletion must look up the race winner"
+assert "return new Response(winner.response_json,{status:winner.response_status,headers})" in handler, "same-payload race must replay the winning response"
+assert "throw cause;" in handler, "unrelated batch failures must not be swallowed"
 assert "DELETE FROM uploaded_files" not in handler
 assert "dependent_duplicate_links" in handler or "dependent_duplicate_links" in engine
 assert "UPDATE shopping_actual_bills SET duplicate_of_bill_id=NULL" in handler
+
+# Bill-line deletion has a separate route and must also recover a concurrent
+# duplicate-key batch winner; the sequential model above cannot exercise that.
+line_delete_start = engine.index('if(purchaseLineMatch && method==="DELETE"){')
+line_delete_end = engine.index('if(subpath==="confirm" && method==="POST"){', line_delete_start)
+line_delete_handler = engine[line_delete_start:line_delete_end]
+assert "try{await db.batch(statements);}catch(cause)" in line_delete_handler
+assert "SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys" in line_delete_handler
+assert "winner.request_hash!==requestHash" in line_delete_handler
+assert "return new Response(winner.response_json,{status:winner.response_status,headers})" in line_delete_handler
 
 # Self-referential duplicate bill links are rejected by the API. SQLite's FK
 # alone permits a row to reference itself, so verify the handler guard explicitly.
