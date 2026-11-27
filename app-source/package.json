@@ -18,7 +18,8 @@
     "test:public-profile": "node --test src/lib/public-profile.test.js",
     "test:html-escape": "node --test src/lib/html-escape.test.js",
     "test:native-auth-security": "node --test src/lib/native-auth-security-config.test.js",
-    "test:price-comparison": "node --test src/lib/price-comparison.test.js"
+    "test:price-comparison": "node --test src/lib/price-comparison.test.js",
+    "preview:cloudflare": "wrangler preview --config dist/server/wrangler.json"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
