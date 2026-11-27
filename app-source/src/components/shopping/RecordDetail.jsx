@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ddmmyyyy, formatQty, inr } from "@/lib/format";
+import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
 
 export function RecordDetail({ record, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
@@ -132,6 +133,13 @@ export function RecordDetail({ record, onDeleted }) {
         </section>
       ) : null}
 
+      {record.source !== "session" && items.length ? (
+        <PriceComparisonPanel
+          items={items.map((item, index) => ({ id: item.id || "history-item-" + index, product_name: item.name, planned_quantity: item.qty, unit: item.unit || "pcs", brand: item.brand || "", pack_size: item.pack_size || "" }))}
+          estimatePrices={Object.fromEntries(items.map((item, index) => [item.id || "history-item-" + index, Number(item.price || 0) / 100]).filter(([, price]) => price > 0))}
+          baselineLabel="Paid price"
+        />
+      ) : null}
       {record.notes ? (
         <div className="rounded-[20px] border border-border bg-white px-5 py-4">
           <p className="micro text-muted-foreground">Notes</p>
