@@ -17,4 +17,8 @@ assert.match(route, /request_hash!==requestHash/, "reusing a key with a differen
 assert.match(ui, /estimateRequestKeyRef = useRef\(null\)/, "client keeps an estimate retry key ref");
 assert.match(ui, /headers: \{ "Idempotency-Key": estimateRequestKeyRef\.current\.key \}/, "estimate requests send their retry key");
 assert.match(ui, /estimateRequestKeyRef\.current\.payload !== estimatePayloadText/, "changed payloads receive a fresh key");
+assert.match(route, /try\{await db\.batch\(statements\);\}catch\(cause\)/, "estimate retries recover concurrent unique-key races");
+assert.match(route, /const winner=await db\.prepare\("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys/, "estimate create recovers the committed race winner");
+assert.match(route, /winner\.request_hash!==requestHash/, "race recovery rejects conflicting payloads");
+assert.match(route, /return json\(safeJson\(winner\.response_json,\{\}\),Number\(winner\.response_status\)\|\|200\)/, "same-payload race replays the exact response");
 console.log("PASS: estimate creation retries are idempotent and conflicting payload reuse is rejected.");
