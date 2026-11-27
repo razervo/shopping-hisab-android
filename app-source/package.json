@@ -18,7 +18,7 @@
     "test:html-escape": "node --test src/lib/html-escape.test.js",
     "test:native-auth-security": "node --test src/lib/native-auth-security-config.test.js",
     "test:price-comparison": "node --test src/lib/price-comparison.test.js",
-    "preview:cloudflare": "npx wrangler versions upload --config dist/server/wrangler.json --name shopping-hisab-native"
+    "preview:cloudflare": "npx wrangler versions upload --config dist/server/wrangler.json"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
