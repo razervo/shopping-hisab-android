@@ -22,6 +22,12 @@ assert.doesNotMatch(nativeConfigText, /shopping-hisab-preview\.hasimabd13\.worke
 const viteConfig = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
 assert.match(viteConfig, /configPath:\s*"wrangler\.native\.jsonc"/, "Vite must build against the native config without a preview override");
 
+const androidBuildWorkflow = await readFile(new URL("../../.github/workflows/build-android.yml", import.meta.url), "utf8");
+assert.match(androidBuildWorkflow, /shopping-hisab-native\.hasimabd13\.workers\.dev\/manifest\.json/, "Android build defaults to the native Worker manifest");
+assert.doesNotMatch(androidBuildWorkflow, /preview Worker URL/i, "Android build guidance must not recommend a preview URL");
+assert.match(androidBuildWorkflow, /workflow_dispatch:/, "Android APK build must remain manual");
+assert.doesNotMatch(androidBuildWorkflow, /^\s*(push|pull_request):/m, "Android APK build must not run automatically");
+
 const deployWorkflow = await readFile(new URL("../../.github/workflows/deploy-shopping-hisab-native.yml", import.meta.url), "utf8");
 assert.match(deployWorkflow, /workflow_dispatch:/, "production deploy workflow must be manual-only");
 assert.doesNotMatch(deployWorkflow, /^\s*(push|pull_request):/m, "production deploy workflow must not run on push or pull requests");
