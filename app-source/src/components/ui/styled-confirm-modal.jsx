@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-export function StyledConfirmModal({ open, title, description, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false, onConfirm, onCancel }) {
+export function StyledConfirmModal({ open, title, description, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false, showCancel = true, onConfirm, onCancel }) {
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event) => { if (event.key === "Escape") onCancel?.(); };
