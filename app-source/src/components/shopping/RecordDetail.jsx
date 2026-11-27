@@ -116,14 +116,7 @@ export function RecordDetail({ record, onDeleted }) {
         <h2 className="text-[13px] font-extrabold">How this total is calculated</h2>
         <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted-foreground">
           <p>Each item row shows its recorded quantity and line amount. A unit price is shown underneath an item when available.</p>
-          {record.source !== "session" && !displayRecord.bill_file_uri && record.source !== "bill" ? (
-        <section className="rounded-[22px] border border-amber-200 bg-white p-4">
-          <div className="mb-3"><p className="text-[13px] font-extrabold">Unverified purchase</p><p className="mt-1 text-[11.5px] text-muted-foreground">Add the bill anytime to verify this quick log.</p></div>
-          <BillUploader compact purpose="priced_list" onExtracted={attachVerificationBill} />
-        </section>
-      ) : null}
-
-      {record.source === "session" ? (
+          {record.source === "session" ? (
             <p>The grand total is the final expense you confirmed for this trip. It is the authoritative paid total, even if item details or receipt rows are incomplete.</p>
           ) : (
             <p>The total is based on recorded item amounts, with the saved record total used as a fallback when item amounts are missing.</p>
@@ -182,6 +175,13 @@ export function RecordDetail({ record, onDeleted }) {
         >
           <FileImage className="h-4 w-4" /> View uploaded list / bill
         </button>
+      ) : null}
+
+      {record.source !== "session" && !displayRecord.bill_file_uri && record.source !== "bill" ? (
+        <section className="rounded-[22px] border border-amber-200 bg-white p-4">
+          <div className="mb-3"><p className="text-[13px] font-extrabold">Unverified purchase</p><p className="mt-1 text-[11.5px] text-muted-foreground">Add the bill anytime to verify this quick log.</p></div>
+          <BillUploader compact purpose="priced_list" onExtracted={attachVerificationBill} />
+        </section>
       ) : null}
 
       {record.source === "session" ? (
