@@ -51,7 +51,7 @@ function HomePage() {
           What are we shopping for today?
         </h1>
         <p className="mt-2 max-w-[34ch] text-[13px] leading-[1.65] text-muted-foreground">
-          Plan what you need, check the expected cost, and keep your actual shopping totals organised.
+          Make your list, plan a budget and keep track of what you spend—all in one place.
         </p>
       </section>
 
@@ -59,7 +59,7 @@ function HomePage() {
         <section className="mb-5">
           <div className="mb-2 px-1">
             <h2 className="text-[14px] font-extrabold">Pick up where you left off</h2>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished shopping trips are ready.</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Your unfinished trips are ready to continue.</p>
           </div>
           <div className="space-y-2">
             {activeTrips.map((trip) => (
@@ -67,7 +67,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex items-center gap-3 rounded-[20px] border border-primary/15 bg-accent/35 p-3.5 transition-colors hover:bg-accent/70"
+                className="flex min-h-[72px] items-center gap-3 rounded-[20px] border border-primary/15 bg-accent/35 p-3.5 transition-colors hover:bg-accent/70"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
@@ -77,12 +77,12 @@ function HomePage() {
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatTripDate(trip.shopping_date)}</span>
                     <span>·</span>
-                    <span>{Number(trip.item_count || 0)} items</span>
+                    <span>{Number(trip.item_count || 0)} {Number(trip.item_count || 0) === 1 ? "item" : "items"}</span>
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
                   <span className="block text-[12px] font-extrabold tabular-nums">{formatPaise(trip.actual_total_paise)}</span>
-                  <span className="mt-1 block text-[10px] font-bold text-primary">Continue →</span>
+                  <span className="mt-1 block text-[10px] font-bold text-primary">Continue <ArrowRight className="inline h-3 w-3" /></span>
                 </span>
               </Link>
             ))}
@@ -94,12 +94,10 @@ function HomePage() {
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
           <Sparkles className="h-5 w-5" />
         </div>
-        <p className="micro mt-5 text-white/65">LET'S GET READY</p>
-        <h2 className="mt-2 text-[21px] font-extrabold leading-tight">
-          Plan your next shopping trip
-        </h2>
+        <p className="micro mt-5 text-white/65">START WITH YOUR LIST</p>
+        <h2 className="mt-2 text-[21px] font-extrabold leading-tight">Plan your next shopping trip</h2>
         <p className="mt-2 max-w-[34ch] text-[12.5px] leading-relaxed text-white/75">
-          Add everything you need. Your assistant will help organise the list and estimate the cost before you go.
+          List what you need, estimate the cost, then record bills as you shop.
         </p>
         <Link
           to="/sessions"
@@ -113,33 +111,46 @@ function HomePage() {
 
       <section className="mt-5">
         <div className="mb-2 px-1">
-          <h2 className="text-[14px] font-extrabold">Your shopping tools</h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">Open past trips or quickly record a purchase.</p>
+          <h2 className="text-[14px] font-extrabold">Quick actions</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Jump straight into what you need.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
-            to="/history"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border/80 bg-card p-4 shadow-[0_8px_24px_-18px_hsl(var(--foreground)/0.24)] transition-all hover:border-primary/20 hover:bg-secondary/30 active:scale-[0.99]"
+            to="/sessions"
+            className="flex min-h-[120px] flex-col items-start justify-between rounded-[22px] border border-primary/15 bg-white p-4 shadow-[0_8px_24px_-18px_hsl(var(--foreground)/0.24)] transition-all hover:border-primary/25 hover:bg-secondary/30 active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              <History className="h-5 w-5" />
+              <ShoppingBag className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">My shopping</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">See your past trips and purchases</span>
+              <span className="block text-[13px] font-extrabold">Plan a list</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Create a trip and add items</span>
             </span>
           </Link>
           <Link
             to="/add/manual"
-            className="flex min-h-[112px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
+            className="flex min-h-[120px] flex-col items-start justify-between rounded-[22px] border border-border bg-white p-4 transition-colors hover:bg-secondary/40 active:scale-[0.99]"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              <ClipboardList className="h-5 w-5" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <ReceiptText className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-[13px] font-extrabold">Add a purchase</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record something you already bought</span>
+              <span className="block text-[13px] font-extrabold">Quick expense</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">Record a purchase you made</span>
             </span>
+          </Link>
+          <Link
+            to="/history"
+            className="col-span-2 flex min-h-[68px] items-center gap-3 rounded-[20px] border border-border bg-white px-4 py-3 transition-colors hover:bg-secondary/30 active:scale-[0.99]"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-primary">
+              <History className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-extrabold">My shopping history</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">Review previous trips and purchases</span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
           </Link>
         </div>
       </section>
@@ -152,11 +163,11 @@ function HomePage() {
             <ReceiptText className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-muted-foreground">Your shopping this month</p>
+            <p className="text-[12px] font-semibold text-muted-foreground">This month's snapshot</p>
             <p className="tnum mt-0.5 text-[20px] font-extrabold">{inr(overview.monthTotal)}</p>
           </div>
-          <Link to="/history" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
-            See all <ArrowRight className="h-3.5 w-3.5" />
+          <Link to="/reports" className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-primary">
+            Summary <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </section>
       ) : null}
