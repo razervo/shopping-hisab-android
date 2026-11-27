@@ -13,7 +13,7 @@ export function TodayHero({ todayTotal, yesterdayTotal, monthTotal, entriesToday
   const circumference = 2 * Math.PI * r;
 
   return (
-    <section className="animate-fade-up overflow-hidden rounded-[18px] bg-primary px-6 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
+    <section className="animate-fade-up overflow-hidden rounded-[30px] bg-primary px-6 py-6 text-primary-foreground shadow-[0_18px_40px_-28px_rgba(11,60,40,0.9)]">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="micro text-white/65">Today&rsquo;s shopping</p>
@@ -21,7 +21,7 @@ export function TodayHero({ todayTotal, yesterdayTotal, monthTotal, entriesToday
             {inr(Math.round(animated))}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF7ED] px-2 py-1 font-semibold text-[#EA580C]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 font-semibold">
               {up ? "▲" : "▼"} {inr(Math.abs(diff))}
             </span>
             <span className="text-white/65">

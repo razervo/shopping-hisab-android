@@ -107,7 +107,7 @@ function ReportsPage() {
             </div>
           </div>
 
-          <section className="mt-4 rounded-[20px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+          <section className="mt-4 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[13px] font-bold tracking-wide">Daily totals</h2>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
@@ -140,7 +140,7 @@ function ReportsPage() {
             )}
           </section>
 
-          <section className="mt-4 space-y-2.5">
+          <section className="mt-4 space-y-2.5 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
