@@ -8,6 +8,7 @@ import { reviewEstimateItems } from "@/lib/estimate-review";
 import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
 import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
+import { StyledConfirmModal } from "@/components/ui/styled-confirm-modal";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -39,6 +40,8 @@ function SessionDetailPage() {
   const { sessionId } = Route.useParams();
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
+  const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
+  const [pendingTotalDifference, setPendingTotalDifference] = useState(null);
   const [activeStep, setActiveStep] = useState(1);
   const [expandedMetadataRows, setExpandedMetadataRows] = useState({});
   const [loading, setLoading] = useState(true);
@@ -224,15 +227,12 @@ function SessionDetailPage() {
     }
   };
 
-  const deleteTrip = async () => {
-    const confirmed = window.confirm("Delete this shopping trip and ALL saved trip data (lists, items, estimates, bills and history)? This cannot be undone. Uploaded files are retained and not physically deleted.");
+  const deleteTrip = async () => { setDeleteTripDialogOpen(true); };
 
-    if (!confirmed) return;
+  const confirmDeleteTrip = async () => {
+    setDeleteTripDialogOpen(false);
     try {
-      await api(`/api/shopping/sessions/${sessionId}`, {
-        method: "DELETE",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-      });
+      await api(`/api/shopping/sessions/${sessionId}`, { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
       toast.success("Shopping trip deleted.");
       navigate({ to: "/sessions" });
     } catch (cause) {
@@ -240,7 +240,6 @@ function SessionDetailPage() {
       await loadSession();
     }
   };
-
   const updateRow = (index, key, value) => {
     setRows((current) => current.map((row, i) => i === index ? { ...row, [key]: value } : row));
   };
@@ -673,21 +672,19 @@ function SessionDetailPage() {
   const confirmSession = async (event) => {
     event.preventDefault();
     const rupees = Number(confirmationTotal);
-    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
-      return toast.error("Enter a valid final expense amount.");
-    }
-    if (Number(session?.bills_amount_pending || 0) > 0) {
-      return toast.error("Resolve every bill with a pending amount before completing this session.");
-    }
-    if (Math.round(rupees * 100) <= 0) {
-      return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
-    }
+    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) return toast.error("Enter a valid final expense amount.");
+    if (Number(session?.bills_amount_pending || 0) > 0) return toast.error("Resolve every bill with a pending amount before completing this session.");
+    if (Math.round(rupees * 100) <= 0) return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
-      const difference = rupees - calculatedRupees;
-      const direction = difference > 0 ? "higher" : "lower";
-      if (!window.confirm(`Your confirmed total is ₹${rupees.toFixed(2)}, but bills calculate to ₹${calculatedRupees.toFixed(2)} (₹${Math.abs(difference).toFixed(2)} ${direction}). Save this difference in the final confirmation?`)) return;
+      setPendingTotalDifference({ rupees, calculatedRupees, difference: rupees - calculatedRupees });
+      return;
     }
+    return finishSession(rupees);
+  };
+
+  const finishSession = async (rupees) => {
+    setPendingTotalDifference(null);
     if (confirmationLockRef.current) return;
     confirmationLockRef.current = true;
     setConfirmationSaving(true);
@@ -710,7 +707,6 @@ function SessionDetailPage() {
       setConfirmationSaving(false);
     }
   };
-
   const moveListItem = (categoryItems, item, direction) => {
     const currentIds = categoryItems.map((entry) => entry.id);
     const currentIndex = currentIds.indexOf(item.id);
@@ -1859,6 +1855,8 @@ function SessionDetailPage() {
         </div>
       </section>
 ) : null}
+      <StyledConfirmModal open={deleteTripDialogOpen} title="Delete this shopping trip?" description="This will delete the trip and all saved trip data (lists, items, estimates, bills and history). Uploaded files are retained and not physically deleted. This cannot be undone." confirmLabel="Delete trip" destructive onCancel={() => setDeleteTripDialogOpen(false)} onConfirm={confirmDeleteTrip} />
+      <StyledConfirmModal open={Boolean(pendingTotalDifference)} title="Confirm final expense difference" description={pendingTotalDifference ? `Your confirmed total is ₹${pendingTotalDifference.rupees.toFixed(2)}, but bills calculate to ₹${pendingTotalDifference.calculatedRupees.toFixed(2)} (₹${Math.abs(pendingTotalDifference.difference).toFixed(2)} ${pendingTotalDifference.difference > 0 ? "higher" : "lower"}). Save this difference in the final confirmation?` : ""} confirmLabel="Confirm total" onCancel={() => setPendingTotalDifference(null)} onConfirm={() => finishSession(pendingTotalDifference?.rupees)} />
       {!completed ? (
         <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
           <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
