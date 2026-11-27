@@ -131,6 +131,7 @@ function HistoryPage() {
                     {ddmmyyyy(r.date)} · {r.item_count ?? r.items?.length ?? 0}{" "}
                     {(r.item_count ?? r.items?.length ?? 0) === 1 ? "item" : "items"}
                   </p>
+                  <span className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold " + (r.source === "bill" || r.reconciliation_status === "complete" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{r.source === "bill" || r.reconciliation_status === "complete" ? "Verified" : "Unverified"}</span>
                 </div>
                 <span className="tnum text-[15px] font-bold">{inr(r.total)}</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
