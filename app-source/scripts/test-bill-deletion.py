@@ -147,7 +147,7 @@ line_delete_handler = engine[line_delete_start:line_delete_end]
 assert "try{await db.batch(statements);}catch(cause)" in line_delete_handler
 assert "SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys" in line_delete_handler
 assert "winner.request_hash===requestHash" in line_delete_handler
-assert "return new Response(winner.response_json,{status:winner.response_status,headers})" in line_delete_handler
+assert "winner.request_hash===requestHash?new Response(winner.response_json,{status:winner.response_status,headers})" in line_delete_handler
 
 # Self-referential duplicate bill links are rejected by the API. SQLite's FK
 # alone permits a row to reference itself, so verify the handler guard explicitly.
