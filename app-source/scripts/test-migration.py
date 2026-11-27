@@ -28,6 +28,10 @@ assert "Sign in with the same email before importing." in import_handler
 assert "ON CONFLICT(user_id, legacy_base44_id) DO UPDATE SET" in import_handler
 assert "await env.DB.batch(statements.slice(i, i + 50))" in import_handler
 assert "Existing Base44 data has not been changed." in import_handler
+assert "name = COALESCE(NULLIF(?, \\'\\'), name)" in import_handler
+assert "displayName = COALESCE(NULLIF(?, \\'\\'), displayName)" in import_handler
+assert "phone = COALESCE(NULLIF(?, \\'\\'), phone)" in import_handler
+assert "preferredMarket = COALESCE(NULLIF(?, \\'\\'), preferredMarket)" in import_handler
 
 file_handler = source[end:source.index("export async function handleNativeApi(", end)]
 assert "SELECT id FROM uploaded_files WHERE user_id = ? AND legacy_file_uri = ?" in file_handler
