@@ -1026,7 +1026,7 @@ async function handleMigrationImport(request, env, user) {
     const legacyPhotoUri = String(profile.profile_picture_uri || "").trim().slice(0, 1200);
     const photoId = parseFileId(legacyPhotoUri) || await resolveLegacyFileId(env.DB, user.id, legacyPhotoUri);
     await env.DB.prepare(
-      'UPDATE "user" SET name = ?, displayName = ?, phone = ?, preferredMarket = ?, profilePictureId = COALESCE(?, profilePictureId), updatedAt = ? WHERE id = ?',
+      'UPDATE "user" SET name = COALESCE(NULLIF(?, \'\'), name), displayName = COALESCE(NULLIF(?, \'\'), displayName), phone = COALESCE(NULLIF(?, \'\'), phone), preferredMarket = COALESCE(NULLIF(?, \'\'), preferredMarket), profilePictureId = COALESCE(?, profilePictureId), updatedAt = ? WHERE id = ?',
     ).bind(displayName || user.name, displayName, phone, preferredMarket, photoId, new Date().toISOString(), user.id).run();
   }
 
