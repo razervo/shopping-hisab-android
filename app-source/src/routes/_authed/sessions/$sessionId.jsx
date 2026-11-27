@@ -1128,8 +1128,22 @@ function SessionDetailPage() {
         ))}
       </nav>
 
+      {activeStep === 1 && !completed ? (
+        <section className="mb-3 grid grid-cols-3 gap-2" aria-label="Choose how to add items">
+          <button type="button" onClick={() => document.getElementById("trip-scan-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+            <span className="block text-[12px] font-extrabold">Scan</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Photo / PDF list</span>
+          </button>
+          <button type="button" onClick={() => document.getElementById("trip-type-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+            <span className="block text-[12px] font-extrabold">Type</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Enter items</span>
+          </button>
+          <button type="button" onClick={startVoiceEntry} disabled={voiceListening} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm disabled:opacity-60">
+            <span className="block text-[12px] font-extrabold">Voice</span><span className="mt-1 block text-[10.5px] text-muted-foreground">{voiceListening ? "Listening…" : "Speak items"}</span>
+          </button>
+        </section>
+      ) : null}
+
       {!completed ? (
-        <section hidden={activeStep !== 1} className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
+        <section hidden={activeStep !== 1} id="trip-scan-input" className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
             <p className="text-[15px] font-extrabold">Scan handwritten list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Take a photo or choose a gallery image or PDF. Review detected items and quantities before adding.</p>
@@ -1160,7 +1174,7 @@ function SessionDetailPage() {
 
 
 {activeStep === 1 ? (
-<section id="trip-step-1" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+<section id="trip-type-input" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
