@@ -75,17 +75,17 @@ function ReportsPage() {
             <p className="micro text-white/65">{monthLabel}</p>
             <p className="tnum mt-2 text-[36px] font-extrabold leading-none">{inr(month.total)}</p>
             <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-white/15 pt-3 text-[12px]">
-              <div>
-                <span className="block text-white/60">Purchases</span>
-                <span className="tnum mt-0.5 block text-[15px] font-bold">{month.entries}</span>
+              <div className="rounded-xl bg-white/10 px-2.5 py-2">
+                <span className="block text-white/65">Purchases</span>
+                <span className="tnum mt-1 block text-[15px] font-bold">{month.entries}</span>
               </div>
-              <div>
-                <span className="block text-white/60">Daily average</span>
-                <span className="tnum mt-0.5 block text-[15px] font-bold">{inr(Math.round(month.avgPerDay))}</span>
+              <div className="rounded-xl bg-white/10 px-2.5 py-2">
+                <span className="block text-white/65">Daily average</span>
+                <span className="tnum mt-1 block text-[15px] font-bold">{inr(Math.round(month.avgPerDay))}</span>
               </div>
-              <div>
-                <span className="block text-white/60">Highest day</span>
-                <span className="tnum mt-0.5 block text-[15px] font-bold">
+              <div className="rounded-xl bg-white/10 px-2.5 py-2">
+                <span className="block text-white/65">Highest day</span>
+                <span className="tnum mt-1 block text-[15px] font-bold">
                   {month.highestDay ? inr(month.highestDay.total) : inr(0)}
                 </span>
               </div>
