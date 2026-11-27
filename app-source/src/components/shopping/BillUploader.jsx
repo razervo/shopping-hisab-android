@@ -184,7 +184,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Take a photo"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[13px] font-bold text-primary-foreground">
+      <span className="pointer-events-none flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-[13px] font-bold text-primary-foreground shadow-sm">
         <Camera className="h-4 w-4" /> Take photo
       </span>
     </label>
@@ -200,7 +200,7 @@ export function BillUploader({
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Choose photo or PDF"
       />
-      <span className="pointer-events-none flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[13px] font-bold text-foreground">
+      <span className="pointer-events-none flex min-h-11 items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-3 text-[13px] font-bold text-foreground transition-colors">
         <ImageUp className="h-4 w-4" /> Gallery / PDF
       </span>
     </label>
@@ -208,7 +208,7 @@ export function BillUploader({
 
   if (compact) {
     return (
-      <div className="space-y-3 rounded-[22px] border border-border bg-white p-3.5">
+      <div className="space-y-3 rounded-[22px] border border-emerald-100 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div>
@@ -248,7 +248,7 @@ export function BillUploader({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[24px] border border-border bg-secondary/40 px-5 py-6 text-center">
+      <div className="rounded-[24px] border border-emerald-100 bg-white px-5 py-6 text-center shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
           {busy ? <Loader2 className="h-7 w-7 animate-spin" /> : <FileText className="h-7 w-7" />}
         </div>
