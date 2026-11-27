@@ -5,7 +5,7 @@
   "compatibility_date": "2026-11-18",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "preview_urls": true,
+  "preview_urls": false,
   "previews": {},
   "observability": { "enabled": true },
   "vars": {
