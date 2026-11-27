@@ -29,9 +29,11 @@ assert.match(androidBuildWorkflow, /workflow_dispatch:/, "Android APK build must
 assert.doesNotMatch(androidBuildWorkflow, /^\s*(push|pull_request):/m, "Android APK build must not run automatically");
 
 const deployWorkflow = await readFile(new URL("../../.github/workflows/deploy-shopping-hisab-native.yml", import.meta.url), "utf8");
-assert.match(deployWorkflow, /workflow_dispatch:/, "production deploy workflow must be manual-only");
-assert.doesNotMatch(deployWorkflow, /^\s*(push|pull_request):/m, "production deploy workflow must not run on push or pull requests");
+assert.match(deployWorkflow, /push:\s*\n\s*branches:\s*\n\s*- main/, "production deploy workflow must deploy automatically on pushes to main");
+assert.doesNotMatch(deployWorkflow, /workflow_dispatch:/, "production deploy workflow must not require manual triggering");
+assert.doesNotMatch(deployWorkflow, /^\s*pull_request:/m, "production deploy workflow must not deploy from pull requests");
+assert.match(deployWorkflow, /paths:\s*\n\s*- "app-source\/\*\*"\s*\n\s*- "\.github\/workflows\/deploy-shopping-hisab-native\.yml"/, "production deploy must be scoped to app-source and its workflow changes");
 assert.match(deployWorkflow, /if:\s*github\.ref\s*==\s*'refs\/heads\/main'/, "production deploy job must be main-only");
 assert.match(deployWorkflow, /npx wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler\.native\.jsonc/, "production D1 migration must target only native D1");
-assert.match(deployWorkflow, /npx wrangler deploy/, "production deploy step must exist behind the main-only manual job guard");
+assert.match(deployWorkflow, /npx wrangler deploy/, "production deploy step must exist behind the main-only push guard");
 console.log("PASS: preview workflows/config/URLs are absent; native build and manual main-only production deployment are guarded.");
