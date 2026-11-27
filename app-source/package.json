@@ -8,7 +8,6 @@
     "build": "vite build",
     "lint": "eslint . --quiet",
     "test:shopping-categories": "node --test src/lib/shopping-categories.test.js",
-    "lint:fix": "eslint . --fix",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:native": "wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc",
@@ -19,7 +18,7 @@
     "test:html-escape": "node --test src/lib/html-escape.test.js",
     "test:native-auth-security": "node --test src/lib/native-auth-security-config.test.js",
     "test:price-comparison": "node --test src/lib/price-comparison.test.js",
-    "preview:cloudflare": "npx wrangler versions upload --config dist/server/wrangler.json"
+    "preview:cloudflare": "npx wrangler versions upload --config dist/server/wrangler.json --name shopping-hisab-native"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -105,7 +104,7 @@
   },
   "overrides": {
     "undici": "7.30.1",
-    "@tanstack/start-plugin-core": "1.171.56",
+    "@tanstack/Start-plugin-core": "1.171.56",
     "@tanstack/query-core": "5.107.1"
   }
 }
