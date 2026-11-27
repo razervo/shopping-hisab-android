@@ -1105,15 +1105,9 @@ function SessionDetailPage() {
         <section hidden={activeStep !== 1} className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
             <p className="text-[15px] font-extrabold">Scan handwritten list</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Scan and review your list, then correct detected items and quantities before adding them.</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Take a photo or choose a gallery image or PDF. Review detected items and quantities before adding.</p>
           </div>
-          <section className="mt-2 space-y-3 rounded-[20px] border border-border bg-white p-3">
-                    <div>
-                      <p className="text-[15px] font-extrabold">Scan handwritten list</p>
-                      <p className="mt-1 text-[12px] text-muted-foreground">Use the existing scanner, then review and correct every detected item and quantity before adding it.</p>
-                    </div>
-                    <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
-                  </section>
+          <BillUploader purpose="shopping_list" compact onExtracted={handleScannedList} />
                   {scannedDraft ? (
                     <form onSubmit={saveScannedList} className="mt-3 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
                       <div>
