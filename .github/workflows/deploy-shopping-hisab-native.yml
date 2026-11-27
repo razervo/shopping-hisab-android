@@ -1,14 +1,10 @@
 name: Deploy Shopping Hisab native Worker
 
 on:
-  # Deploy automatically only when changes reach the designated deployment branch.
-  push:
-    branches:
-      - cloudflare-native-migration
-  # Keep manual deployment available as a fallback.
+  # Manual production deployment remains gated pending explicit user approval.
   workflow_dispatch:
 
-# Pushes to cloudflare-native-migration deploy the native production Worker for physical-device validation.
+# Production deploy is intentionally manual until explicitly approved.
 
 permissions:
   contents: read
