@@ -15,7 +15,7 @@ export function StyledConfirmModal({ open, title, description, confirmLabel = "C
         <h2 id="styled-confirm-title" className="text-[16px] font-extrabold">{title}</h2>
         <p id="styled-confirm-description" className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
         <div className="mt-5 flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 rounded-full border border-[#450A0A] px-4 py-3 text-[13px] font-bold"> {cancelLabel} </button>
+          {showCancel ? <button type="button" onClick={onCancel} className="flex-1 rounded-full border border-[#450A0A] px-4 py-3 text-[13px] font-bold"> {cancelLabel} </button> : null}
           <button type="button" onClick={onConfirm} className={`flex-1 rounded-full px-4 py-3 text-[13px] font-bold text-white ${destructive ? "bg-red-700" : "bg-[#0F766E]"}`}>{confirmLabel}</button>
         </div>
       </section>
