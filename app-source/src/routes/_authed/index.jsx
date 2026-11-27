@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, CalendarDays, History, PlayCircle, ReceiptText, ShoppingBag } from "lucide-react";
+import { ArrowRight, CalendarDays, PlayCircle, ReceiptText, ShoppingBag } from "lucide-react";
 import { RecentRecords } from "@/components/dashboard/RecentRecords";
 import { useOverview } from "@/components/dashboard/useOverview";
 import { inr, inrPaise } from "@/lib/format";
@@ -61,7 +61,7 @@ function HomePage() {
                 key={trip.id}
                 to="/sessions/$sessionId"
                 params={{ sessionId: trip.id }}
-                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#450A0A] bg-[#FFF7ED] p-3.5 transition-colors hover:bg-[#F6F8F7]"
+                className="flex min-h-[76px] items-center gap-3 rounded-[18px] border-[1.5px] border-[#450A0A] bg-white p-3.5 transition-colors hover:bg-[#F6F8F7]"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
                   <PlayCircle className="h-5 w-5" />
