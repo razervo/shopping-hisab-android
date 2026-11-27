@@ -1104,7 +1104,7 @@ function SessionDetailPage() {
       </nav>
 
       {!completed ? (
-        <section className="mb-4 space-y-3 rounded-[24px] border border-primary/20 bg-white p-4">
+        <section className="mb-4 space-y-3 rounded-[24px] border border-emerald-100 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
           <div>
             <p className="text-[15px] font-extrabold">Quick scan · handwritten list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Scan and review a handwritten list here without opening the preparation step.</p>
