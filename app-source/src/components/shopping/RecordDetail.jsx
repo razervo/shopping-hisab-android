@@ -38,7 +38,23 @@ export function RecordDetail({ record, onDeleted }) {
     }
   };
 
-  const attachVerificationBill = async (_extracted, fileUri) => {\n    if (!fileUri || verifyingBill) return;\n    setVerifyingBill(true);\n    try {\n      const updated = await base44.entities.ShoppingRecord.update(record.id, {\n        shop_name: record.shop_name || "", date: record.date, items, total, item_count: items.length,\n        notes: record.notes || "", source: "bill", bill_file_uri: fileUri,\n        receipts: record.receipts || [], reconciliation_status: record.reconciliation_status || "not_required",\n      });\n      setVerifiedRecord(updated);\n      toast.success("Bill uploaded — purchase verified");\n    } catch (error) {\n      toast.error("Bill uploaded, but verification could not be saved", { description: error?.message || "Please try again." });\n    } finally { setVerifyingBill(false); }\n  };\n\n  const remove = async () => {
+  const attachVerificationBill = async (_extracted, fileUri) => {
+    if (!fileUri || verifyingBill) return;
+    setVerifyingBill(true);
+    try {
+      const updated = await base44.entities.ShoppingRecord.update(record.id, {
+        shop_name: record.shop_name || "", date: record.date, items, total, item_count: items.length,
+        notes: record.notes || "", source: "bill", bill_file_uri: fileUri,
+        receipts: record.receipts || [], reconciliation_status: record.reconciliation_status || "not_required",
+      });
+      setVerifiedRecord(updated);
+      toast.success("Bill uploaded — purchase verified");
+    } catch (error) {
+      toast.error("Bill uploaded, but verification could not be saved", { description: error?.message || "Please try again." });
+    } finally { setVerifyingBill(false); }
+  };
+
+  const remove = async () => {
     setDeleting(true);
     try {
       await base44.entities.ShoppingRecord.delete(record.id);
@@ -100,7 +116,14 @@ export function RecordDetail({ record, onDeleted }) {
         <h2 className="text-[13px] font-extrabold">How this total is calculated</h2>
         <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted-foreground">
           <p>Each item row shows its recorded quantity and line amount. A unit price is shown underneath an item when available.</p>
-          {record.source === "session" ? (
+          {record.source !== "session" && !displayRecord.bill_file_uri && record.source !== "bill" ? (
+        <section className="rounded-[22px] border border-amber-200 bg-white p-4">
+          <div className="mb-3"><p className="text-[13px] font-extrabold">Unverified purchase</p><p className="mt-1 text-[11.5px] text-muted-foreground">Add the bill anytime to verify this quick log.</p></div>
+          <BillUploader compact purpose="priced_list" onExtracted={attachVerificationBill} />
+        </section>
+      ) : null}
+
+      {record.source === "session" ? (
             <p>The grand total is the final expense you confirmed for this trip. It is the authoritative paid total, even if item details or receipt rows are incomplete.</p>
           ) : (
             <p>The total is based on recorded item amounts, with the saved record total used as a fallback when item amounts are missing.</p>
