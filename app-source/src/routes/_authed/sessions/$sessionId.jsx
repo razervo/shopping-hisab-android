@@ -391,6 +391,22 @@ function SessionDetailPage() {
     }
   };
 
+  const startVoiceBillEntry = () => {
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionApi) return toast.error("Voice input is unavailable here. Use Type or Scan.");
+    const recognition = new SpeechRecognitionApi();
+    recognition.lang = "en-IN"; recognition.continuous = false; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim(); if (!transcript) return;
+      const match = transcript.match(/(?:rupees?|rs\\.?|₹)\\s*(\\d+(?:\\.\\d{1,2})?)|\\b(\\d+(?:\\.\\d{1,2})?)\\s*(?:rupees?|rs\\.?|₹)\\b/i;
+      const amount = match ? (match[1] || match[2]) : "";
+      const shop = amount ? transcript.replace(match[0], "").trim() : transcript;
+      setBillForm((current) => ({ ...current, shop_name: shop || current.shop_name, bill_total: amount || current.bill_total }));
+      toast.success(amount ? "Voice captured. Check shop and amount, then save as Unverified." : "Shop name captured. Enter the amount, then save as Unverified.");
+    };
+    recognition.onerror = () => toast.error("Voice capture failed. Try again or type instead.");
+    try { recognition.start(); } catch { toast.error("Could not start voice capture."); }
+  };
   const saveBill = async (event) => {
     event.preventDefault();
     const rupees = Number(billForm.bill_total);
@@ -1543,6 +1559,7 @@ function SessionDetailPage() {
             <p className="text-[15px] font-extrabold">Add a shop purchase</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Record each shop purchase. Typed or voice-only bills are marked Unverified until you attach a receipt; scanned bills stay in review until checked.</p>
           </div>
+          <button type="button" onClick={startVoiceBillEntry} className="min-h-10 w-full rounded-full border border-primary/30 bg-primary/5 py-2 text-[12px] font-bold text-primary">Voice bill entry (Unverified)</button>
           <input value={billForm.shop_name} onChange={(event) => setBillForm((v) => ({ ...v, shop_name: event.target.value }))}
             placeholder="Shop name" maxLength={160} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
           <div className="grid grid-cols-2 gap-2">
