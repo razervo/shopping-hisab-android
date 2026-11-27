@@ -1088,10 +1088,10 @@ function SessionDetailPage() {
 
       <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-[#3B0A0A] bg-white p-2 shadow-sm">
         {[
-          { id: 1, label: "Your list", done: items.length > 0 },
-          { id: 2, label: "Estimate", done: Boolean(latestEstimate) },
-          { id: 3, label: "Shop & bills", done: (session.bills || []).length > 0 },
-          { id: 4, label: "Finish", done: completed },
+          { id: 1, label: "Input & Lists", done: items.length > 0 },
+          { id: 2, label: "List", done: items.length > 0 },
+          { id: 3, label: "Estimate", done: Boolean(latestEstimate) },
+          { id: 4, label: "Shop & Finish", done: completed },
         ].map((step) => (
           <button key={step.id} type="button" onClick={() => setActiveStep(step.id)} aria-current={activeStep === step.id ? "step" : undefined}
             className={`flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${activeStep === step.id ? "bg-[#EA580C] text-white shadow-sm" : step.done ? "bg-[#0F766E]/10 text-[#0F766E]" : "bg-secondary/40 text-muted-foreground"}`}>
@@ -1132,7 +1132,8 @@ function SessionDetailPage() {
       ) : null}
 
 
-<section id="trip-step-1" hidden={activeStep !== 1} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+{activeStep === 1 ? (
+<section id="trip-step-1" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
@@ -1341,10 +1342,12 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
 
       {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
 
-      <section id="trip-step-2" hidden={activeStep !== 2} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+      {activeStep === 2 ? (
+<section id="trip-step-2" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Get an idea of the total before you shop{latestEstimate ? " · Estimate saved" : ""}</span>
@@ -1453,8 +1456,10 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
 
-      <section id="trip-step-3" hidden={activeStep !== 3} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+      {activeStep === 3 ? (
+<section id="trip-step-3" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">
@@ -1689,8 +1694,10 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
 
-      <section id="trip-step-4" hidden={activeStep !== 4} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+      {activeStep === 4 ? (
+<section id="trip-step-4" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">4. Finish your trip</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Review your totals and save the final shopping summary</span>
@@ -1758,6 +1765,7 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
       {!completed ? (
         <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
           <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
