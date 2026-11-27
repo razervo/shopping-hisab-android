@@ -1099,10 +1099,10 @@ function SessionDetailPage() {
             {step.label}
           </button>
         ))}
-      </nav>>
+      </nav>
 
       {!completed ? (
-        <section className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
+        <section hidden={activeStep !== 1} className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
             <p className="text-[15px] font-extrabold">Scan handwritten list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Scan and review your list, then correct detected items and quantities before adding them.</p>
@@ -1348,10 +1348,10 @@ function SessionDetailPage() {
       {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
 
       <section id="trip-step-2" hidden={activeStep !== 2} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
-        <summary className="cursor-pointer px-4 py-4">
+        <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Get an idea of the total before you shop{latestEstimate ? " · Estimate saved" : ""}</span>
-        </summary>
+        </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form onSubmit={saveEstimate} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
@@ -1455,15 +1455,15 @@ function SessionDetailPage() {
         </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your saved lists will appear here.</p>}
       </section>
         </div>
-      </details>
+      </section>
 
       <section id="trip-step-3" hidden={activeStep !== 3} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
-        <summary className="cursor-pointer px-4 py-4">
+        <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">
             {fullyPurchasedItemCount} of {items.length} items bought · {(session.bills || []).length} shop bills
           </span>
-        </summary>
+        </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
@@ -1691,13 +1691,13 @@ function SessionDetailPage() {
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">No bills added yet. Add a shop purchase or scan a receipt to record what you paid.</p>}
       </section>
         </div>
-      </details>
+      </section>
 
-      <section id="trip-step-4" hidden={activeStep !== 4} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white>
-        <summary className="cursor-pointer px-4 py-4">
+      <section id="trip-step-4" hidden={activeStep !== 4} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+        <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">4. Finish your trip</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Review your totals and save the final shopping summary</span>
-        </summary>
+        </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
         <form id="trip-finish" onSubmit={confirmSession} className="mt-6 space-y-3 rounded-[24px] border border-primary/25 bg-white p-4">
@@ -1760,7 +1760,7 @@ function SessionDetailPage() {
         ) : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Create an estimate above. Each saved version is retained; newer estimates do not overwrite older ones.</p>}
       </section>
         </div>
-      </details>
+      </section>
       {!completed ? (
         <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
           <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
