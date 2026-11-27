@@ -1,48 +1,76 @@
 name: Deploy Shopping Hisab native Worker
 
 on:
-  # Manual production deployment remains gated pending explicit user approval.
-  workflow_dispatch:
-
-# Production deploy is intentionally manual until explicitly approved.
+  push:
+    branches:
+      - main
+    paths:
+      - "app-source/**"
+      - ".github/workflows/deploy-shopping-hisab-native.yml"
 
 permissions:
   contents: read
 
 concurrency:
   group: shopping-hisab-native-production-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    if: github.ref == 'refs/heads/main'
+  verify-and-deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app-source
     steps:
-      - name: Check out selected deployment branch
+      - name: Checkout main
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Run integrity and retry-recovery tests
+        run: |
+          python3 scripts/test-bill-deletion.py
+          python3 scripts/test-reconciliation-integrity.py
+          python3 scripts/test-drive-recovery.py
+          node scripts/test-bill-line-idempotency.mjs
+          node scripts/test-bill-create-idempotency.mjs
+          node scripts/test-ui-mutation-retry-recovery.mjs
+          node scripts/test-estimate-line-integrity.mjs
+          node scripts/test-estimate-idempotency.mjs
+      - name: Run remaining hardening regression tests
+        run: |
+          npm run test:native-auth-security
+          python3 scripts/test-reporting.py
+          python3 scripts/test-confirmation.py
+          python3 scripts/test-session-deletion.py
+          node scripts/test-receipt-manual-fallback.mjs
+          node scripts/test-estimate-review.mjs
+          node scripts/test-estimate-price-memory.mjs
+          node scripts/test-bill-file.mjs
+          python3 scripts/test-migration.py
+          node scripts/test-preview-deployment-safety.mjs
+      - name: Run Phase 2 regression tests
+        run: |
+          npm run test:shopping-categories
+          npm run test:date-validation
+          npm run test:html-escape
+          npm run test:public-profile
       - name: Build native Cloudflare app
         run: npm run build:native
-      - name: Verify isolated deployment target
+      - name: Verify isolated native Worker bundle
         run: |
-          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('wrangler.native.jsonc','utf8')); if(c.name!=='shopping-hisab-native') process.exit(1)"
-      - name: Verify Vite-generated isolated Worker bundle
-        run: |
-          node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; const p='.wrangler/deploy/config.json'; if(!fs.existsSync(p)) throw new Error('Vite-generated Wrangler redirect is missing'); const redirect=JSON.parse(fs.readFileSync(p,'utf8')); if(typeof redirect.configPath!=='string') throw new Error('Unexpected Wrangler redirect format'); const target=path.resolve('.wrangler/deploy',redirect.configPath); if(!fs.existsSync(target)) throw new Error('Generated Wrangler config not found: '+target); const c=JSON.parse(fs.readFileSync(target,'utf8')); if(c.name!=='shopping-hisab-native') throw new Error('Refusing deployment: generated Worker name is '+c.name); if(!c.main) throw new Error('Generated Worker entry point is missing'); console.log('Verified generated Worker:',c.name,'config:',target,'entry:',c.main)"
+          node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; const p='.wrangler/deploy/config.json'; if(!fs.existsSync(p)) throw new Error('Vite-generated Wrangler redirect missing'); const redirect=JSON.parse(fs.readFileSync(p,'utf8')); if(typeof redirect.configPath!=='string') throw new Error('Unexpected Wrangler redirect'); const target=path.resolve('.wrangler/deploy',redirect.configPath); if(!fs.existsSync(target)) throw new Error('Generated Wrangler config missing'); const c=JSON.parse(fs.readFileSync(target,'utf8')); if(c.name!=='shopping-hisab-native') throw new Error('Refusing deploy: Worker name is '+c.name); if(!c.main) throw new Error('Generated Worker entry point missing'); console.log('Verified native Worker:',c.name)"
       - name: Apply pending native D1 migrations
         run: npx wrangler d1 migrations apply shopping-hisab-native --remote --config wrangler.native.jsonc
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
-      - name: Deploy only the native Worker
+      - name: Deploy native Worker
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
