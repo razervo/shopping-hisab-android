@@ -1137,8 +1137,8 @@ function SessionDetailPage() {
       <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-[#3B0A0A] bg-white p-2 shadow-sm">
         {[
           { id: 1, label: "Input & Lists", done: items.length > 0 },
-          { id: 2, label: "List", done: items.length > 0 },
-          { id: 3, label: "Estimate", done: Boolean(latestEstimate) },
+          { id: 2, label: "Review List", done: items.length > 0 },
+          { id: 3, label: "AI Estimate", done: Boolean(latestEstimate) },
           { id: 4, label: "Shop & Finish", done: completed },
         ].map((step) => (
           <button key={step.id} type="button" onClick={() => setActiveStep(step.id)} aria-current={activeStep === step.id ? "step" : undefined}
@@ -1254,7 +1254,34 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
-      <section id="trip-list" className="mt-6">
+      
+        </div>
+      </section>
+) : null}
+
+      {estimateDetailsOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="estimate-details-title" className="w-full max-w-md rounded-[22px] border border-[#3B0A0A] bg-white p-4 shadow-xl">
+            <h2 id="estimate-details-title" className="text-[15px] font-extrabold">Complete item details</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">Every item needs a quantity greater than zero and a unit before you can save an estimate.</p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {estimateDetailItems.map((item) => (
+                <div key={item.id} className="rounded-xl bg-secondary/50 px-3 py-2 text-[12px]">
+                  <span className="font-bold">{item.product_name}</span>
+                  <span className="mt-1 block text-muted-foreground">Quantity: {item.planned_quantity ?? "Missing"} {item.unit || "(unit missing)"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setEstimateDetailsOpen(false)} className="flex-1 rounded-full border border-border py-2.5 text-[12px] font-bold">Close</button>
+              <button type="button" onClick={() => { setEstimateDetailsOpen(false); setActiveStep(1); }} className="flex-1 rounded-full bg-primary py-2.5 text-[12px] font-bold text-primary-foreground">Edit list</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+
+      {activeStep === 2 ? (<section id="trip-list" className="mt-6">
         <div className="mb-3 flex items-center justify-between px-1">
           <div><h2 className="text-[15px] font-extrabold">Your shopping list</h2><p className="text-[11.5px] text-muted-foreground">{items.length} items in this trip</p></div>
           <button type="button" onClick={loadSession} aria-label="Refresh session" className="rounded-full border border-border p-2"><RefreshCw className="h-4 w-4" /></button>
@@ -1401,34 +1428,9 @@ function SessionDetailPage() {
             <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
           </div>
         )}
-      </section>
-        </div>
-      </section>
-) : null}
+      </section>) : null}
 
-      {estimateDetailsOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <section role="dialog" aria-modal="true" aria-labelledby="estimate-details-title" className="w-full max-w-md rounded-[22px] border border-[#3B0A0A] bg-white p-4 shadow-xl">
-            <h2 id="estimate-details-title" className="text-[15px] font-extrabold">Complete item details</h2>
-            <p className="mt-1 text-[12px] text-muted-foreground">Every item needs a quantity greater than zero and a unit before you can save an estimate.</p>
-            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-              {estimateDetailItems.map((item) => (
-                <div key={item.id} className="rounded-xl bg-secondary/50 px-3 py-2 text-[12px]">
-                  <span className="font-bold">{item.product_name}</span>
-                  <span className="mt-1 block text-muted-foreground">Quantity: {item.planned_quantity ?? "Missing"} {item.unit || "(unit missing)"}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => setEstimateDetailsOpen(false)} className="flex-1 rounded-full border border-border py-2.5 text-[12px] font-bold">Close</button>
-              <button type="button" onClick={() => { setEstimateDetailsOpen(false); setActiveStep(1); }} className="flex-1 rounded-full bg-primary py-2.5 text-[12px] font-bold text-primary-foreground">Edit list</button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-
-      {activeStep === 2 ? (
+{activeStep === 3 ? (
 <section id="trip-step-2" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
@@ -1546,7 +1548,7 @@ function SessionDetailPage() {
       </section>
 ) : null}
 
-      {activeStep === 3 ? (
+      {activeStep === 4 ? (
 <section id="trip-step-3" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
