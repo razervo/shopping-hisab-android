@@ -32,7 +32,7 @@ export function findDuplicateShoppingNames(existingItems = [], incomingNames = [
 export function parseVoiceShoppingItems(transcript) {
   const cleaned = String(transcript || "")
     .replace(/^\s*(add|please add|i need|we need|i want|we want|buy|shopping list)\s+/i, "")
-    .replace(/\s+(?:and|then)\s+/gi, ",");
+    .replace(/\s+(?:and|then|aur)\s+/gi, ",");
   const unitPattern = "(kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
   const normalizeUnit = (value) => {
     const key = String(value || "").toLowerCase();
