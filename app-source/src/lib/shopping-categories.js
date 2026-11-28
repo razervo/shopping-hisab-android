@@ -31,9 +31,9 @@ export function findDuplicateShoppingNames(existingItems = [], incomingNames = [
 
 export function parseVoiceShoppingItems(transcript) {
   const cleaned = String(transcript || "")
-    .replace(/^\\s*(add|please add|i need|we need|i want|we want|buy|shopping list)\\s+/i, "")
-    .replace(/\\s+(?:and|then)\\s+/gi, ",");
-  const unitPattern = "kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box";
+    .replace(/^\s*(add|please add|i need|we need|i want|we want|buy|shopping list)\s+/i, "")
+    .replace(/\s+(?:and|then)\s+/gi, ",");
+  const unitPattern = "(kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
   const normalizeUnit = (value) => {
     const key = String(value || "").toLowerCase();
     if (/^(kg|kgs|kilo|kilogram)$/.test(key)) return "kg";
@@ -44,12 +44,15 @@ export function parseVoiceShoppingItems(transcript) {
     if (/^(pkt|packet|pack)$/.test(key)) return "pkt";
     return key === "dozen" ? "dozen" : "box";
   };
-  return cleaned.split(/[,;\\n]+/).map((raw) => {
-    const item = raw.trim().replace(/^[\\s-]+|[.!?]+$/g, "");
+  return cleaned.split(/[,;\n]+/).map((raw) => {
+    const item = raw.trim().replace(/^[\s-]+|[.!?]+$/g, "");
     if (!item) return null;
-    const reverse = item.match(new RegExp("^(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(" + unitPattern + ")\\\\s+(.+)$", "i"));
-    if (reverse) return { name: reverse[3].trim(), quantity: Number(reverse[1]), unit: normalizeUnit(reverse[2]) };
-    const match = item.match(new RegExp("^(.*?)(?:\\\\s+(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(" + unitPattern + "))?$", "i"));
-    return { name: (match?.[1] || item).trim(), quantity: match?.[2] ? Number(match[2]) : 1, unit: match?.[3] ? normalizeUnit(match[3]) : "pcs" };
+    const reverse = item.match(new RegExp("^\\d+(?:\\.\\d+)?\\s*" + unitPattern + "\\s+(.+)$", "i"));
+    if (reverse) {
+      const prefix = item.match(new RegExp("^(\\d+(?:\\.\\d+)?)\\s*" + unitPattern, "i"));
+      return { name: reverse[1].trim(), quantity: Number(prefix[1]), unit: normalizeUnit(prefix[2]) };
+    }
+    const suffix = item.match(new RegExp("^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*" + unitPattern + "$", "i"));
+    return { name: suffix ? suffix[1].trim() : item, quantity: suffix ? Number(suffix[2]) : 1, unit: suffix ? normalizeUnit(suffix[3]) : "pcs" };
   }).filter((item) => item && item.name);
 }
