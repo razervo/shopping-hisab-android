@@ -20,9 +20,11 @@ const inr = (paise) => new Intl.NumberFormat("en-IN", {
   style: "currency", currency: "INR", maximumFractionDigits: 2,
 }).format(Number(paise || 0) / 100);
 
-const dateLabel = (value) => value
-  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-  : "Date not set";
+const dateLabel = (value) => {
+  if (!value) return "Date not set";
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+};
 
 const blankRow = () => ({ name: "", quantity: "1", unit: "pcs", brand: "", pack_size: "" });
 
@@ -262,9 +264,10 @@ function SessionDetailPage() {
     };
     recognition.onresult = (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript || "";
-      const names = parseVoiceShoppingItems(transcript);
-      if (!names.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
-      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...names.map((name) => ({ ...blankRow(), name }))]);
+      const parsedItems = parseVoiceShoppingItems(transcript);
+      if (!parsedItems.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
+      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...parsedItems.map((item) => ({ ...blankRow(), name: item.name, quantity: String(item.quantity), unit: item.unit }))]);
+      setActiveStep(1);
       toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
     };
     try { recognition.start(); } catch { setVoiceListening(false); toast.error("Could not start voice input. Please try again."); }
