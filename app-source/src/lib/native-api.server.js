@@ -863,7 +863,7 @@ async function handleAI(request, env, user) {
       const bytes = new Uint8Array(await object.arrayBuffer());
       if (!bytes.length || bytes.length > MAX_FILE_BYTES) return error("The bill image is empty or too large. Please choose an image under 10 MB.");
       const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-      parsed = await callVisionModel(env, imageDataUrl, prompt, 2200);
+      parsed = await readBillWithFallback(env, imageDataUrl, prompt, 2200, false);
     } else if (mime === "application/pdf") {
       if (!env.AI?.toMarkdown) return error("PDF reading is not enabled. Please upload a clear JPG or PNG photo instead.", 503);
       const converted = await env.AI.toMarkdown().transform({
@@ -1117,6 +1117,6 @@ export async function handleNativeApi(request, env) {
     return error("Not found.", 404);
   } catch (cause) {
     console.error("Native API request failed", cause);
-    return error("Internal server error. Please try again.", 500);
+    return error(cause?.message || "The request failed unexpectedly. Please retry.", 500);
   }
 }
