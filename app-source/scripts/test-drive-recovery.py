@@ -19,7 +19,7 @@ db.executemany(
 )
 
 source = (ROOT / "src/lib/native-api.server.js").read_text(encoding="utf-8")
-assert "return error(\"Internal server error. Please try again.\", 500);" in source
+assert "return error(cause?.message || \"The request failed unexpectedly. Please retry.\", 500);" in source
 
 # File-content and OCR reads must both authorize the file by owner ID.
 files_handler_start = source.index("async function handleFiles(")
