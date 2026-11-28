@@ -656,32 +656,38 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  // Save the original receipt first. Do not spend AI inference on a file that
-  // cannot be persisted (for example, when Drive is disconnected or unavailable).
-  // The upload operation is idempotent, so a retry after a lost response recovers
-  // the existing Drive file instead of creating another copy.
-  const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
-  let uploaded;
-  try {
-    uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
-  } catch (cause) {
-    throw new Error(`Receipt could not be saved to Google Drive: ${cause?.message || "Please reconnect Drive and retry."}`);
-  }
-  const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
-  const fileUri = `cf-file:${id}`;
-
+  // OCR comes first so receipt extraction remains usable when Drive is disconnected.
   let parsed;
   try {
     parsed = await readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
   } catch (cause) {
-    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${cause?.message || "Try again."}` });
+    return json({ draft: null, file_uri: null, recoverable: true, error: cause?.message || "OCR failed. Try again." });
   }
   if (!parsed?.draft || !Array.isArray(parsed.draft.items) || (!parsed.draft.items.length && purpose !== "priced_list")) {
-    return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
+    return json({ draft: null, file_uri: null, recoverable: true, error: "The bill could not be interpreted. Retry reading or enter items manually." });
   }
-  return json({ draft: parsed.draft, file_uri: fileUri });
-}
 
+  // Drive is optional. If connected, save the source image and attach metadata.
+  const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
+  let fileUri = null;
+  let driveUploadMs = 0;
+  try {
+    const uploadStarted = Date.now();
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
+    const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
+    fileUri = `cf-file:${id}`;
+    driveUploadMs = Date.now() - uploadStarted;
+  } catch (cause) {
+    console.warn("Optional Drive receipt upload failed; returning OCR draft without attachment:", cause?.message || cause);
+  }
+  return json({
+    draft: parsed.draft,
+    file_uri: fileUri,
+    reader: parsed.reader,
+    drive_optional: true,
+    timing: { ocr_ms: 0, drive_upload_ms: driveUploadMs, total_ms: Date.now() - started }
+  });
+}
 
 async function queryCombinedReportRecords(db, userId, { shop = "", from = "", to = "", recordId = "", limit = 200, offset = 0 } = {}) {
   const cleanShop = String(shop || "").trim().slice(0, 100);

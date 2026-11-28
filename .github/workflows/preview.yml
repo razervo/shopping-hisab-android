@@ -27,6 +27,14 @@ jobs:
       - name: Build
         working-directory: app-source
         run: npm run build
+      - name: Set preview Google OAuth secret
+        if: ${{ secrets.GOOGLE_CLIENT_SECRET != '' }}
+        working-directory: app-source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: printf '%s' "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --name shopping-hisab-preview
       - name: Set preview auth secret
         working-directory: app-source
         env:
