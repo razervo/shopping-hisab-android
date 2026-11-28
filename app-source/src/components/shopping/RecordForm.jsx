@@ -4,6 +4,7 @@ import { Camera, ListPlus, Mic, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, todayISO } from "@/lib/format";
+import { isValidCalendarDate } from "@/lib/date-validation.js";
 import { amountOf, emptyItem, normalizeShoppingUnit, toFormItems } from "@/lib/shopping";
 import { ItemRow } from "@/components/shopping/ItemRow";
 import { EstimateBar } from "@/components/shopping/EstimateBar";
@@ -465,7 +466,8 @@ export function RecordForm({
 
   const submit = (e) => {
     e.preventDefault();
-    if (!date) return setError("Please choose the shopping date.");
+    if (!shopName.trim()) return setError("Enter the shop name before saving.");
+    if (!isValidCalendarDate(date)) return setError("Please choose a valid shopping date.");
     if (filled.length === 0) return setError("Add at least one item with a name and quantity.");
     if (estimatedCount > 0) {
       return setError(
@@ -482,7 +484,7 @@ export function RecordForm({
   };
 
   return (
-    <form onSubmit={submit} className="w-full min-w-0 space-y-4 overflow-x-clip pb-32">
+    <form onSubmit={submit} className="w-full min-w-0 space-y-4 overflow-x-clip pb-44">
       <div className="rounded-[20px] border border-border bg-white p-3.5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -494,8 +496,10 @@ export function RecordForm({
               value={shopName}
               onChange={(e) => setShopName(e.target.value)}
               placeholder="e.g. Sharma Kirana Store"
+              required
               className="h-11 text-[15px]"
             />
+            {!shopName.trim() ? <p className="mt-1 text-[11px] text-[#EA580C]">Shop name is required to save this purchase.</p> : null}
           </div>
           <div>
             <Label htmlFor="date" className="micro mb-1.5 block text-muted-foreground">
@@ -504,10 +508,12 @@ export function RecordForm({
             <Input
               id="date"
               type="date"
+              required
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="h-11 text-[15px]"
             />
+            {!isValidCalendarDate(date) ? <p className="mt-1 text-[11px] text-[#EA580C]">Choose a valid shopping date to save this purchase.</p> : null}
           </div>
         </div>
       </div>
@@ -648,7 +654,7 @@ export function RecordForm({
         <p className="rounded-xl bg-destructive/10 px-4 py-3 text-[13px] font-semibold text-destructive">{error}</p>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-[68px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
+      <div className="fixed inset-x-0 bottom-[80px] z-30 border-t border-border bg-white/95 px-3.5 py-3 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-2xl min-w-0 items-center gap-2 sm:gap-4">
           <div className="min-w-0 flex-1">
             <p className="micro text-muted-foreground">Actual spend (estimates excluded)</p>

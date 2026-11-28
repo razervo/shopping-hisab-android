@@ -108,7 +108,8 @@ export async function handleShoppingEngine(request, env) {
   if (path === "/sessions" && method === "POST") {
     const shoppingDate=text(body.shopping_date,10);
     if(!validDate(shoppingDate))return fail("A valid shopping_date (YYYY-MM-DD) is required.");
-    const name=text(body.name,120) || "Shopping trip";
+    const name=text(body.name,120);
+    if(!name)return fail("A shopping trip name is required.");
     const requestKey=text(request.headers.get("Idempotency-Key"),160);
     const operation="session_create";
     const requestHash=requestKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify({name,shopping_date:shoppingDate}))))).map(b=>b.toString(16).padStart(2,"0")).join(""):null;

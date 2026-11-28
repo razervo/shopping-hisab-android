@@ -59,6 +59,8 @@ function finiteNonNegative(value) {
 function validateRecord(input) {
   const date = String(input?.date || "");
   if (!isValidCalendarDate(date)) throw new Error("Please provide a valid shopping date.");
+  const shopName = String(input?.shop_name || "").trim().slice(0, 160);
+  if (!shopName) throw new Error("A shop name is required.");
   const items = Array.isArray(input?.items) ? input.items : [];
   if (items.length > 500) throw new Error("A shopping record cannot contain more than 500 items.");
   const cleaned = items.map((item) => {
@@ -78,7 +80,7 @@ function validateRecord(input) {
   const total = Number(input?.total);
   if (!Number.isFinite(total) || total < 0 || total > 100000000) throw new Error("Please provide a valid total.");
   return {
-    shop_name: String(input?.shop_name || "").trim().slice(0, 160),
+    shop_name: shopName,
     date,
     items_json: JSON.stringify(cleaned),
     total,

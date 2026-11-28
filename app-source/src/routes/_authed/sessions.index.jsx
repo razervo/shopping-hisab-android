@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, ChevronRight, Loader2, Plus, RefreshCw, ShoppingBag } from "lucide-react";
 import { inrPaise } from "@/lib/format";
 import { toast } from "sonner";
+import { isValidCalendarDate } from "@/lib/date-validation.js";
 
 export const Route = createFileRoute("/_authed/sessions/")({
   head: () => ({ meta: [{ title: "Shopping Trips · Shopping Hisab" }] }),
@@ -50,8 +51,12 @@ function SessionsPage() {
 
   const createSession = async (event) => {
     event.preventDefault();
-    if (!name.trim() || !date) {
-      toast.error("Add a trip name and choose a shopping date.");
+    if (!name.trim()) {
+      toast.error("Add a trip name.");
+      return;
+    }
+    if (!isValidCalendarDate(date)) {
+      toast.error("Choose a valid shopping date.");
       return;
     }
     const sessionPayload = JSON.stringify({ name: name.trim(), shopping_date: date });
@@ -110,7 +115,7 @@ function SessionsPage() {
             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input id="session-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)}
               className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-[14px] outline-none focus:ring-2 focus:ring-primary/20" />
-            {!date ? <p className="mt-1 text-[11px] text-[#EA580C]">Choose a shopping date to continue.</p> : null}
+            {!isValidCalendarDate(date) ? <p className="mt-1 text-[11px] text-[#EA580C]">Choose a valid shopping date to continue.</p> : null}
           </div>
         </div>
         <button type="submit" disabled={creating || !name.trim() || !date}
