@@ -1098,6 +1098,105 @@ async function handleMigrationFile(request, env, user) {
   return json({ file_uri: `cf-file:${id}`, already_imported: false }, 201);
 }
 
+
+// Live public price lookup with fixed retailer hosts only. It intentionally falls
+// back when pages are blocked or prices cannot be matched with confidence.
+const COMPARE_BASELINE = [
+  { keys: ["rice"], rate: 65, unit: "kg" }, { keys: ["dal", "lentil"], rate: 130, unit: "kg" },
+  { keys: ["atta", "flour"], rate: 42, unit: "kg" }, { keys: ["sugar"], rate: 45, unit: "kg" },
+  { keys: ["oil", "mustard"], rate: 150, unit: "l" }, { keys: ["milk"], rate: 60, unit: "l" },
+  { keys: ["potato"], rate: 30, unit: "kg" }, { keys: ["onion"], rate: 35, unit: "kg" },
+  { keys: ["tomato"], rate: 40, unit: "kg" }, { keys: ["egg"], rate: 8, unit: "pcs" },
+  { keys: ["salt"], rate: 20, unit: "kg" }, { keys: ["tea"], rate: 300, unit: "kg" },
+  { keys: ["soap"], rate: 35, unit: "pcs" }, { keys: ["default"], rate: 80, unit: "kg" },
+];
+function comparisonUnitRate(item) {
+  const name = String(item.name || "").toLowerCase();
+  const found = COMPARE_BASELINE.find((entry) => entry.keys.some((key) => name.includes(key)));
+  return found || COMPARE_BASELINE[COMPARE_BASELINE.length - 1];
+}
+function unitQuantity(qty, unit) {
+  const value = Number(qty);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const u = String(unit || "pcs").toLowerCase();
+  if (["g","gram","grams"].includes(u)) return value / 1000;
+  if (["ml","milliliter","milliliters"].includes(u)) return value / 1000;
+  return value;
+}
+async function findPublicGroceryPrice(item, pinCode) {
+  const query = encodeURIComponent(String(item.name || "").slice(0, 90) + " " + String(item.quantity || 1) + " " + String(item.unit || ""));
+  const targets = [
+    { store: "BigBasket", url: `https://www.bigbasket.com/ps/?q=${query}` },
+    { store: "JioMart", url: `https://www.jiomart.com/search/${query}` },
+  ];
+  const tokens = String(item.name || "").toLowerCase().split(/[^a-z0-9]+/).filter(t=>t.length>2);
+  for (const target of targets) {
+    try {
+      const response = await fetch(target.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; ShoppingHisab/1.0)", "Accept": "text/html" }, signal: AbortSignal.timeout(4500 });
+      if (!response.ok) continue;
+      const html = await response.text();
+      if (html.length > 1_500_000) continue;
+      const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#x20;/gi," ").replace(/&amp;/gi,"&").replace(/\s+/g," ");
+      const low = text.toLowerCase();
+      if (tokens.length && !tokens.some(token=>low.includes(token))) continue;
+      const match = text.match(/(?:₹|Rs\.?\s*)(\d{1,5}(?:\.\d{1,2})?)/i);
+      if (match) {
+        const price = Number(match[1]);
+        if (price > 0 && price < 100000) return { pricePaise: Math.round(price * 100), store: target.store, source: target.url };
+      }
+    } catch { /* blocked, timeout or inaccessible listing: try next store */ }
+  }
+  return null;
+}
+async function historicalUnitRate(db, userId, item) {
+  try {
+    const rows = await db.prepare("SELECT items_json FROM shopping_records WHERE user_id = ? ORDER BY date DESC LIMIT 80").bind(userId).all();
+    const wanted = String(item.name || "").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    for (const row of rows.results || []) {
+      for (const past of parseItems(row.items_json)) {
+        const name = String(past.name || "").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+        if (!name || !wanted || (name !== wanted && !(name.includes(wanted) || wanted.includes(name)))) continue;
+        const amount = Number(past.amount), qty = unitQuantity(past.qty, past.unit);
+        if (Number.isFinite(amount) && amount > 0 && qty > 0) return Math.round(amount * 100 / qty);
+      }
+    }
+  } catch { /* history is an optional fallback */ }
+  return null;
+}
+async function handleCompareBasket(request, env, user) {
+  if (request.method !== "POST") return error("Method not allowed.", 405);
+  let payload;
+  try { payload = await request.json(); } catch { return error("Invalid JSON request."); }
+  if (!Array.isArray(payload?.items) || payload.items.length < 1 || payload.items.length > 30) return error("Provide between 1 and 30 basket items.");
+  const pinCode = String(payload.pinCode || "").trim();
+  if (pinCode && !/^\d{6}$/.test(pinCode)) return error("PinCode must be a 6-digit Indian postal code.");
+  const clean = payload.items.map((item) => {
+    const name = String(item?.name || "").trim().slice(0, 100);
+    const qty = Number(item?.quantity ?? 1), unit = String(item?.unit || "pcs").trim().slice(0, 20);
+    const paid = item?.paidPaise == null ? null : Number(item.paidPaise);
+    if (!name || !Number.isFinite(qty) || qty <= 0 || qty > 100000 || (paid !== null && (!Number.isFinite(paid) || paid < 0 || paid > 100000000))) throw new Error("Each item needs a name, valid quantity, unit, and optional paid amount.");
+    return { name, quantity: qty, unit, paidPaise: paid };
+  });
+  const rows = await Promise.all(clean.map(async (item) => {
+    const live = await findPublicGroceryPrice(item, pinCode);
+    const historical = live ? null : await historicalUnitRate(env.DB, user.id, item);
+    const baseline = live ? null : historical ?? comparisonUnitRate(item).rate * 100;
+    const ratePaise = live?.pricePaise ?? baseline;
+    const quantity = unitQuantity(item.quantity, item.unit);
+    const onlinePaise = Math.max(0, Math.round(ratePaise * quantity));
+    return {
+      name: item.name, paidPaise: item.paidPaise, onlinePaise,
+      sourceStore: live?.store || (historical !== null ? "Your past purchase (D1)" : "India baseline (estimate)"),
+      sourceUrl: live?.source || null,
+      diffPaise: item.paidPaise === null ? null : item.paidPaise - onlinePaise,
+      fallback: !live,
+    };
+  }));
+  const paidTotalPaise = rows.reduce((sum, row) => sum + (Number(row.paidPaise) || 0), 0);
+  const onlineTotalPaise = rows.reduce((sum, row) => sum + row.onlinePaise, 0);
+  return json({ items: rows, paidTotalPaise, onlineTotalPaise, netDiffPaise: paidTotalPaise - onlineTotalPaise });
+}
+
 export async function handleNativeApi(request, env) {
   const url = new URL(request.url);
   try {
@@ -1105,6 +1204,7 @@ export async function handleNativeApi(request, env) {
     if (!authContext) return error("Please sign in to continue.", 401);
     const { user } = authContext;
 
+    if (url.pathname === "/api/compare-basket") return await handleCompareBasket(request, env, user);
     if (url.pathname === "/api/reports" || url.pathname === "/api/reports/export") {
       return await handleReports(request, env, user, url);
     }

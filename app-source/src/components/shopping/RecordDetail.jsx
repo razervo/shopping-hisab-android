@@ -154,11 +154,7 @@ export function RecordDetail({ record, onDeleted }) {
       ) : null}
 
       {record.source !== "session" && items.length ? (
-        <PriceComparisonPanel
-          items={items.map((item, index) => ({ id: item.id || "history-item-" + index, product_name: item.name, planned_quantity: item.qty, unit: item.unit || "pcs", brand: item.brand || "", pack_size: item.pack_size || "" }))}
-          estimatePrices={Object.fromEntries(items.map((item, index) => [item.id || "history-item-" + index, Number(item.price || 0) / 100]).filter(([, price]) => price > 0))}
-          baselineLabel="Paid price"
-        />
+        <PriceComparisonPanel items={items.map(item=>({name:item.name,quantity:item.qty||1,unit:item.unit||"pcs",paidPaise:Number(item.amount||0)>0?Math.round(Number(item.amount)*100):null}))} paidTotalPaise={Math.round(Number(total||0)*100)} />
       ) : null}
       {record.notes ? (
         <div className="rounded-[20px] border border-border bg-white px-5 py-4">
