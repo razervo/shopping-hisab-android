@@ -573,22 +573,35 @@ async function callGeminiVision(env, imageDataUrl, instructions, maxTokens = 220
 }
 
 async function readBillWithFallback(env, imageDataUrl, instructions, maxTokens = 2200, allowEmptyItems = false) {
+  let geminiError = null;
   if (env.GEMINI_API_KEY) {
     try {
       const parsed = await callGeminiVision(env, imageDataUrl, instructions, maxTokens);
       if (parsed.draft.items.length || allowEmptyItems) return { ...parsed, reader: "gemini" };
-      throw new Error("Gemini did not detect any shopping-list items.");
-    } catch (geminiError) {
-      console.warn("Gemini OCR failed; trying Moondream fallback:", geminiError?.message || geminiError);
+      geminiError = new Error("Gemini did not detect any shopping-list items.");
+    } catch (cause) {
+      geminiError = cause;
+      console.warn("Gemini OCR failed; trying Moondream fallback:", cause?.message || cause);
     }
   }
-  if (!env.AI) throw new Error("Gemini OCR was unavailable and the Moondream fallback is not configured.");
-  const parsed = await callVisionModel(env, imageDataUrl, instructions, maxTokens);
-  return { ...parsed, reader: "moondream_fallback" };
+  if (env.AI) {
+    try {
+      const parsed = await callVisionModel(env, imageDataUrl, instructions, maxTokens);
+      if (parsed?.draft && Array.isArray(parsed.draft.items) && (parsed.draft.items.length || allowEmptyItems)) {
+        return { ...parsed, reader: "moondream_fallback" };
+      }
+      throw new Error("Moondream returned an invalid or empty OCR result.");
+    } catch (fallbackError) {
+      const details = [geminiError?.message, fallbackError?.message].filter(Boolean).join(" | ");
+      throw new Error(details ? "OCR failed with Gemini and Cloudflare AI: " + details : "OCR could not read this image.");
+    }
+  }
+  throw new Error(geminiError
+    ? "Gemini OCR failed and Cloudflare AI fallback is not configured: " + geminiError.message
+    : "OCR is unavailable. Configure GEMINI_API_KEY or the Cloudflare AI binding.");
 }
 
 async function handleGeminiOcrTest(request, env, user) {
-  if (!env.GEMINI_API_KEY) return error("Gemini test is not configured. Add the GEMINI_API_KEY Worker secret.", 503);
   const form = await request.formData();
   const file = form.get("file");
   const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
@@ -605,58 +618,8 @@ async function handleGeminiOcrTest(request, env, user) {
   const started = Date.now();
   const modelPromise = (async () => {
     const modelStarted = Date.now();
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [
-          { text: prompt + " Return only JSON matching {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Use an empty shopName and null date if absent. Currency is INR. Do not add commentary." },
-          { inlineData: { mimeType: mime, data: imageBase64 } },
-        ] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 3000,
-          responseMimeType: "application/json",
-          responseJsonSchema: {
-            type: "OBJECT",
-            properties: {
-              draft: {
-                type: "OBJECT",
-                properties: {
-                  shopName: { type: "STRING" },
-                  date: { type: "STRING", nullable: true },
-                  notes: { type: "STRING" },
-                  items: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        name: { type: "STRING" },
-                        qty: { type: "NUMBER" },
-                        unit: { type: "STRING" },
-                        price: { type: "NUMBER" },
-                        amount: { type: "NUMBER" }
-                      },
-                      required: ["name", "qty", "unit", "price", "amount"]
-                    }
-                  }
-                },
-                required: ["shopName", "date", "notes", "items"]
-              }
-            },
-            required: ["draft"]
-          }
-        }
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const detail = payload?.error?.message || "Gemini API request failed.";
-      throw new Error(detail.slice(0, 500));
-    }
-    const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
-    const parsed = parseModelJson(text);
-    if (!parsed?.draft || !Array.isArray(parsed.draft.items)) throw new Error("Gemini returned an unexpected shopping-list format.");
+    const imageDataUrl = `data:${mime};base64,${imageBase64}`;
+    const parsed = await readBillWithFallback(env, imageDataUrl, prompt, 3000, purpose === "priced_list");
     return { parsed, ms: Date.now() - modelStarted };
   })();
   const uploadPromise = (async () => {
@@ -670,7 +633,8 @@ async function handleGeminiOcrTest(request, env, user) {
   return json({
     draft: model.parsed.draft,
     file_uri: uploaded.file_uri,
-    timing: { gemini_ms: model.ms, drive_upload_ms: uploaded.ms, total_ms: Date.now() - started }
+    reader: model.parsed.reader,
+    timing: { ocr_ms: model.ms, drive_upload_ms: uploaded.ms, total_ms: Date.now() - started }
   });
 }
 
