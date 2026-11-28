@@ -58,6 +58,7 @@ function SessionDetailPage() {
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [inputMode, setInputMode] = useState("type");
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
@@ -1082,7 +1083,7 @@ function SessionDetailPage() {
     : null;
 
   return (
-    <div className="pb-32">
+    <div className="pb-44 scroll-mt-20">
       <Link to="/sessions" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
         <ArrowLeft className="h-4 w-4" /> All trips
       </Link>
@@ -1149,20 +1150,20 @@ function SessionDetailPage() {
 
       {activeStep === 1 && !completed ? (
         <section className="mb-3 grid grid-cols-3 gap-2" aria-label="Choose how to add items">
-          <button type="button" onClick={() => document.getElementById("trip-scan-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+          <button type="button" onClick={() => setInputMode("scan")} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
             <span className="block text-[12px] font-extrabold">Scan</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Photo / PDF list</span>
           </button>
-          <button type="button" onClick={() => document.getElementById("trip-type-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+          <button type="button" onClick={() => setInputMode("type")} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
             <span className="block text-[12px] font-extrabold">Type</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Enter items</span>
           </button>
-          <button type="button" onClick={startVoiceEntry} disabled={voiceListening} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm disabled:opacity-60">
+          <button type="button" onClick={() => { setInputMode("voice"); startVoiceEntry(); }} disabled={voiceListening} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm disabled:opacity-60">
             <span className="block text-[12px] font-extrabold">Voice</span><span className="mt-1 block text-[10.5px] text-muted-foreground">{voiceListening ? "Listening…" : "Speak items"}</span>
           </button>
         </section>
       ) : null}
 
       {!completed ? (
-        <section hidden={activeStep !== 1} id="trip-scan-input" className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
+        <section hidden={activeStep !== 1 || inputMode !== "scan"} id="trip-scan-input" className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
             <p className="text-[15px] font-extrabold">Scan handwritten list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Take a photo or choose a gallery image or PDF. Review detected items and quantities before adding.</p>
@@ -1192,7 +1193,7 @@ function SessionDetailPage() {
       ) : null}
 
 
-{activeStep === 1 ? (
+{activeStep === 1 && inputMode === "type" ? (
 <section id="trip-type-input" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
@@ -1867,7 +1868,7 @@ function SessionDetailPage() {
         <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
           <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
             className="flex w-full items-center justify-center rounded-full bg-[#EA580C] px-4 py-3.5 text-sm font-extrabold text-white shadow-lg disabled:opacity-40">
-            {activeStep === 1 ? "Next: Estimate →" : activeStep === 2 ? "Next: Shop & bills →" : activeStep === 3 ? "Next: Finish →" : "Finish"}
+            {activeStep === 1 ? "Next: Review List →" : activeStep === 2 ? "Next: AI Estimate →" : activeStep === 3 ? "Next: Shop & Finish →" : "Finish"}
           </button>
         </div>
       ) : null}
