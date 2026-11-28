@@ -6,26 +6,26 @@
   :root {
     color-scheme: light;
     /* Shopping Hisab semantic palette — warm neutral surfaces + emerald */
-    --background: 150 14% 97%; /* #F6F8F7 */
+    --background: 37 45% 96%; /* #FAF6F0 */
     --foreground: 222 47% 11%; /* #0F172A */
     --card: 0 0% 100%;
     --card-foreground: 155 16% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 155 16% 10%;
-    --primary: 177 77% 26%; /* #0F766E */
+    --primary: 165 72% 21%; /* #0F5C4C */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 100% 97%; /* #FFF7ED */
+    --secondary: 40 100% 99%; /* #FFFDF9 */
     --secondary-foreground: 177 76% 19%;
-    --muted: 150 14% 94%;
+    --muted: 36 25% 92%;
     --muted-foreground: 215 19% 35%; /* #475569 */
-    --accent: 21 90% 48%; /* #EA580C */
+    --accent: 21 78% 48%; /* #D95D1A */
     --accent-foreground: 24 100% 97%;
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 100%;
     --success: 145 63% 31%;
     --warning: 21 90% 48%;
-    --border: 0 71% 13%; /* #3B0A0A */
-    --input: 0 71% 13%;
+    --border: 35 22% 84%; /* warm soft border */
+    --input: 35 22% 84%;
     --ring: 177 77% 26%;
     --chart-1: 177 77% 26%;
     --chart-2: 21 90% 48%;
@@ -157,11 +157,11 @@
 }
 @layer utilities {
   .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
-  .hisab-card { border: 1.5px solid #3B0A0A; border-radius: 18px; background: #FFFFFF; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
-  .hisab-card-soft { border: 1.5px solid #3B0A0A; border-radius: 18px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
+   .hisab-card { border: 1px solid hsl(35 22% 84%); border-radius: 18px; background: #FFFFFF; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
+   .hisab-card-soft { border: 1px solid hsl(35 22% 84%); border-radius: 18px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05); }
   .hisab-orange-badge { background: #FFF7ED; color: #EA580C; border: 1px solid #FED7AA; }
-  .hisab-primary-button { background: #0F766E; color: #FFFFFF; }
-  .hisab-primary-button:hover { background: #115E59; }
+   .hisab-primary-button { background: #0F5C4C; color: #FFFFFF; }
+   .hisab-primary-button:hover { background: #0B493D; }
   .surface-shadow { box-shadow: 0 8px 24px -18px hsl(var(--foreground) / 0.24); }
 }
 @media (prefers-reduced-motion: no-preference) {

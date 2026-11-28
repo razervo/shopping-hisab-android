@@ -263,14 +263,29 @@ function SessionDetailPage() {
       setVoiceListening(false);
       toast.error(event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input failed. Try again or enter items manually.");
     };
-    recognition.onresult = (event) => {
+    recognition.onresult = async (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript || "";
-      const parsedItems = parseVoiceShoppingItems(transcript);
-      if (!parsedItems.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
-      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...parsedItems.map((item) => ({ ...blankRow(), name: item.name, quantity: String(item.quantity), unit: item.unit }))]);
+      let parsedItems = [];
+      try {
+        const response = await fetch("/api/ai/parse-voice", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body:JSON.stringify({transcript}) });
+        const payload = await response.json().catch(()=>({}));
+        if(response.ok && Array.isArray(payload.items)) parsedItems=payload.items;
+      } catch { /* deterministic local fallback */ }
+      if(!parsedItems.length) parsedItems=parseVoiceShoppingItems(transcript).map((phrase)=>{
+        if(typeof phrase!=="string") return phrase;
+        const unit="(kg|kgs|kilo|g|gm|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
+        const suffix=phrase.match(new RegExp("^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*"+unit+"$","i"));
+        const prefix=phrase.match(new RegExp("^(\\d+(?:\\.\\d+)?)\\s*"+unit+"\\s+(.+)$","i"));
+        const normalize=(u)=>/^(kg|kgs|kilo)$/i.test(u)?"kg":/^(g|gm|grams)$/i.test(u)?"g":/^(l|ltr|litre|liter)$/i.test(u)?"L":/^(pcs|piece|pieces)$/i.test(u)?"pcs":/^(pkt|packet|pack)$/i.test(u)?"pack":u.toLowerCase();
+        if(suffix) return {name:suffix[1].trim(),quantity:Number(suffix[2]),unit:normalize(suffix[3]),brand:""};
+        if(prefix) return {name:prefix[3].trim(),quantity:Number(prefix[1]),unit:normalize(prefix[2]),brand:""};
+        return {name:phrase,quantity:1,unit:"pcs",brand:""};
+      });
+      if(!parsedItems.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
+      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...parsedItems.map((item) => ({ ...blankRow(), name: item.name, quantity: String(item.quantity||1), unit: item.unit||"pcs", brand:item.brand||"" }))]);
       setInputMode("type");
       setActiveStep(1);
-      toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
+      toast.success(`Added ${parsedItems.length} item(s) from voice. Review before saving.`);
     };
     try { recognition.start(); } catch { setVoiceListening(false); toast.error("Could not start voice input. Please try again."); }
   };

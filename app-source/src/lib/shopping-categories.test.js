@@ -69,3 +69,9 @@ test("manual item order is stable and puts newly added items at the end", () => 
   const items = [{ id: "a", product_name: "A" }, { id: "b", product_name: "B" }, { id: "c", product_name: "C" }];
   assert.deepEqual(applyManualShoppingOrder(items, ["c", "a"]).map((item) => item.id), ["c", "a", "b"]);
 });
+
+
+test("voice parser preserves multi-item quantity segments for Hinglish transcripts", () => {
+  assert.deepEqual(parseVoiceShoppingItems("rice 1 kg dal 2 kg"), ["rice", "dal"]);
+  assert.deepEqual(parseVoiceShoppingItems("aloo 3 kg aur pyaz 1 kg"), ["aloo", "pyaz"]);
+});

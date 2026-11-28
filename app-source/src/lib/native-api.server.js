@@ -1165,6 +1165,22 @@ async function historicalUnitRate(db, userId, item) {
   } catch { /* history is an optional fallback */ }
   return null;
 }
+function parseVoiceTranscriptFallback(transcript) {
+  const spoken = String(transcript || "").trim().replace(/^(?:please\s+)?(?:add|buy|need|want|shopping list)\s+/i, "").replace(/\s+(?:and|then|aur|or)\s+/gi, ",");
+  const unitPattern = "(kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
+  const normalize = (u) => { const s=String(u||"").toLowerCase(); if(/^(kg|kgs|kilo|kilogram)$/.test(s))return "kg"; if(/^(g|gm|gms|gram|grams)$/.test(s))return "g"; if(/^(l|ltr|litre|liter)$/.test(s))return "L"; if(s==="ml")return "ml"; if(/^(pcs|piece|pieces)$/.test(s))return "pcs"; if(/^(pkt|packet|pack)$/.test(s))return "pack"; return s==="dozen"?"dozen":"box"; };
+  const pattern=new RegExp("(\\d+(?:\\.\\d+)?)\\s*"+unitPattern,"gi"), matches=[...spoken.matchAll(pattern)];
+  if(matches.length>1){const out=[];let cursor=0;for(const m of matches){const name=spoken.slice(cursor,m.index).trim().replace(/^[,;\s-]+|[,;\s-]+$/g,"");if(name&&Number(m[1])>0)out.push({name,quantity:Number(m[1]),unit:normalize(m[2]),brand:""});cursor=m.index+m[0].length;}if(out.length===matches.length)return out;}
+  return spoken.split(/[,;\n]+/).map(part=>{const item=part.trim().replace(/^[\s-]+|[.!?]+$/g,"");if(!item)return null;const suffix=item.match(new RegExp("^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*"+unitPattern+"$","i"));const prefix=item.match(new RegExp("^(\\d+(?:\\.\\d+)?)\\s*"+unitPattern+"\\s+(.+)$","i"));if(suffix?.[1]?.trim())return{name:suffix[1].trim(),quantity:Number(suffix[2]),unit:normalize(suffix[3]),brand:""};if(prefix?.[3]?.trim())return{name:prefix[3].trim(),quantity:Number(prefix[1]),unit:normalize(prefix[2]),brand:""};return{name:item,quantity:1,unit:"pcs",brand:""};}).filter(x=>x&&x.name);
+}
+async function handleVoiceParse(request, env) {
+  if(request.method!=="POST")return error("Method not allowed.",405);
+  let payload;try{payload=await request.json();}catch{return error("Invalid JSON request.");}
+  const transcript=String(payload?.transcript||"").trim().slice(0,1200);if(!transcript)return error("Please provide a voice transcript.");
+  const fallback=parseVoiceTranscriptFallback(transcript);if(!env.GEMINI_API_KEY)return json({items:fallback,source:"local"});
+  try{const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":env.GEMINI_API_KEY},signal:AbortSignal.timeout(8000),body:JSON.stringify({contents:[{role:"user",parts:[{text:"Parse this grocery voice transcript into JSON only, schema {items:[{name,quantity,unit,brand}]}. Preserve Hinglish item names. Normalize units to kg, g, L, ml, pcs, pack, dozen or box. Infer brand only when explicit. Transcript: "+transcript}]}],generationConfig:{temperature:0.1,maxOutputTokens:700,responseMimeType:"application/json"}})});const responseBody=await response.json().catch(()=>({}));if(!response.ok)throw new Error("Gemini request failed");const raw=responseBody?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("").trim()||"";const parsed=parseModelJson(raw);const items=Array.isArray(parsed?.items)?parsed.items.map(x=>({name:String(x?.name||"").trim().slice(0,100),quantity:Number(x?.quantity??1),unit:String(x?.unit||"pcs").trim().slice(0,20),brand:String(x?.brand||"").trim().slice(0,80)})).filter(x=>x.name&&Number.isFinite(x.quantity)&&x.quantity>0):[];if(!items.length)throw new Error("No valid Gemini items");return json({items,source:"gemini"});}catch(cause){console.warn("Voice parser fallback",cause?.message||cause);return json({items:fallback,source:"local"});}
+}
+
 async function handleCompareBasket(request, env, user) {
   if (request.method !== "POST") return error("Method not allowed.", 405);
   let payload;
@@ -1206,6 +1222,7 @@ export async function handleNativeApi(request, env) {
     if (!authContext) return error("Please sign in to continue.", 401);
     const { user } = authContext;
 
+    if (url.pathname === "/api/ai/parse-voice") return await handleVoiceParse(request, env);
     if (url.pathname === "/api/compare-basket") return await handleCompareBasket(request, env, user);
     if (url.pathname === "/api/reports" || url.pathname === "/api/reports/export") {
       return await handleReports(request, env, user, url);

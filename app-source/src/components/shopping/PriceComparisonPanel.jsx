@@ -15,7 +15,7 @@ export function PriceComparisonPanel({items=[],paidTotalPaise=0,pinCode=""}) {
   } catch(e){toast.error(e.message||"Online comparison failed.");}
   finally{setLoading(false);}
  };
- return <section className="mt-4 rounded-[22px] border border-border bg-white p-4">
+ return <section className="mt-4 rounded-[22px] bg-[#FFFDF9] p-4 shadow-sm">
   <div className="flex items-center justify-between gap-3"><div><h3 className="text-[14px] font-extrabold">Online basket comparison</h3><p className="mt-1 text-[11.5px] text-muted-foreground">Checks public listings; unavailable stores fall back to your history or an India price estimate.</p></div>
   <button type="button" onClick={run} disabled={loading} className="min-h-11 shrink-0 rounded-full bg-primary px-4 py-2 text-[11px] font-bold text-primary-foreground">{loading?<Loader2 className="inline h-4 w-4 animate-spin"/>:<ShoppingCart className="inline h-4 w-4"/>} {loading?"Checking…":"Compare Online Basket"}</button></div>
   {result?<div className="mt-3">
