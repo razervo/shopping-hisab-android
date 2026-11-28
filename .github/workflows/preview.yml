@@ -27,6 +27,14 @@ jobs:
       - name: Build
         working-directory: app-source
         run: npm run build
+      - name: Set preview auth secret
+        working-directory: app-source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5ab302219d43e0312e9d6fce7863c58f
+        run: |
+          secret="$(openssl rand -hex 24)"
+          printf '%s' "$secret" | npx wrangler secret put BETTER_AUTH_SECRET --name shopping-hisab-preview
       - name: Deploy isolated preview Worker
         working-directory: app-source
         env:
