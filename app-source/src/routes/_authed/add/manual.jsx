@@ -40,7 +40,7 @@ function AddManualPage() {
   };
 
   return (
-    <div>
+    <div className="pb-44">
       <button
         type="button"
         onClick={() => navigate({ to: "/add" })}

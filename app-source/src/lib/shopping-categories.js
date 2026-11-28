@@ -45,6 +45,20 @@ export function parseVoiceShoppingItems(transcript) {
     return key === "dozen" ? "dozen" : "box";
   };
 
+  // Split continuous speech into item segments when multiple quantity/unit pairs are present.
+  const quantityUnitPattern = new RegExp("(\\d+(?:\\.\\d+)?)\\s*" + unitPattern, "gi");
+  const matches = [...cleaned.matchAll(quantityUnitPattern)];
+  if (matches.length > 1) {
+    const segmented = [];
+    let cursor = 0;
+    for (const match of matches) {
+      const name = cleaned.slice(cursor, match.index).trim().replace(/^[,;\\s-]+|[,;\\s-]+$/g, "");
+      if (name && Number(match[1]) > 0) segmented.push({ name, quantity: Number(match[1]), unit: normalizeUnit(match[2]) });
+      cursor = match.index + match[0].length;
+    }
+    if (segmented.length === matches.length) return segmented;
+  }
+
   return cleaned.split(/[,;\n]+/).map((raw) => {
     const item = raw.trim().replace(/^[\s-]+|[.!?]+$/g, "");
     if (!item) return null;
