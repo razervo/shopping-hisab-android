@@ -29,7 +29,7 @@ async function sendPasswordReset(env, { user, url }) {
 }
 
 export function createNativeAuth(env) {
-  const baseURL = validateAppBaseURL(env.APP_BASE_URL);
+  const baseURL = validateAppBaseURL(env.APP_BASE_URL || env.BETTER_AUTH_URL);
   if (!env.DB) throw new Error("Missing D1 binding DB.");
   if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 32) {
     throw new Error("BETTER_AUTH_SECRET must be configured with at least 32 characters.");
@@ -52,7 +52,7 @@ export function createNativeAuth(env) {
     baseURL,
     secret: env.BETTER_AUTH_SECRET,
     database: env.DB,
-    trustedOrigins: [baseURL],
+    trustedOrigins: [env.APP_BASE_URL, env.BETTER_AUTH_URL, "https://shopping-hisab-preview.hasimabd13.workers.dev", "https://shopping-hisab-native.hasimabd13.workers.dev"].filter(Boolean),
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,

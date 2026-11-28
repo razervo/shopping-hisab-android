@@ -8,6 +8,8 @@ import { reviewEstimateItems } from "@/lib/estimate-review";
 import { estimatePriceMemoryKey, findRememberedEstimatePrices, rememberEstimatePrices } from "@/lib/estimate-price-memory";
 import { SHOPPING_CATEGORIES, groupShoppingItems, inferShoppingCategory, filterShoppingListItems, parseVoiceShoppingItems, findDuplicateShoppingNames, sortShoppingListItems, applyManualShoppingOrder } from "@/lib/shopping-categories";
 import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
+import { StyledConfirmModal } from "@/components/ui/styled-confirm-modal";
+import { useStyledConfirm } from "@/components/ui/use-styled-confirm";
 
 export const Route = createFileRoute("/_authed/sessions/$sessionId")({
   head: () => ({ meta: [{ title: "Shopping Trip · Shopping Hisab" }] }),
@@ -18,9 +20,11 @@ const inr = (paise) => new Intl.NumberFormat("en-IN", {
   style: "currency", currency: "INR", maximumFractionDigits: 2,
 }).format(Number(paise || 0) / 100);
 
-const dateLabel = (value) => value
-  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-  : "Date not set";
+const dateLabel = (value) => {
+  if (!value) return "Date not set";
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+};
 
 const blankRow = () => ({ name: "", quantity: "1", unit: "pcs", brand: "", pack_size: "" });
 
@@ -37,8 +41,11 @@ async function api(path, options = {}) {
 
 function SessionDetailPage() {
   const { sessionId } = Route.useParams();
+  const { confirmStyled, dialogElement: pendingConfirmDialog } = useStyledConfirm();
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
+  const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
+  const [pendingTotalDifference, setPendingTotalDifference] = useState(null);
   const [activeStep, setActiveStep] = useState(1);
   const [expandedMetadataRows, setExpandedMetadataRows] = useState({});
   const [loading, setLoading] = useState(true);
@@ -51,6 +58,7 @@ function SessionDetailPage() {
   const [listName, setListName] = useState("My shopping list");
   const [rows, setRows] = useState([blankRow()]);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [inputMode, setInputMode] = useState("type");
   const [billForm, setBillForm] = useState({ shop_name: "", purchase_date: new Date().toISOString().slice(0, 10), receipt_number: "", bill_total: "" });
   const [billSaving, setBillSaving] = useState(false);
   const billRequestKeyRef = useRef(null);
@@ -82,6 +90,8 @@ function SessionDetailPage() {
   const [rememberedEstimateKeys, setRememberedEstimateKeys] = useState({});
   const [estimateReviewWarnings, setEstimateReviewWarnings] = useState([]);
   const [estimateReviewOpen, setEstimateReviewOpen] = useState(false);
+  const [estimateDetailsOpen, setEstimateDetailsOpen] = useState(false);
+  const [estimateDetailItems, setEstimateDetailItems] = useState([]);
   const [estimateSaving, setEstimateSaving] = useState(false);
   const [aiEstimateSaving, setAiEstimateSaving] = useState(false);
   const [scannedDraft, setScannedDraft] = useState(null);
@@ -222,15 +232,12 @@ function SessionDetailPage() {
     }
   };
 
-  const deleteTrip = async () => {
-    const confirmed = window.confirm("Delete this shopping trip and ALL saved trip data (lists, items, estimates, bills and history)? This cannot be undone. Uploaded files are retained and not physically deleted.");
+  const deleteTrip = async () => { setDeleteTripDialogOpen(true); };
 
-    if (!confirmed) return;
+  const confirmDeleteTrip = async () => {
+    setDeleteTripDialogOpen(false);
     try {
-      await api(`/api/shopping/sessions/${sessionId}`, {
-        method: "DELETE",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-      });
+      await api(`/api/shopping/sessions/${sessionId}`, { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
       toast.success("Shopping trip deleted.");
       navigate({ to: "/sessions" });
     } catch (cause) {
@@ -238,7 +245,6 @@ function SessionDetailPage() {
       await loadSession();
     }
   };
-
   const updateRow = (index, key, value) => {
     setRows((current) => current.map((row, i) => i === index ? { ...row, [key]: value } : row));
   };
@@ -259,9 +265,11 @@ function SessionDetailPage() {
     };
     recognition.onresult = (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript || "";
-      const names = parseVoiceShoppingItems(transcript);
-      if (!names.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
-      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...names.map((name) => ({ ...blankRow(), name }))]);
+      const parsedItems = parseVoiceShoppingItems(transcript);
+      if (!parsedItems.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
+      setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...parsedItems.map((item) => ({ ...blankRow(), name: item.name, quantity: String(item.quantity), unit: item.unit }))]);
+      setInputMode("type");
+      setActiveStep(1);
       toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
     };
     try { recognition.start(); } catch { setVoiceListening(false); toast.error("Could not start voice input. Please try again."); }
@@ -273,8 +281,17 @@ function SessionDetailPage() {
     event.preventDefault();
     const currentItems = session?.items || [];
     if (!currentItems.length) return toast.error("Add items to your list before estimating.");
+    const invalidDetails = currentItems.filter((item) => {
+      const quantity = Number(item.planned_quantity);
+      return !Number.isFinite(quantity) || quantity <= 0 || !String(item.unit || "").trim();
+    });
+    if (invalidDetails.length) {
+      setEstimateDetailItems(invalidDetails);
+      setEstimateDetailsOpen(true);
+      return;
+    }
     const missing = currentItems.filter((item) => estimatePrices[item.id] == null || String(estimatePrices[item.id]).trim() === "");
-    if (missing.length) return toast.error("Add a price for each item before saving your estimate.");
+    if (missing.length) return toast.error("Add a total line price for each item before saving your estimate.");
     const warnings = reviewEstimateItems(currentItems);
     if (warnings.length && !estimateReviewOpen) {
       setEstimateReviewWarnings(warnings);
@@ -288,13 +305,16 @@ function SessionDetailPage() {
       if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
         return toast.error(`Enter a valid estimated price for ${item.product_name}.`);
       }
-      const unitPrice = Math.round(rupees * 100);
+      const quantity = Number(item.planned_quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) return toast.error(`Enter a valid quantity for ${item.product_name}.`);
+      const lineTotalPaise = Math.round(rupees * 100);
+      const unitPrice = Math.round(lineTotalPaise / quantity);
       lines.push({
         shopping_item_id: item.id,
-        quantity: Number(item.planned_quantity || 0),
+        quantity,
         unit: item.unit || "pcs",
         estimated_unit_price_paise: unitPrice,
-        estimated_line_total_paise: Math.round(Number(item.planned_quantity || 0) * unitPrice),
+        estimated_line_total_paise: lineTotalPaise,
         price_source: estimateSources[item.id] || "manual",
       });
     }
@@ -353,7 +373,9 @@ function SessionDetailPage() {
         const item = currentItems[entry.index];
         const rate = Number(entry.rate);
         if (!item || !Number.isFinite(rate) || rate <= 0) continue;
-        updates[item.id] = String(rate);
+        const quantity = Number(item.planned_quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) continue;
+        updates[item.id] = String(Math.round(rate * quantity * 100) / 100);
         sources[item.id] = "ai_estimate";
       }
       if (!Object.keys(updates).length) {
@@ -375,6 +397,22 @@ function SessionDetailPage() {
     }
   };
 
+  const startVoiceBillEntry = () => {
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionApi) return toast.error("Voice input is unavailable here. Use Type or Scan.");
+    const recognition = new SpeechRecognitionApi();
+    recognition.lang = "en-IN"; recognition.continuous = false; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim(); if (!transcript) return;
+      const match = transcript.match(/(?:rupees?|rs\\.?|₹)\\s*(\\d+(?:\\.\\d{1,2})?)|\\b(\\d+(?:\\.\\d{1,2})?)\\s*(?:rupees?|rs\\.?|₹)\\b/i);
+      const amount = match ? (match[1] || match[2]) : "";
+      const shop = amount ? transcript.replace(match[0], "").trim() : transcript;
+      setBillForm((current) => ({ ...current, shop_name: shop || current.shop_name, bill_total: amount || current.bill_total }));
+      toast.success(amount ? "Voice captured. Check shop and amount, then save as Unverified." : "Shop name captured. Enter the amount, then save as Unverified.");
+    };
+    recognition.onerror = () => toast.error("Voice capture failed. Try again or type instead.");
+    try { recognition.start(); } catch { toast.error("Could not start voice capture."); }
+  };
   const saveBill = async (event) => {
     event.preventDefault();
     const rupees = Number(billForm.bill_total);
@@ -391,7 +429,7 @@ function SessionDetailPage() {
         purchase_date: billForm.purchase_date || null,
         receipt_number: billForm.receipt_number.trim(),
         bill_total_paise: Math.round(rupees * 100),
-        bill_status: "verified",
+        bill_status: "needs_review",
         duplicate_fingerprint: [billForm.shop_name.trim().toLowerCase().replace(/\s+/g, " "), billForm.purchase_date, billForm.receipt_number.trim().toUpperCase(), Math.round(rupees * 100)].join("|").slice(0, 200),
         original_ocr: { entry_method: "manual" },
       };
@@ -507,7 +545,7 @@ function SessionDetailPage() {
             file_id: fileMatch?.[1] || null,
             original_file_uri: uploadedBillFileUri || null,
             duplicate_fingerprint: duplicateFingerprint,
-            bill_status: "needs_review",
+            bill_status: fileMatch ? "verified" : "needs_review",
             original_ocr: { entry_method: "existing_bill_uploader", draft: uploadedBillDraft },
           }),
         });
@@ -641,21 +679,19 @@ function SessionDetailPage() {
   const confirmSession = async (event) => {
     event.preventDefault();
     const rupees = Number(confirmationTotal);
-    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) {
-      return toast.error("Enter a valid final expense amount.");
-    }
-    if (Number(session?.bills_amount_pending || 0) > 0) {
-      return toast.error("Resolve every bill with a pending amount before completing this session.");
-    }
-    if (Math.round(rupees * 100) <= 0) {
-      return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
-    }
+    if (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100))) return toast.error("Enter a valid final expense amount.");
+    if (Number(session?.bills_amount_pending || 0) > 0) return toast.error("Resolve every bill with a pending amount before completing this session.");
+    if (Math.round(rupees * 100) <= 0) return toast.error("A shopping trip cannot be completed with ₹0.00. Enter the actual paid amount or review your bills.");
     const calculatedRupees = Number(session?.actual_total_paise || 0) / 100;
     if (Math.round(rupees * 100) !== Math.round(calculatedRupees * 100)) {
-      const difference = rupees - calculatedRupees;
-      const direction = difference > 0 ? "higher" : "lower";
-      if (!window.confirm(`Your confirmed total is ₹${rupees.toFixed(2)}, but bills calculate to ₹${calculatedRupees.toFixed(2)} (₹${Math.abs(difference).toFixed(2)} ${direction}). Save this difference in the final confirmation?`)) return;
+      setPendingTotalDifference({ rupees, calculatedRupees, difference: rupees - calculatedRupees });
+      return;
     }
+    return finishSession(rupees);
+  };
+
+  const finishSession = async (rupees) => {
+    setPendingTotalDifference(null);
     if (confirmationLockRef.current) return;
     confirmationLockRef.current = true;
     setConfirmationSaving(true);
@@ -678,7 +714,6 @@ function SessionDetailPage() {
       setConfirmationSaving(false);
     }
   };
-
   const moveListItem = (categoryItems, item, direction) => {
     const currentIds = categoryItems.map((entry) => entry.id);
     const currentIndex = currentIds.indexOf(item.id);
@@ -712,7 +747,7 @@ function SessionDetailPage() {
     finally { setItemEditSaving(false); }
   };
   const deletePlannedItem = async (item) => {
-    if (!window.confirm(`Remove "${item.product_name}" from this shopping session?`)) return;
+    if (!await confirmStyled(`Remove "${item.product_name}" from this shopping session?`)) return;
     try {
       await api(`/api/shopping/sessions/${sessionId}/items/${item.id}`, { method: "DELETE" });
       setEstimatePrices((current) => {
@@ -766,7 +801,7 @@ function SessionDetailPage() {
   };
 
   const deleteBill = async (billId) => {
-    if (!window.confirm("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
+    if (!await confirmStyled("Delete this bill and its saved bill items? The trip total will be recalculated. The uploaded file is retained.")) return;
     const requestKey = billDeleteKeysRef.current[billId] || (billDeleteKeysRef.current[billId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}`, {
@@ -813,7 +848,7 @@ function SessionDetailPage() {
   };
 
   const deleteBillLine = async (billId, lineId) => {
-    if (!window.confirm("Delete this bill item? The bill reconciliation will be recalculated.")) return;
+    if (!await confirmStyled("Delete this bill item? The bill reconciliation will be recalculated.")) return;
     const requestKey = billLineDeleteRequestKeysRef.current[lineId] || (billLineDeleteRequestKeysRef.current[lineId] = crypto.randomUUID());
     try {
       await api(`/api/shopping/sessions/${sessionId}/bills/${billId}/lines/${lineId}`, { method: "DELETE", headers: { "Idempotency-Key": requestKey } });
@@ -855,7 +890,7 @@ function SessionDetailPage() {
     if (!validRows.length || validRows.some((row) => !row.name)) return toast.error("Check every scanned item name before saving.");
     if (validRows.some((row) => !Number.isFinite(row.quantity) || row.quantity < 0)) return toast.error("Check the quantity for each scanned item.");
     const scannedDuplicates = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
-    if (scannedDuplicates.length && !window.confirm(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
+    if (scannedDuplicates.length && !await confirmStyled(`Similar items already exist or repeat in this scanned list: ${scannedDuplicates.join(", ")}. Keep them as separate entries?`)) return;
     if (scannedListSaveLockRef.current) return;
     scannedListSaveLockRef.current = true;
     setScannedListSaving(true);
@@ -931,7 +966,7 @@ function SessionDetailPage() {
     }
 
     const duplicateNames = findDuplicateShoppingNames(items, validRows.map((row) => row.name));
-    if (duplicateNames.length && !window.confirm(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
+    if (duplicateNames.length && !await confirmStyled(`Similar items already exist or repeat in this list: ${duplicateNames.join(", ")}. Keep them as separate entries?`)) return;
     if (manualListSaveLockRef.current) return;
     manualListSaveLockRef.current = true;
     setSaving(true);
@@ -1010,6 +1045,19 @@ function SessionDetailPage() {
   const smartListGroups = groupShoppingItems(smartSortedItems, categoryOverrides);
 
   const lists = session.source_lists || [];
+  const listLineLookup = new Map();
+  for (const list of lists) {
+    const sourceLines = Array.isArray(list.lines) ? list.lines : Array.isArray(list.source_lines) ? list.source_lines : [];
+    for (const line of sourceLines) {
+      if (line?.id != null) listLineLookup.set(String(line.id), String(list.id));
+    }
+  }
+  const groupedSourceLists = lists.map((list) => ({
+    ...list,
+    groupedItems: items.filter((item) => listLineLookup.get(String(item.source_line_id || "")) === String(list.id)),
+  })).filter((list) => list.groupedItems.length);
+  const groupedItemIds = new Set(groupedSourceLists.flatMap((list) => list.groupedItems.map((item) => String(item.id))));
+  const fallbackItems = items.filter((item) => !groupedItemIds.has(String(item.id)));
   const completed = session.status === "completed";
   const unresolvedBills = (session.bills || []).filter(
     (bill) => !["verified", "duplicate", "void"].includes(bill.bill_status),
@@ -1025,7 +1073,7 @@ function SessionDetailPage() {
     return value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
   });
   const draftEstimateRupees = pricedEstimateItems.reduce(
-    (total, item) => total + Number(item.planned_quantity || 0) * Number(estimatePrices[item.id]),
+    (total, item) => total + Number(estimatePrices[item.id]),
     0,
   );
   const uploadedBillRowsHaveAmounts = uploadedBillRows.length > 0 && uploadedBillRows.every((row) =>
@@ -1036,7 +1084,7 @@ function SessionDetailPage() {
     : null;
 
   return (
-    <div className="pb-32">
+    <div className="pb-44 scroll-mt-20">
       <Link to="/sessions" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
         <ArrowLeft className="h-4 w-4" /> All trips
       </Link>
@@ -1088,10 +1136,10 @@ function SessionDetailPage() {
 
       <nav aria-label="Shopping trip steps" className="mt-3 grid grid-cols-4 gap-1 rounded-[20px] border border-[#3B0A0A] bg-white p-2 shadow-sm">
         {[
-          { id: 1, label: "Your list", done: items.length > 0 },
-          { id: 2, label: "Estimate", done: Boolean(latestEstimate) },
-          { id: 3, label: "Shop & bills", done: (session.bills || []).length > 0 },
-          { id: 4, label: "Finish", done: completed },
+          { id: 1, label: "Input & Lists", done: items.length > 0 },
+          { id: 2, label: "Review List", done: items.length > 0 },
+          { id: 3, label: "AI Estimate", done: Boolean(latestEstimate) },
+          { id: 4, label: "Shop & Finish", done: completed },
         ].map((step) => (
           <button key={step.id} type="button" onClick={() => setActiveStep(step.id)} aria-current={activeStep === step.id ? "step" : undefined}
             className={`flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition-colors ${activeStep === step.id ? "bg-[#EA580C] text-white shadow-sm" : step.done ? "bg-[#0F766E]/10 text-[#0F766E]" : "bg-secondary/40 text-muted-foreground"}`}>
@@ -1101,8 +1149,22 @@ function SessionDetailPage() {
         ))}
       </nav>
 
+      {activeStep === 1 && !completed ? (
+        <section className="mb-3 grid grid-cols-3 gap-2" aria-label="Choose how to add items">
+          <button type="button" onClick={() => setInputMode("scan")} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+            <span className="block text-[12px] font-extrabold">Scan</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Photo / PDF list</span>
+          </button>
+          <button type="button" onClick={() => setInputMode("type")} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm">
+            <span className="block text-[12px] font-extrabold">Type</span><span className="mt-1 block text-[10.5px] text-muted-foreground">Enter items</span>
+          </button>
+          <button type="button" onClick={() => { setInputMode("voice"); startVoiceEntry(); }} disabled={voiceListening} className="min-h-[92px] rounded-2xl border border-[#3B0A0A] bg-white p-3 text-left shadow-sm disabled:opacity-60">
+            <span className="block text-[12px] font-extrabold">Voice</span><span className="mt-1 block text-[10.5px] text-muted-foreground">{voiceListening ? "Listening…" : "Speak items"}</span>
+          </button>
+        </section>
+      ) : null}
+
       {!completed ? (
-        <section hidden={activeStep !== 1} className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
+        <section hidden={activeStep !== 1 || inputMode !== "scan"} id="trip-scan-input" className="mb-4 space-y-3 rounded-[24px] border border-[#3B0A0A] bg-white p-4 shadow-sm">
           <div>
             <p className="text-[15px] font-extrabold">Scan handwritten list</p>
             <p className="mt-1 text-[12px] text-muted-foreground">Take a photo or choose a gallery image or PDF. Review detected items and quantities before adding.</p>
@@ -1132,14 +1194,15 @@ function SessionDetailPage() {
       ) : null}
 
 
-<section id="trip-step-1" hidden={activeStep !== 1} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+{activeStep === 1 && inputMode === "type" ? (
+<section id="trip-type-input" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="px-4 py-4">
           <span className="block text-[14px] font-extrabold">1. Prepare your shopping list</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Scan a photo or add items manually · {items.length} items</span>
         </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
-        <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+        <form onSubmit={saveList} className="mt-3 space-y-3 p-1">
           <div>
             <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
             <p className="mt-1 text-[12px] text-muted-foreground">You can add another list at any time. Each list remains saved separately.</p>
@@ -1191,7 +1254,34 @@ function SessionDetailPage() {
         </form>
       ) : null}
 
-      <section id="trip-list" className="mt-6">
+      
+        </div>
+      </section>
+) : null}
+
+      {estimateDetailsOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="estimate-details-title" className="w-full max-w-md rounded-[22px] border border-[#3B0A0A] bg-white p-4 shadow-xl">
+            <h2 id="estimate-details-title" className="text-[15px] font-extrabold">Complete item details</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">Every item needs a quantity greater than zero and a unit before you can save an estimate.</p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {estimateDetailItems.map((item) => (
+                <div key={item.id} className="rounded-xl bg-secondary/50 px-3 py-2 text-[12px]">
+                  <span className="font-bold">{item.product_name}</span>
+                  <span className="mt-1 block text-muted-foreground">Quantity: {item.planned_quantity ?? "Missing"} {item.unit || "(unit missing)"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setEstimateDetailsOpen(false)} className="flex-1 rounded-full border border-border py-2.5 text-[12px] font-bold">Close</button>
+              <button type="button" onClick={() => { setEstimateDetailsOpen(false); setActiveStep(1); }} className="flex-1 rounded-full bg-primary py-2.5 text-[12px] font-bold text-primary-foreground">Edit list</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+
+      {activeStep === 2 ? (<section id="trip-list" className="mt-6">
         <div className="mb-3 flex items-center justify-between px-1">
           <div><h2 className="text-[15px] font-extrabold">Your shopping list</h2><p className="text-[11.5px] text-muted-foreground">{items.length} items in this trip</p></div>
           <button type="button" onClick={loadSession} aria-label="Refresh session" className="rounded-full border border-border p-2"><RefreshCw className="h-4 w-4" /></button>
@@ -1261,12 +1351,15 @@ function SessionDetailPage() {
                 {categoryItems.map((item, index) => (
                   <div key={item.id} className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderTop: index ? "1px solid hsl(var(--border) / 0.8)" : "none" }}>
                     <div className="min-w-0 flex-1">
-                      <p className="break-words text-[13.5px] font-bold">{item.product_name}</p>
-                      <p className="mt-0.5 text-[11.5px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit}{item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}</p>
-                      <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                        Bought: {Number(item.purchased_quantity || 0)} {item.unit} · Remaining: {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit}
+                      <div className="flex min-w-0 items-baseline gap-1.5">
+                        <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">• {Number(item.planned_quantity)} {item.unit}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
+                        {Number(item.remaining_quantity ?? item.planned_quantity)} {item.unit} left to buy
+                        {item.brand ? ` · ${item.brand}` : ""}{item.pack_size ? ` · ${item.pack_size}` : ""}
                         {Number(item.purchase_count || 0) > 1 ? ` · ${item.purchase_count} purchases` : ""}
-                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es) not counted` : ""}
+                        {Number(item.unit_mismatch_count || 0) > 0 ? ` · ${item.unit_mismatch_count} unit mismatch(es)` : ""}
                       </p>
                       {!completed && item.item_status !== "cancelled" && items.some((candidate) => candidate.id !== item.id && candidate.item_status !== "cancelled" && String(candidate.unit || "pcs").trim().toLowerCase() === String(item.unit || "pcs").trim().toLowerCase()) ? (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1335,13 +1428,10 @@ function SessionDetailPage() {
             <p className="mt-1 text-[12px] text-muted-foreground">Add your first list above.</p>
           </div>
         )}
-      </section>
-        </div>
-      </section>
+      </section>) : null}
 
-      {activeStep === 2 ? <PriceComparisonPanel items={items} estimatePrices={estimatePrices} /> : null}
-
-      <section id="trip-step-2" hidden={activeStep !== 2} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+{activeStep === 3 ? (
+<section id="trip-step-2" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">2. Estimate your cost</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Get an idea of the total before you shop{latestEstimate ? " · Estimate saved" : ""}</span>
@@ -1357,7 +1447,7 @@ function SessionDetailPage() {
             <div key={item.id} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-bold">{item.product_name}</p>
-                <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · price per {item.unit}</p>
+                <p className="text-[11px] text-muted-foreground">{Number(item.planned_quantity)} {item.unit} · total for this line</p>
                 {item.brand || item.pack_size ? (
                   <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
                     {[item.brand, item.pack_size].filter(Boolean).join(" · ")}
@@ -1368,7 +1458,7 @@ function SessionDetailPage() {
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={estimatePrices[item.id] ?? ""}
                   onChange={(event) => { setEstimatePrices((current) => ({ ...current, [item.id]: event.target.value })); setEstimateSources((current) => ({ ...current, [item.id]: "manual" })); setRememberedEstimateKeys((current) => { if (!(item.id in current)) return current; const next = { ...current }; delete next[item.id]; return next; }); }}
-                  placeholder="₹ / unit" aria-label={`Estimated unit price for ${item.product_name}`}
+                  placeholder="₹ total" aria-label={`Estimated total line price for ${item.product_name}`}
                   className="h-10 w-full rounded-xl border border-border bg-background px-2.5 text-[12px]" />
                 {estimateSources[item.id] === "remembered" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">Saved price · exact pack match</p>
                   : estimateSources[item.id] === "ai_estimate" ? <p className="mt-1 text-[10px] font-medium text-muted-foreground">AI estimate · review price</p>
@@ -1439,19 +1529,27 @@ function SessionDetailPage() {
 
       <section className="mt-4">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Lists you added</h2>
-        {lists.length ? <div className="space-y-2">
-          {lists.map((list) => (
+        {groupedSourceLists.length || fallbackItems.length ? <div className="space-y-2">
+          {groupedSourceLists.map((list) => (
             <div key={list.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <p className="text-[13px] font-bold">{list.source_metadata_json ? (() => { try { return JSON.parse(list.source_metadata_json).title || "Shopping list"; } catch { return "Shopping list"; } })() : "Shopping list"}</p>
-              <p className="mt-1 text-[11px] capitalize text-muted-foreground">{String(list.source_type).replaceAll("_", " ")} · {String(list.ocr_status).replaceAll("_", " ")}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{list.groupedItems.length} item(s)</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">{list.groupedItems.map((item) => <span key={item.id} className="rounded-full bg-secondary px-2.5 py-1 text-[10.5px]">{item.product_name}</span>)}</div>
             </div>
           ))}
+          {fallbackItems.length ? <div className="rounded-[18px] border border-dashed border-border bg-white px-4 py-3">
+            <p className="text-[13px] font-bold">All items</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Items whose source-line association is unavailable are kept here.</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">{fallbackItems.map((item) => <span key={item.id} className="rounded-full bg-secondary px-2.5 py-1 text-[10.5px]">{item.product_name}</span>)}</div>
+          </div> : null}
         </div> : <p className="rounded-[18px] bg-secondary/40 px-4 py-4 text-[12px] text-muted-foreground">Your saved lists will appear here.</p>}
       </section>
         </div>
       </section>
+) : null}
 
-      <section id="trip-step-3" hidden={activeStep !== 3} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+      {activeStep === 4 ? (
+<section id="trip-step-3" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">3. While you're shopping</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">
@@ -1463,8 +1561,9 @@ function SessionDetailPage() {
         <form onSubmit={saveBill} className="mt-6 space-y-3 rounded-[24px] border border-border bg-white p-4">
           <div>
             <p className="text-[15px] font-extrabold">Add a shop purchase</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Record the amount you paid at each shop. This amount is counted immediately in actual spending.</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Record each shop purchase. Typed or voice-only bills are marked Unverified until you attach a receipt; scanned bills stay in review until checked.</p>
           </div>
+          <button type="button" onClick={startVoiceBillEntry} className="min-h-10 w-full rounded-full border border-primary/30 bg-primary/5 py-2 text-[12px] font-bold text-primary">Voice bill entry (Unverified)</button>
           <input value={billForm.shop_name} onChange={(event) => setBillForm((v) => ({ ...v, shop_name: event.target.value }))}
             placeholder="Shop name" maxLength={160} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-[13px]" />
           <div className="grid grid-cols-2 gap-2">
@@ -1478,7 +1577,7 @@ function SessionDetailPage() {
             placeholder="Total paid (₹)" required className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] font-semibold" />
           <button type="submit" disabled={billSaving} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13px] font-bold text-primary-foreground disabled:opacity-60">
             {billSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {billSaving ? "Adding bill…" : "Save shop bill"}
+            {billSaving ? "Adding bill…" : "Save unverified bill"}
           </button>
         </form>
       ) : null}
@@ -1609,8 +1708,8 @@ function SessionDetailPage() {
           <div className="space-y-2">{session.bills.map((bill) => (
             <div key={bill.id} className="rounded-[18px] border border-border bg-white px-4 py-3">
               <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"} · {String(bill.bill_status).replaceAll("_", " ")}</p></div>
-                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p><button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button></div>
+                <div><p className="text-[13px] font-bold">{bill.shop_name || "Shop not named"}</p><p className="mt-1 text-[11px] text-muted-foreground">{bill.receipt_number || "Receipt number not recorded"}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${bill.bill_status === "verified" ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{bill.bill_status === "verified" ? "Verified · receipt attached" : ["duplicate", "void"].includes(bill.bill_status) ? String(bill.bill_status).toUpperCase() : "Unverified · no confirmed receipt"}</span></div>
+                <div className="flex shrink-0 flex-col items-end gap-1"><p className="text-[13px] font-extrabold tabular-nums">{bill.bill_total_paise == null ? "Amount pending" : inr(bill.bill_total_paise)}</p>{!completed ? <button type="button" onClick={() => deleteBill(bill.id)} className="text-[10.5px] font-bold text-destructive underline">Delete bill</button> : null}</div>
               </div>
               {!completed ? (
                 <div className="mt-2">
@@ -1648,8 +1747,8 @@ function SessionDetailPage() {
                           <span className="min-w-0">{line.product_name} · {Number(line.quantity)} {line.unit}{line.is_extra ? " · Extra" : ""}</span>
                           <div className="flex shrink-0 items-center gap-2">
                             <span className="font-bold">{line.line_amount_paise == null ? "Amount not entered" : inr(line.line_amount_paise)}</span>
-                            <button type="button" onClick={() => editBillLine(bill.id, line)} aria-label={`Edit ${line.product_name}`} className="font-bold text-primary underline">Edit</button>
-                            <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button>
+                            {!completed ? <button type="button" onClick={() => editBillLine(bill.id, line)} aria-label={`Edit ${line.product_name}`} className="font-bold text-primary underline">Edit</button> : null}
+                            {!completed ? <button type="button" onClick={() => deleteBillLine(bill.id, line.id)} aria-label={`Delete ${line.product_name}`} className="rounded-full p-1 text-muted-foreground hover:bg-white"><Trash2 className="h-3 w-3" /></button> : null}
                           </div>
                         </div>
                       )}
@@ -1686,8 +1785,10 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
 
-      <section id="trip-step-4" hidden={activeStep !== 4} className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
+      {activeStep === 4 ? (
+<section id="trip-step-4" className="mt-4 overflow-hidden rounded-[24px] border border-[#3B0A0A] bg-white">
         <div className="cursor-pointer px-4 py-4">
           <span className="block text-[14px] font-extrabold">4. Finish your trip</span>
           <span className="mt-1 block text-[11.5px] text-muted-foreground">Review your totals and save the final shopping summary</span>
@@ -1739,9 +1840,16 @@ function SessionDetailPage() {
           <p className="text-[15px] font-extrabold">Trip finished</p>
           <p className="mt-1 text-[12px] text-muted-foreground">Final confirmed expense: {inr(session.confirmed_actual_total_paise)}. Your trip summary is saved and cannot be edited.</p>
           <p className="mt-2 text-[11px] text-muted-foreground">{items.filter((item) => Number(item.remaining_quantity ?? item.planned_quantity) > 0).length} planned item(s) remain unpurchased or partially purchased.</p>
+          <button type="button" onClick={() => {
+            const rows = [["Shopping Trip", tripName || "Shopping"], ["Date", tripDate || ""], ["Final total (₹)", (Number(session.confirmed_actual_total_paise || 0) / 100).toFixed(2)], ["Planned Items"], ...items.map((item) => [item.product_name, item.planned_quantity, item.unit]), ["Bills"], ...(session.bills || []).map((bill) => [bill.shop_name || "Shop", (Number(bill.bill_total_paise || 0) / 100).toFixed(2), bill.bill_status])];
+            const csv = rows.map((row) => row.map((value) => String(value ?? "").split('"').join('""')).map((value) => '"' + value + '"' ).join(",")).join("\\r\\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "shopping-trip-summary.csv"; link.click(); URL.revokeObjectURL(url);
+          }} className="mt-3 w-full rounded-full border border-primary py-3 text-[12px] font-bold text-primary">Download Summary (CSV)</button>
         </section>
       )}
 
+      {completed ? <PriceComparisonPanel items={items.filter(item=>Number(item.remaining_quantity ?? item.planned_quantity) <= 0)} paidTotalPaise={session.confirmed_actual_total_paise || session.actual_total_paise} /> : null}
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Saved estimates</h2>
         {(session.estimates || []).length ? (
@@ -1755,11 +1863,15 @@ function SessionDetailPage() {
       </section>
         </div>
       </section>
+) : null}
+      {pendingConfirmDialog}
+      <StyledConfirmModal open={deleteTripDialogOpen} title="Delete this shopping trip?" description="This will delete the trip and all saved trip data (lists, items, estimates, bills and history). Uploaded files are retained and not physically deleted. This cannot be undone." confirmLabel="Delete trip" destructive onCancel={() => setDeleteTripDialogOpen(false)} onConfirm={confirmDeleteTrip} />
+      <StyledConfirmModal open={Boolean(pendingTotalDifference)} title="Confirm final expense difference" description={pendingTotalDifference ? `Your confirmed total is ₹${pendingTotalDifference.rupees.toFixed(2)}, but bills calculate to ₹${pendingTotalDifference.calculatedRupees.toFixed(2)} (₹${Math.abs(pendingTotalDifference.difference).toFixed(2)} ${pendingTotalDifference.difference > 0 ? "higher" : "lower"}). Save this difference in the final confirmation?` : ""} confirmLabel="Confirm total" onCancel={() => setPendingTotalDifference(null)} onConfirm={() => finishSession(pendingTotalDifference?.rupees)} />
       {!completed ? (
-        <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md px-4">
+        <div className="fixed inset-x-0 bottom-[76px] z-30 mx-auto max-w-md border-t border-border bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
           <button type="button" onClick={() => setActiveStep((step) => Math.min(4, step + 1))} disabled={activeStep === 4}
             className="flex w-full items-center justify-center rounded-full bg-[#EA580C] px-4 py-3.5 text-sm font-extrabold text-white shadow-lg disabled:opacity-40">
-            {activeStep === 1 ? "Next: Estimate →" : activeStep === 2 ? "Next: Shop & bills →" : activeStep === 3 ? "Next: Finish →" : "Finish"}
+            {activeStep === 1 ? "Next: Review List →" : activeStep === 2 ? "Next: AI Estimate →" : activeStep === 3 ? "Next: Shop & Finish →" : "Finish"}
           </button>
         </div>
       ) : null}

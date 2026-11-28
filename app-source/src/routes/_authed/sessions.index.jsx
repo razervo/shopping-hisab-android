@@ -17,9 +17,8 @@ const localDate = () => {
 
 const prettyDate = (value) => {
   if (!value) return "Date not set";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" });
 };
 
 function SessionsPage() {
@@ -51,8 +50,8 @@ function SessionsPage() {
 
   const createSession = async (event) => {
     event.preventDefault();
-    if (!date) {
-      toast.error("Choose a shopping date.");
+    if (!name.trim() || !date) {
+      toast.error("Add a trip name and choose a shopping date.");
       return;
     }
     const sessionPayload = JSON.stringify({ name: name.trim(), shopping_date: date });
@@ -99,10 +98,11 @@ function SessionsPage() {
 
       <form onSubmit={createSession} className="mt-5 space-y-3 rounded-[18px] border-[1.5px] border-[#3B0A0A] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
         <div>
-          <label htmlFor="session-name" className="mb-1.5 block text-[12px] font-bold text-muted-foreground">Give this trip a name (optional)</label>
+          <label htmlFor="session-name" className="mb-1.5 block text-[12px] font-bold text-muted-foreground">Trip name (required)</label>
           <input id="session-name" value={name} onChange={(event) => setName(event.target.value)}
-            maxLength={120} placeholder="e.g. Monthly groceries"
+            maxLength={120} required placeholder="e.g. Monthly groceries"
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-[14px] outline-none focus:ring-2 focus:ring-primary/20" />
+          {!name.trim() ? <p className="mt-1 text-[11px] text-[#EA580C]">Name this trip to enable creation.</p> : null}
         </div>
         <div>
           <label htmlFor="session-date" className="mb-1.5 block text-[12px] font-bold text-muted-foreground">When are you shopping?</label>
@@ -110,9 +110,10 @@ function SessionsPage() {
             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input id="session-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)}
               className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-[14px] outline-none focus:ring-2 focus:ring-primary/20" />
+            {!date ? <p className="mt-1 text-[11px] text-[#EA580C]">Choose a shopping date to continue.</p> : null}
           </div>
         </div>
-        <button type="submit" disabled={creating}
+        <button type="submit" disabled={creating || !name.trim() || !date}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-[14px] font-bold text-primary-foreground disabled:opacity-60">
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           {creating ? "Preparing…" : "Create my shopping trip"}

@@ -14,10 +14,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ddmmyyyy, formatQty, inr } from "@/lib/format";
+import { PriceComparisonPanel } from "@/components/shopping/PriceComparisonPanel";
+import { BillUploader } from "@/components/shopping/BillUploader";
 
 export function RecordDetail({ record, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [verifiedRecord, setVerifiedRecord] = useState(null);
+  const [verifyingBill, setVerifyingBill] = useState(false);
+  const displayRecord = verifiedRecord || record;
   const items = record.items || [];
   const total = record.source === "session" ? (Number(record.total) || 0) : (items.reduce((s, i) => s + (Number(i.amount) || 0), 0) || Number(record.total) || 0);
 
@@ -31,6 +36,22 @@ export function RecordDetail({ record, onDeleted }) {
     } catch {
       /* ignore */
     }
+  };
+
+  const attachVerificationBill = async (_extracted, fileUri) => {
+    if (!fileUri || verifyingBill) return;
+    setVerifyingBill(true);
+    try {
+      const updated = await base44.entities.ShoppingRecord.update(record.id, {
+        shop_name: record.shop_name || "", date: record.date, items, total, item_count: items.length,
+        notes: record.notes || "", source: "bill", bill_file_uri: fileUri,
+        receipts: record.receipts || [], reconciliation_status: record.reconciliation_status || "not_required",
+      });
+      setVerifiedRecord(updated);
+      toast.success("Bill uploaded — purchase verified");
+    } catch (error) {
+      toast.error("Bill uploaded, but verification could not be saved", { description: error?.message || "Please try again." });
+    } finally { setVerifyingBill(false); }
   };
 
   const remove = async () => {
@@ -132,6 +153,9 @@ export function RecordDetail({ record, onDeleted }) {
         </section>
       ) : null}
 
+      {record.source !== "session" && items.length ? (
+        <PriceComparisonPanel items={items.map(item=>({name:item.name,quantity:item.qty||1,unit:item.unit||"pcs",paidPaise:Number(item.amount||0)>0?Math.round(Number(item.amount)*100):null}))} paidTotalPaise={Math.round(Number(total||0)*100)} />
+      ) : null}
       {record.notes ? (
         <div className="rounded-[20px] border border-border bg-white px-5 py-4">
           <p className="micro text-muted-foreground">Notes</p>
@@ -139,7 +163,7 @@ export function RecordDetail({ record, onDeleted }) {
         </div>
       ) : null}
 
-      {record.bill_file_uri ? (
+      {displayRecord.bill_file_uri ? (
         <button
           type="button"
           onClick={openBill}
@@ -147,6 +171,13 @@ export function RecordDetail({ record, onDeleted }) {
         >
           <FileImage className="h-4 w-4" /> View uploaded list / bill
         </button>
+      ) : null}
+
+      {record.source !== "session" && !displayRecord.bill_file_uri && record.source !== "bill" ? (
+        <section className="rounded-[22px] border border-amber-200 bg-white p-4">
+          <div className="mb-3"><p className="text-[13px] font-extrabold">Unverified purchase</p><p className="mt-1 text-[11.5px] text-muted-foreground">Add the bill anytime to verify this quick log.</p></div>
+          <BillUploader compact purpose="priced_list" onExtracted={attachVerificationBill} />
+        </section>
       ) : null}
 
       {record.source === "session" ? (

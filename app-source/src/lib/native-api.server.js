@@ -573,22 +573,35 @@ async function callGeminiVision(env, imageDataUrl, instructions, maxTokens = 220
 }
 
 async function readBillWithFallback(env, imageDataUrl, instructions, maxTokens = 2200, allowEmptyItems = false) {
+  let geminiError = null;
   if (env.GEMINI_API_KEY) {
     try {
       const parsed = await callGeminiVision(env, imageDataUrl, instructions, maxTokens);
       if (parsed.draft.items.length || allowEmptyItems) return { ...parsed, reader: "gemini" };
-      throw new Error("Gemini did not detect any shopping-list items.");
-    } catch (geminiError) {
-      console.warn("Gemini OCR failed; trying Moondream fallback:", geminiError?.message || geminiError);
+      geminiError = new Error("Gemini did not detect any shopping-list items.");
+    } catch (cause) {
+      geminiError = cause;
+      console.warn("Gemini OCR failed; trying Moondream fallback:", cause?.message || cause);
     }
   }
-  if (!env.AI) throw new Error("Gemini OCR was unavailable and the Moondream fallback is not configured.");
-  const parsed = await callVisionModel(env, imageDataUrl, instructions, maxTokens);
-  return { ...parsed, reader: "moondream_fallback" };
+  if (env.AI) {
+    try {
+      const parsed = await callVisionModel(env, imageDataUrl, instructions, maxTokens);
+      if (parsed?.draft && Array.isArray(parsed.draft.items) && (parsed.draft.items.length || allowEmptyItems)) {
+        return { ...parsed, reader: "moondream_fallback" };
+      }
+      throw new Error("Moondream returned an invalid or empty OCR result.");
+    } catch (fallbackError) {
+      const details = [geminiError?.message, fallbackError?.message].filter(Boolean).join(" | ");
+      throw new Error(details ? "OCR failed with Gemini and Cloudflare AI: " + details : "OCR could not read this image.");
+    }
+  }
+  throw new Error(geminiError
+    ? "Gemini OCR failed and Cloudflare AI fallback is not configured: " + geminiError.message
+    : "OCR is unavailable. Configure GEMINI_API_KEY or the Cloudflare AI binding.");
 }
 
 async function handleGeminiOcrTest(request, env, user) {
-  if (!env.GEMINI_API_KEY) return error("Gemini test is not configured. Add the GEMINI_API_KEY Worker secret.", 503);
   const form = await request.formData();
   const file = form.get("file");
   const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
@@ -605,58 +618,8 @@ async function handleGeminiOcrTest(request, env, user) {
   const started = Date.now();
   const modelPromise = (async () => {
     const modelStarted = Date.now();
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [
-          { text: prompt + " Return only JSON matching {draft:{shopName:string,date:string|null,notes:string,items:[{name:string,qty:number,unit:string,price:number,amount:number}]}}. Use an empty shopName and null date if absent. Currency is INR. Do not add commentary." },
-          { inlineData: { mimeType: mime, data: imageBase64 } },
-        ] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 3000,
-          responseMimeType: "application/json",
-          responseJsonSchema: {
-            type: "OBJECT",
-            properties: {
-              draft: {
-                type: "OBJECT",
-                properties: {
-                  shopName: { type: "STRING" },
-                  date: { type: "STRING", nullable: true },
-                  notes: { type: "STRING" },
-                  items: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        name: { type: "STRING" },
-                        qty: { type: "NUMBER" },
-                        unit: { type: "STRING" },
-                        price: { type: "NUMBER" },
-                        amount: { type: "NUMBER" }
-                      },
-                      required: ["name", "qty", "unit", "price", "amount"]
-                    }
-                  }
-                },
-                required: ["shopName", "date", "notes", "items"]
-              }
-            },
-            required: ["draft"]
-          }
-        }
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const detail = payload?.error?.message || "Gemini API request failed.";
-      throw new Error(detail.slice(0, 500));
-    }
-    const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
-    const parsed = parseModelJson(text);
-    if (!parsed?.draft || !Array.isArray(parsed.draft.items)) throw new Error("Gemini returned an unexpected shopping-list format.");
+    const imageDataUrl = `data:${mime};base64,${imageBase64}`;
+    const parsed = await readBillWithFallback(env, imageDataUrl, prompt, 3000, purpose === "priced_list");
     return { parsed, ms: Date.now() - modelStarted };
   })();
   const uploadPromise = (async () => {
@@ -670,11 +633,13 @@ async function handleGeminiOcrTest(request, env, user) {
   return json({
     draft: model.parsed.draft,
     file_uri: uploaded.file_uri,
-    timing: { gemini_ms: model.ms, drive_upload_ms: uploaded.ms, total_ms: Date.now() - started }
+    reader: model.parsed.reader,
+    timing: { ocr_ms: model.ms, drive_upload_ms: uploaded.ms, total_ms: Date.now() - started }
   });
 }
 
 async function handleDirectBillRead(request, env, user) {
+  const started = Date.now();
   const form = await request.formData();
   const file = form.get("file");
   const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
@@ -692,32 +657,40 @@ async function handleDirectBillRead(request, env, user) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-  // Save the original receipt first. Do not spend AI inference on a file that
-  // cannot be persisted (for example, when Drive is disconnected or unavailable).
-  // The upload operation is idempotent, so a retry after a lost response recovers
-  // the existing Drive file instead of creating another copy.
-  const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
-  let uploaded;
-  try {
-    uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
-  } catch (cause) {
-    throw new Error(`Receipt could not be saved to Google Drive: ${cause?.message || "Please reconnect Drive and retry."}`);
-  }
-  const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
-  const fileUri = `cf-file:${id}`;
-
+  // OCR comes first so receipt extraction remains usable when Drive is disconnected.
+  const ocrStarted = Date.now();
   let parsed;
   try {
     parsed = await readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
   } catch (cause) {
-    return json({ draft: null, file_uri: fileUri, recoverable: true, error: `Receipt saved. AI reading failed: ${cause?.message || "Try again."}` });
+    return json({ draft: null, file_uri: null, recoverable: true, error: cause?.message || "OCR failed. Try again." });
   }
   if (!parsed?.draft || !Array.isArray(parsed.draft.items) || (!parsed.draft.items.length && purpose !== "priced_list")) {
-    return json({ draft: null, file_uri: fileUri, recoverable: true, error: "Receipt saved, but the bill could not be interpreted. Retry reading or enter items manually." });
+    return json({ draft: null, file_uri: null, recoverable: true, error: "The bill could not be interpreted. Retry reading or enter items manually." });
   }
-  return json({ draft: parsed.draft, file_uri: fileUri });
-}
 
+  const ocrMs = Date.now() - ocrStarted;
+  // Drive is optional. If connected, save the source image and attach metadata.
+  const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
+  let fileUri = null;
+  let driveUploadMs = 0;
+  try {
+    const uploadStarted = Date.now();
+    const uploaded = await uploadGoogleDriveFile(env.DB, user.id, env, file, file.name || "shopping-list.jpg", uploadKey);
+    const id = await ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime);
+    fileUri = `cf-file:${id}`;
+    driveUploadMs = Date.now() - uploadStarted;
+  } catch (cause) {
+    console.warn("Optional Drive receipt upload failed; returning OCR draft without attachment:", cause?.message || cause);
+  }
+  return json({
+    draft: parsed.draft,
+    file_uri: fileUri,
+    reader: parsed.reader,
+    drive_optional: true,
+    timing: { ocr_ms: ocrMs, drive_upload_ms: driveUploadMs, total_ms: Date.now() - started }
+  });
+}
 
 async function queryCombinedReportRecords(db, userId, { shop = "", from = "", to = "", recordId = "", limit = 200, offset = 0 } = {}) {
   const cleanShop = String(shop || "").trim().slice(0, 100);
@@ -899,7 +872,7 @@ async function handleAI(request, env, user) {
       const bytes = new Uint8Array(await object.arrayBuffer());
       if (!bytes.length || bytes.length > MAX_FILE_BYTES) return error("The bill image is empty or too large. Please choose an image under 10 MB.");
       const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
-      parsed = await callVisionModel(env, imageDataUrl, prompt, 2200);
+      parsed = await readBillWithFallback(env, imageDataUrl, prompt, 2200, false);
     } else if (mime === "application/pdf") {
       if (!env.AI?.toMarkdown) return error("PDF reading is not enabled. Please upload a clear JPG or PNG photo instead.", 503);
       const converted = await env.AI.toMarkdown().transform({
@@ -1125,6 +1098,105 @@ async function handleMigrationFile(request, env, user) {
   return json({ file_uri: `cf-file:${id}`, already_imported: false }, 201);
 }
 
+
+// Live public price lookup with fixed retailer hosts only. It intentionally falls
+// back when pages are blocked or prices cannot be matched with confidence.
+const COMPARE_BASELINE = [
+  { keys: ["rice"], rate: 65, unit: "kg" }, { keys: ["dal", "lentil"], rate: 130, unit: "kg" },
+  { keys: ["atta", "flour"], rate: 42, unit: "kg" }, { keys: ["sugar"], rate: 45, unit: "kg" },
+  { keys: ["oil", "mustard"], rate: 150, unit: "l" }, { keys: ["milk"], rate: 60, unit: "l" },
+  { keys: ["potato"], rate: 30, unit: "kg" }, { keys: ["onion"], rate: 35, unit: "kg" },
+  { keys: ["tomato"], rate: 40, unit: "kg" }, { keys: ["egg"], rate: 8, unit: "pcs" },
+  { keys: ["salt"], rate: 20, unit: "kg" }, { keys: ["tea"], rate: 300, unit: "kg" },
+  { keys: ["soap"], rate: 35, unit: "pcs" }, { keys: ["default"], rate: 80, unit: "kg" },
+];
+function comparisonUnitRate(item) {
+  const name = String(item.name || "").toLowerCase();
+  const found = COMPARE_BASELINE.find((entry) => entry.keys.some((key) => name.includes(key)));
+  return found || COMPARE_BASELINE[COMPARE_BASELINE.length - 1];
+}
+function unitQuantity(qty, unit) {
+  const value = Number(qty);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const u = String(unit || "pcs").toLowerCase();
+  if (["g","gram","grams"].includes(u)) return value / 1000;
+  if (["ml","milliliter","milliliters"].includes(u)) return value / 1000;
+  return value;
+}
+async function findPublicGroceryPrice(item, pinCode) {
+  const query = encodeURIComponent(String(item.name || "").slice(0, 90) + " " + String(item.quantity || 1) + " " + String(item.unit || ""));
+  const targets = [
+    { store: "BigBasket", url: `https://www.bigbasket.com/ps/?q=${query}` },
+    { store: "JioMart", url: `https://www.jiomart.com/search/${query}` },
+  ];
+  const tokens = String(item.name || "").toLowerCase().split(/[^a-z0-9]+/).filter(t=>t.length>2);
+  for (const target of targets) {
+    try {
+      const response = await fetch(target.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; ShoppingHisab/1.0)", "Accept": "text/html" }, signal: AbortSignal.timeout(4500 });
+      if (!response.ok) continue;
+      const html = await response.text();
+      if (html.length > 1_500_000) continue;
+      const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#x20;/gi," ").replace(/&amp;/gi,"&").replace(/\s+/g," ");
+      const low = text.toLowerCase();
+      if (tokens.length && !tokens.some(token=>low.includes(token))) continue;
+      const match = text.match(/(?:₹|Rs\.?\s*)(\d{1,5}(?:\.\d{1,2})?)/i);
+      if (match) {
+        const price = Number(match[1]);
+        if (price > 0 && price < 100000) return { pricePaise: Math.round(price * 100), store: target.store, source: target.url };
+      }
+    } catch { /* blocked, timeout or inaccessible listing: try next store */ }
+  }
+  return null;
+}
+async function historicalUnitRate(db, userId, item) {
+  try {
+    const rows = await db.prepare("SELECT items_json FROM shopping_records WHERE user_id = ? ORDER BY date DESC LIMIT 80").bind(userId).all();
+    const wanted = String(item.name || "").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    for (const row of rows.results || []) {
+      for (const past of parseItems(row.items_json)) {
+        const name = String(past.name || "").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+        if (!name || !wanted || (name !== wanted && !(name.includes(wanted) || wanted.includes(name)))) continue;
+        const amount = Number(past.amount), qty = unitQuantity(past.qty, past.unit);
+        if (Number.isFinite(amount) && amount > 0 && qty > 0) return Math.round(amount * 100 / qty);
+      }
+    }
+  } catch { /* history is an optional fallback */ }
+  return null;
+}
+async function handleCompareBasket(request, env, user) {
+  if (request.method !== "POST") return error("Method not allowed.", 405);
+  let payload;
+  try { payload = await request.json(); } catch { return error("Invalid JSON request."); }
+  if (!Array.isArray(payload?.items) || payload.items.length < 1 || payload.items.length > 30) return error("Provide between 1 and 30 basket items.");
+  const pinCode = String(payload.pinCode || "").trim();
+  if (pinCode && !/^\d{6}$/.test(pinCode)) return error("PinCode must be a 6-digit Indian postal code.");
+  const clean = payload.items.map((item) => {
+    const name = String(item?.name || "").trim().slice(0, 100);
+    const qty = Number(item?.quantity ?? 1), unit = String(item?.unit || "pcs").trim().slice(0, 20);
+    const paid = item?.paidPaise == null ? null : Number(item.paidPaise);
+    if (!name || !Number.isFinite(qty) || qty <= 0 || qty > 100000 || (paid !== null && (!Number.isFinite(paid) || paid < 0 || paid > 100000000))) throw new Error("Each item needs a name, valid quantity, unit, and optional paid amount.");
+    return { name, quantity: qty, unit, paidPaise: paid };
+  });
+  const rows = await Promise.all(clean.map(async (item) => {
+    const live = await findPublicGroceryPrice(item, pinCode);
+    const historical = live ? null : await historicalUnitRate(env.DB, user.id, item);
+    const baseline = live ? null : historical ?? comparisonUnitRate(item).rate * 100;
+    const ratePaise = live?.pricePaise ?? baseline;
+    const quantity = unitQuantity(item.quantity, item.unit);
+    const onlinePaise = Math.max(0, Math.round(ratePaise * quantity));
+    return {
+      name: item.name, paidPaise: item.paidPaise, onlinePaise,
+      sourceStore: live?.store || (historical !== null ? "Your past purchase (D1)" : "India baseline (estimate)"),
+      sourceUrl: live?.source || null,
+      diffPaise: item.paidPaise === null ? null : item.paidPaise - onlinePaise,
+      fallback: !live,
+    };
+  }));
+  const paidTotalPaise = Number.isSafeInteger(Number(payload.paidTotalPaise)) && Number(payload.paidTotalPaise) >= 0 ? Number(payload.paidTotalPaise) : rows.reduce((sum, row) => sum + (Number(row.paidPaise) || 0), 0);
+  const onlineTotalPaise = rows.reduce((sum, row) => sum + row.onlinePaise, 0);
+  return json({ items: rows, paidTotalPaise, onlineTotalPaise, netDiffPaise: paidTotalPaise - onlineTotalPaise });
+}
+
 export async function handleNativeApi(request, env) {
   const url = new URL(request.url);
   try {
@@ -1132,6 +1204,7 @@ export async function handleNativeApi(request, env) {
     if (!authContext) return error("Please sign in to continue.", 401);
     const { user } = authContext;
 
+    if (url.pathname === "/api/compare-basket") return await handleCompareBasket(request, env, user);
     if (url.pathname === "/api/reports" || url.pathname === "/api/reports/export") {
       return await handleReports(request, env, user, url);
     }
@@ -1153,6 +1226,6 @@ export async function handleNativeApi(request, env) {
     return error("Not found.", 404);
   } catch (cause) {
     console.error("Native API request failed", cause);
-    return error("Internal server error. Please try again.", 500);
+    return error(cause?.message || "The request failed unexpectedly. Please retry.", 500);
   }
 }

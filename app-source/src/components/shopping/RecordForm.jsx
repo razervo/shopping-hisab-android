@@ -11,6 +11,7 @@ import { BillUploader } from "@/components/shopping/BillUploader";
 import { estimateMarketRates } from "@/lib/server-fns";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { parseVoiceShoppingItems } from "@/lib/shopping-categories";
+import { StyledConfirmModal } from "@/components/ui/styled-confirm-modal";
 
 export function RecordForm({
   initial,
@@ -30,6 +31,7 @@ export function RecordForm({
     initial?.items?.length ? toFormItems(initial.items) : [emptyItem()],
   );
   const [error, setError] = useState("");
+  const [incompleteItemsAlert, setIncompleteItemsAlert] = useState("");
   const [estimating, setEstimating] = useState(false);
   const [estimateMsg, setEstimateMsg] = useState("");
   const [estimatedIds, setEstimatedIds] = useState(() => new Set(initial?.estimatedIds || []));
@@ -367,7 +369,7 @@ export function RecordForm({
     const incomplete = items.filter((i) => String(i.name || "").trim() && (!(Number(i.qty) > 0) || !String(i.unit || "").trim()));
     if (incomplete.length) {
       const labels = incomplete.map((i) => String(i.name || "Unnamed item").trim()).slice(0, 5).join(", ");
-      window.alert(`Complete quantity and unit for: ${labels}${incomplete.length > 5 ? " and more" : ""} before estimating.`);
+      setIncompleteItemsAlert(`Complete quantity and unit for: ${labels}${incomplete.length > 5 ? " and more" : ""} before estimating.`);
       return;
     }
     const targets = items.filter((i) => String(i.name).trim() && !(Number(i.price) > 0));
@@ -670,6 +672,7 @@ export function RecordForm({
           </button>
         </div>
       </div>
+      <StyledConfirmModal open={Boolean(incompleteItemsAlert)} title="Complete item details" description={incompleteItemsAlert} confirmLabel="OK" showCancel={false} onCancel={() => setIncompleteItemsAlert("")} onConfirm={() => setIncompleteItemsAlert("")} />
     </form>
   );
 }

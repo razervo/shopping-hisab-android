@@ -33,7 +33,7 @@ function HistoryPage() {
 
   return (
     <div className="pb-2">
-      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">My shopping</h1>
+      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Past Purchases</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">
         Your past shopping trips and purchases, newest first.
       </p>
@@ -75,6 +75,10 @@ function HistoryPage() {
         </div>
       </form>
 
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Link to="/add/manual" className="flex min-h-12 items-center justify-center rounded-full bg-primary px-3 text-[12px] font-bold text-primary-foreground">Quick log purchase</Link>
+        <Link to="/add/bill" className="flex min-h-12 items-center justify-center rounded-full border border-primary/30 bg-primary/5 px-3 text-[12px] font-bold text-primary">Upload bill to verify</Link>
+      </div>
       <div className="mb-2 mt-5 flex items-baseline justify-between px-1">
         <h2 className="text-[13px] font-bold tracking-wide">
           {records.length > 0
@@ -108,7 +112,7 @@ function HistoryPage() {
             to="/add"
             className="mt-4 inline-block rounded-full bg-primary px-5 py-2.5 text-[13px] font-bold text-primary-foreground"
           >
-            Start a shopping trip
+            Record a past purchase
           </Link>
         </div>
       ) : (
@@ -127,6 +131,7 @@ function HistoryPage() {
                     {ddmmyyyy(r.date)} · {r.item_count ?? r.items?.length ?? 0}{" "}
                     {(r.item_count ?? r.items?.length ?? 0) === 1 ? "item" : "items"}
                   </p>
+                  <span className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold " + (r.source === "bill" || r.reconciliation_status === "complete" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{r.source === "bill" || r.reconciliation_status === "complete" ? "Verified" : "Unverified"}</span>
                 </div>
                 <span className="tnum text-[15px] font-bold">{inr(r.total)}</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
