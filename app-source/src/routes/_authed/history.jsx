@@ -33,7 +33,7 @@ function HistoryPage() {
 
   return (
     <div className="pb-2">
-      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">My shopping</h1>
+      <h1 className="text-[24px] font-extrabold leading-tight tracking-tight">Past Purchases</h1>
       <p className="mt-1 text-[13.5px] text-muted-foreground">
         Your past shopping trips and purchases, newest first.
       </p>
@@ -112,7 +112,7 @@ function HistoryPage() {
             to="/add"
             className="mt-4 inline-block rounded-full bg-primary px-5 py-2.5 text-[13px] font-bold text-primary-foreground"
           >
-            Start a shopping trip
+            Record a past purchase
           </Link>
         </div>
       ) : (
