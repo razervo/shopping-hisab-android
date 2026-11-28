@@ -1202,7 +1202,7 @@ function SessionDetailPage() {
         </div>
         <div className="space-y-3 px-3 pb-4">
       {!completed ? (
-        <form onSubmit={saveList} className="mt-5 space-y-3 rounded-[24px] border border-border bg-white p-4">
+        <form onSubmit={saveList} className="mt-3 space-y-3 p-1">
           <div>
             <p className="text-[15px] font-extrabold">Enter a shopping list manually</p>
             <p className="mt-1 text-[12px] text-muted-foreground">You can add another list at any time. Each list remains saved separately.</p>
