@@ -268,6 +268,7 @@ function SessionDetailPage() {
       const parsedItems = parseVoiceShoppingItems(transcript);
       if (!parsedItems.length) return toast.info("No items recognized. Try saying: milk, eggs, rice.");
       setRows((current) => [...current.filter((row) => String(row.name || "").trim()), ...parsedItems.map((item) => ({ ...blankRow(), name: item.name, quantity: String(item.quantity), unit: item.unit }))]);
+      setInputMode("type");
       setActiveStep(1);
       toast.success(`Added ${names.length} item(s) from voice. Review before saving.`);
     };
