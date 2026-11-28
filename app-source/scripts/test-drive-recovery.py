@@ -48,10 +48,10 @@ assert "SELECT original_name, size_bytes FROM uploaded_files WHERE user_id = ? A
 direct_start = source.index("async function handleDirectBillRead(")
 direct_end = source.index("async function queryCombinedReportRecords(", direct_start)
 direct_read = source[direct_start:direct_end]
+ocr_position = direct_read.index("parsed = await readBillWithFallback")
 upload_position = direct_read.index("uploaded = await uploadGoogleDriveFile")
 metadata_position = direct_read.index("ensureDriveUploadMetadata(env.DB, user.id, uploaded, mime)", upload_position)
-ocr_position = direct_read.index("parsed = await readBillWithFallback", metadata_position)
-assert upload_position >= 0 and metadata_position > upload_position and ocr_position > metadata_position
+assert ocr_position >= 0 and upload_position > ocr_position and metadata_position > upload_position
 assert "Promise.allSettled([readPromise, uploadPromise])" not in direct_read
 assert "recoverable: true" in direct_read
 assert "file_uri: fileUri" in direct_read
