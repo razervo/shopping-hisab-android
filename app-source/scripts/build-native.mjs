@@ -19,5 +19,5 @@ if (!Array.isArray(config.d1_databases) || !config.d1_databases.some((database) 
 if (!config.ai?.binding) {
   throw new Error("Native Worker config is missing the AI binding; refusing to deploy.");
 }
-config.name = "shopping-hisab-native";
+// Do not rewrite config.name here; preview upload overrides its target via --name.
 await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
