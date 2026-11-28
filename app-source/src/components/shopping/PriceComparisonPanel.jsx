@@ -8,7 +8,7 @@ export function PriceComparisonPanel({items=[],paidTotalPaise=0,pinCode=""}) {
   if(!items.length)return toast.error("No purchased items to compare.");
   setLoading(true);setResult(null);
   try {
-   const response=await fetch("/api/compare-basket",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(i=>({name:i.name||i.product_name,quantity:i.quantity??i.qty??i.planned_quantity??1,unit:i.unit||"pcs",paidPaise:i.paidPaise??i.amountPaise??null})),pinCode})});
+   const response=await fetch("/api/compare-basket",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(i=>({name:i.name||i.product_name,quantity:i.quantity??i.qty??i.planned_quantity??1,unit:i.unit||"pcs",paidPaise:i.paidPaise??i.amountPaise??null})),paidTotalPaise,pinCode})});
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(data.error||"Comparison unavailable.");
    setResult(data);

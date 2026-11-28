@@ -1192,7 +1192,7 @@ async function handleCompareBasket(request, env, user) {
       fallback: !live,
     };
   }));
-  const paidTotalPaise = rows.reduce((sum, row) => sum + (Number(row.paidPaise) || 0), 0);
+  const paidTotalPaise = Number.isSafeInteger(Number(payload.paidTotalPaise)) && Number(payload.paidTotalPaise) >= 0 ? Number(payload.paidTotalPaise) : rows.reduce((sum, row) => sum + (Number(row.paidPaise) || 0), 0);
   const onlineTotalPaise = rows.reduce((sum, row) => sum + row.onlinePaise, 0);
   return json({ items: rows, paidTotalPaise, onlineTotalPaise, netDiffPaise: paidTotalPaise - onlineTotalPaise });
 }
