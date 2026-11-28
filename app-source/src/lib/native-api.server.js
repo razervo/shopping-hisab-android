@@ -1134,7 +1134,7 @@ async function findPublicGroceryPrice(item, pinCode) {
   const tokens = String(item.name || "").toLowerCase().split(/[^a-z0-9]+/).filter(t=>t.length>2);
   for (const target of targets) {
     try {
-      const response = await fetch(target.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; ShoppingHisab/1.0)", "Accept": "text/html" }, signal: AbortSignal.timeout(4500 });
+      const response = await fetch(target.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; ShoppingHisab/1.0)", "Accept": "text/html" }, signal: AbortSignal.timeout(4500) });
       if (!response.ok) continue;
       const html = await response.text();
       if (html.length > 1_500_000) continue;
