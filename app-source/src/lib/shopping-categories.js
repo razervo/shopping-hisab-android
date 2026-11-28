@@ -33,7 +33,7 @@ export function parseVoiceShoppingItems(transcript) {
   const cleaned = String(transcript || "")
     .replace(/^\s*(add|please add|i need|we need|i want|we want|buy|shopping list)\s+/i, "")
     .replace(/\s+(?:and|then)\s+/gi, ",");
-  const units = "(kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
+  const unitPattern = "(kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|piece|pieces|pkt|packet|pack|dozen|box)";
   const normalizeUnit = (value) => {
     const key = String(value || "").toLowerCase();
     if (/^(kg|kgs|kilo|kilogram)$/.test(key)) return "kg";
@@ -44,14 +44,21 @@ export function parseVoiceShoppingItems(transcript) {
     if (/^(pkt|packet|pack)$/.test(key)) return "pkt";
     return key === "dozen" ? "dozen" : "box";
   };
+
   return cleaned.split(/[,;\n]+/).map((raw) => {
     const item = raw.trim().replace(/^[\s-]+|[.!?]+$/g, "");
     if (!item) return null;
-    const prefix = item.match(new RegExp("^(\\d+(?:\\.\\d+)?)\\s*" + units, "i"));
-    const reverse = item.match(new RegExp("^\\d+(?:\\.\\d+)?\\s*" + units + "\\s+(.+)$", "i"));
-    if (reverse && prefix) return { name: reverse[1].trim(), quantity: Number(prefix[1]), unit: normalizeUnit(prefix[2]) };
-    const suffix = item.match(new RegExp("^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*" + units + "$", "i"));
-    return { name: suffix ? suffix[1].trim() : item, quantity: suffix ? Number(suffix[2]) : 1, unit: suffix ? normalizeUnit(suffix[3]) : "pcs" };
+
+    // Accept both spoken orderings: "rice 1 kg" and "1 kg rice".
+    const suffix = item.match(new RegExp("^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s*" + unitPattern + "$", "i"));
+    const prefix = item.match(new RegExp("^(\\d+(?:\\.\\d+)?)\\s*" + unitPattern + "\\s+(.+)$", "i"));
+    if (suffix && suffix[1].trim()) {
+      return { name: suffix[1].trim(), quantity: Number(suffix[2]), unit: normalizeUnit(suffix[3]) };
+    }
+    if (prefix && prefix[3].trim()) {
+      return { name: prefix[3].trim(), quantity: Number(prefix[1]), unit: normalizeUnit(prefix[2]) };
+    }
+    return { name: item, quantity: 1, unit: "pcs" };
   }).filter((item) => item && item.name);
 }
 const CATEGORY_RULES = [
