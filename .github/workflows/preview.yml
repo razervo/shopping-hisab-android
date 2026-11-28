@@ -28,7 +28,7 @@ jobs:
         working-directory: app-source
         run: npm run build
       - name: Set preview Google OAuth secret
-        if: ${{ secrets.GOOGLE_CLIENT_SECRET != '' }}
+        if: ${{ env.GOOGLE_CLIENT_SECRET != '' }}
         working-directory: app-source
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

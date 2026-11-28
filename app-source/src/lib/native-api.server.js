@@ -639,6 +639,7 @@ async function handleGeminiOcrTest(request, env, user) {
 }
 
 async function handleDirectBillRead(request, env, user) {
+  const started = Date.now();
   const form = await request.formData();
   const file = form.get("file");
   const purpose = form.get("purpose") === "priced_list" ? "priced_list" : "shopping_list";
@@ -657,6 +658,7 @@ async function handleDirectBillRead(request, env, user) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageDataUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
   // OCR comes first so receipt extraction remains usable when Drive is disconnected.
+  const ocrStarted = Date.now();
   let parsed;
   try {
     parsed = await readBillWithFallback(env, imageDataUrl, `Purpose: ${purpose}. ${prompt}`, 2200, purpose === "priced_list");
@@ -667,6 +669,7 @@ async function handleDirectBillRead(request, env, user) {
     return json({ draft: null, file_uri: null, recoverable: true, error: "The bill could not be interpreted. Retry reading or enter items manually." });
   }
 
+  const ocrMs = Date.now() - ocrStarted;
   // Drive is optional. If connected, save the source image and attach metadata.
   const uploadKey = request.headers.get("Idempotency-Key") || crypto.randomUUID();
   let fileUri = null;
@@ -685,7 +688,7 @@ async function handleDirectBillRead(request, env, user) {
     file_uri: fileUri,
     reader: parsed.reader,
     drive_optional: true,
-    timing: { ocr_ms: 0, drive_upload_ms: driveUploadMs, total_ms: Date.now() - started }
+    timing: { ocr_ms: ocrMs, drive_upload_ms: driveUploadMs, total_ms: Date.now() - started }
   });
 }
 
