@@ -26,6 +26,9 @@ assert.match(route, /seenEstimateItemIds\.has\(itemId\)/, "duplicate item lines 
 assert.match(route, /duplicates a shopping item/, "duplicate estimates return a clear validation error");
 assert.match(route, /Number\(line\.estimated_line_total_paise\) !== lineTotal/, "a mismatching client total is rejected");
 assert.match(route, /total does not match its quantity and unit price/, "mismatch has a clear response");
-assert.match(ui, /estimated_line_total_paise: Math\.round\(Number\(item\.planned_quantity \|\| 0\) \* unitPrice\)/, "the UI sends the same quantity-times-unit-price calculation");
+assert.match(ui, /const lineTotalPaise = Math\.round\(rupees \* 100\)/, "the UI converts entered rupees into integer paise");
+assert.match(ui, /const unitPrice = Math\.round\(lineTotalPaise \/ quantity\)/, "the UI derives the per-unit paise price from the entered line total and quantity");
+assert.match(ui, /estimated_unit_price_paise: unitPrice/, "the UI sends the derived unit price");
+assert.match(ui, /estimated_line_total_paise: lineTotalPaise/, "the UI sends the entered line total for server-side math validation");
 
 console.log("PASS: estimate totals use safe server-side paise arithmetic and reject client/server mismatches.");

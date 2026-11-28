@@ -93,8 +93,9 @@ assert "onClick={deleteTrip}" in route and "all saved trip data" in route.lower(
 # Session creation permits an omitted name because the UI labels it optional.
 create_engine = (ROOT / "src/lib/shopping-engine.server.js").read_text(encoding="utf-8")
 create_page = (ROOT / "src/routes/_authed/sessions.index.jsx").read_text(encoding="utf-8")
-assert 'const name=text(body.name,120) || "Shopping trip";' in create_engine
-assert "Give this trip a name (optional)" in create_page
+assert 'const name=text(body.name,120);' in create_engine
+assert 'if(!name)return fail("A shopping trip name is required.");' in create_engine
+assert "Trip name (required)" in create_page and "Add a trip name." in create_page
 # Session creation retry keys are payload-bound: same payload recovers, changed input gets a new key.
 assert "createSessionKeyRef.current.payload !== sessionPayload" in create_page
 assert "createSessionKeyRef.current = { payload: sessionPayload, key: crypto.randomUUID() }" in create_page
