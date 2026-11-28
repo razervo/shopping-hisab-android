@@ -21,4 +21,10 @@ assert.match(route, /try\{await db\.batch\(statements\);\}catch\(cause\)/, "esti
 assert.match(route, /const winner=await db\.prepare\("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys/, "estimate create recovers the committed race winner");
 assert.match(route, /winner\.request_hash!==requestHash/, "race recovery rejects conflicting payloads");
 assert.match(route, /return json\(safeJson\(winner\.response_json,\{\}\),Number\(winner\.response_status\)\|\|200\)/, "same-payload race replays the exact response");
-console.log("PASS: estimate creation retries are idempotent and conflicting payload reuse is rejected.");
+
+const auditInsert = route.indexOf('statements.push(db.prepare("INSERT INTO shopping_audit_events');
+const batchIndex = route.indexOf("try{await db.batch(statements);}");
+assert.ok(auditInsert >= 0 && auditInsert < batchIndex, "estimate creation audit record must be included in the same atomic batch as estimate lines and retry marker");
+assert.match(route.slice(auditInsert, batchIndex), /estimate_version_created/);
+assert.doesNotMatch(route.slice(batchIndex), /await audit\(/, "estimate audit must not be a post-commit separate write");
+\nconsole.log("PASS: estimate creation retries, conflict recovery, and atomic audit logging are verified.");

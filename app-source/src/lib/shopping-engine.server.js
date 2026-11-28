@@ -518,8 +518,8 @@ export async function handleShoppingEngine(request, env) {
     statements.push(db.prepare("UPDATE shopping_sessions SET latest_estimate_id=?,updated_at=? WHERE id=? AND user_id=?").bind(estimateId,timestamp,sessionId,userId));
     const responseBody={id:estimateId,version_number:version,estimated_total_paise:totalPaise,lines:prepared};
     statements.push(db.prepare("INSERT INTO shopping_idempotency_keys (id,user_id,session_id,operation,idempotency_key,request_hash,response_json,response_status,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,operation,idempotencyKey,requestHash,JSON.stringify(responseBody),201,timestamp));
+    statements.push(db.prepare("INSERT INTO shopping_audit_events (id,user_id,session_id,entity_type,entity_id,event_type,before_json,after_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(id(),userId,sessionId,"estimate",estimateId,"estimate_version_created",null,JSON.stringify({version_number:version,estimated_total_paise:totalPaise,line_count:prepared.length}),timestamp));
     try{await db.batch(statements);}catch(cause){const winner=await db.prepare("SELECT request_hash,response_json,response_status FROM shopping_idempotency_keys WHERE user_id=? AND operation=? AND idempotency_key=?").bind(userId,operation,idempotencyKey).first();if(winner){if(winner.request_hash!==requestHash)return fail("This idempotency key was already used for a different estimate request.",409);return json(safeJson(winner.response_json,{}),Number(winner.response_status)||200);}throw cause;}
-    await audit(db,userId,sessionId,"estimate",estimateId,"estimate_version_created",{version_number:version,estimated_total_paise:totalPaise,line_count:prepared.length});
     return json(responseBody,201);
   }
 
