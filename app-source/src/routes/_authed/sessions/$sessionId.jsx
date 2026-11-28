@@ -1849,7 +1849,7 @@ function SessionDetailPage() {
         </section>
       )}
 
-      {completed ? <PriceComparisonPanel items={items.filter(item=>item.item_status==="purchased" || item.item_status==="included")} paidTotalPaise={session.confirmed_actual_total_paise || session.actual_total_paise} /> : null}
+      {completed ? <PriceComparisonPanel items={items.filter(item=>Number(item.remaining_quantity ?? item.planned_quantity) <= 0)} paidTotalPaise={session.confirmed_actual_total_paise || session.actual_total_paise} /> : null}
       <section className="mt-6">
         <h2 className="mb-3 px-1 text-[15px] font-extrabold">Saved estimates</h2>
         {(session.estimates || []).length ? (
