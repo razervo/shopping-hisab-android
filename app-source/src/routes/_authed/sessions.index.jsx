@@ -17,9 +17,8 @@ const localDate = () => {
 
 const prettyDate = (value) => {
   if (!value) return "Date not set";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" });
 };
 
 function SessionsPage() {
